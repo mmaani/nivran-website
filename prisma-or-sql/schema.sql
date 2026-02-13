@@ -13,6 +13,7 @@ create table if not exists orders (
 
   customer_email text,
   customer_name text,
+  customer_id bigint references customers(id),
 
   paytabs_tran_ref text,
   paytabs_last_payload text,
@@ -27,12 +28,14 @@ alter table orders add column if not exists customer jsonb;
 alter table orders add column if not exists shipping jsonb;
 alter table orders add column if not exists customer_email text;
 alter table orders add column if not exists customer_name text;
+alter table orders add column if not exists customer_id bigint references customers(id);
 alter table orders add column if not exists paytabs_tran_ref text;
 alter table orders add column if not exists paytabs_last_payload text;
 alter table orders add column if not exists paytabs_last_signature text;
 
 create index if not exists idx_orders_status on orders(status);
 create index if not exists idx_orders_created_at on orders(created_at desc);
+create index if not exists idx_orders_customer_id on orders(customer_id);
 
 -- PAYTABS CALLBACK LOGS
 create table if not exists paytabs_callbacks (
