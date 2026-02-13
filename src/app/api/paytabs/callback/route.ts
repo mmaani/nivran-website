@@ -14,17 +14,20 @@ let _hasPayloadCol: boolean | null = null;
 
 async function hasPayloadColumn(): Promise<boolean> {
   if (_hasPayloadCol !== null) return _hasPayloadCol;
+
   const r = await db.query(
     "select 1 from information_schema.columns where table_name='paytabs_callbacks' and column_name='payload' limit 1"
   );
-  _hasPayloadCol = r.rowCount > 0;
+
+  // ✅ Avoid rowCount (can be number|null in pg typings); rows.length is always number
+  _hasPayloadCol = (r.rows?.length || 0) > 0;
   return _hasPayloadCol;
 }
 
 export async function POST(req: Request) {
   const { serverKey } = getPaytabsEnv();
 
-  const rawBody = await req.text(); // IMPORTANT for signature verification :contentReference[oaicite:8]{index=8}
+  const rawBody = await req.text(); // IMPORTANT for signature verification
   const headerSig =
     req.headers.get("signature") ||
     req.headers.get("Signature") ||
@@ -66,7 +69,6 @@ export async function POST(req: Request) {
   }
 
   if (!sigValid) {
-    // PayTabs recommends verifying signature for callbacks :contentReference[oaicite:9]{index=9}
     return NextResponse.json({ ok: false, error: "Invalid signature" }, { status: 401 });
   }
 
@@ -76,7 +78,6 @@ export async function POST(req: Request) {
 
   const newStatus = mapPaytabsResponseStatusToOrderStatus(respStatus);
 
-  // Update order
   await db.query(
     `update orders
        set status=$1,
