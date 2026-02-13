@@ -50,8 +50,21 @@ export default function CheckoutPage() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ mode, locale, qty: 1, customer: { name, phone, email }, shipping: { city, address, notes } }),
     });
-    const data = await res.json();
-    if (!res.ok || !data.ok) throw new Error(data.error || "Order create failed");
+
+    const raw = await res.text();
+    let data: any = null;
+    if (raw) {
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        throw new Error(`Order create failed (${res.status})`);
+      }
+    }
+
+    if (!res.ok || !data?.ok) {
+      throw new Error(data?.error || `Order create failed (${res.status})`);
+    }
+
     setCartId(data.cartId);
     setStatus(data.status);
     return data.cartId as string;

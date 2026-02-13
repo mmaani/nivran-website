@@ -23,7 +23,7 @@ export default async function StoreLocaleLayout({ children, params }: { children
           <nav className="main-nav desktop-nav">
             <a href={href("")}>{t.home}</a>
             <a href={href("/story")}>{t.story}</a>
-            <a href={href("/product/nivran-calm-100ml")}>{t.product}</a>
+            <a href={href("/product")}>{t.product}</a>
             <a href={href("/faq")}>{t.faq}</a>
             <a href={href("/contact")}>{t.contact}</a>
             <a className="nav-cta" href={href("/checkout")}>{t.checkout}</a>
@@ -37,7 +37,7 @@ export default async function StoreLocaleLayout({ children, params }: { children
             <div className="mobile-nav-panel">
               <a href={href("")}>{t.home}</a>
               <a href={href("/story")}>{t.story}</a>
-              <a href={href("/product/nivran-calm-100ml")}>{t.product}</a>
+              <a href={href("/product")}>{t.product}</a>
               <a href={href("/faq")}>{t.faq}</a>
               <a href={href("/contact")}>{t.contact}</a>
               <a className="nav-cta" href={href("/checkout")}>{t.checkout}</a>
