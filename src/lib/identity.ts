@@ -61,17 +61,3 @@ export function verifyPassword(password: string, stored: string) {
 export function createSessionToken() {
   return crypto.randomBytes(SESSION_BYTES).toString("hex");
 }
-
-export async function getCustomerIdFromRequest(req: Request) {
-  await ensureIdentityTables();
-  const token = req.headers.get("cookie")?.match(/customer_session=([^;]+)/)?.[1] || "";
-  if (!token) return null;
-  const { rows } = await db.query<{ customer_id: number }>(
-    `select customer_id
-     from customer_sessions
-     where token=$1 and revoked_at is null and expires_at > now()
-     limit 1`,
-    [token]
-  );
-  return rows[0]?.customer_id || null;
-}

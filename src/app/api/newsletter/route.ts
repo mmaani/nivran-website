@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   );
 
   if (isForm) {
-    return NextResponse.redirect(new URL(`/${locale}?subscribed=1`, req.url), 303);
+    return NextResponse.redirect(new URL(`/${locale}?subscribed=1`, req.url));
   }
   return NextResponse.json({ ok: true });
 }
