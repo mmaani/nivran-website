@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 type Order = {
   id: number;
@@ -46,10 +46,6 @@ export default function AdminOrdersPage() {
       setLoading(false);
     }
   }
-
-  useEffect(() => {
-    // do nothing until token is entered
-  }, []);
 
   return (
     <div style={{ padding: 24, fontFamily: "system-ui" }}>
