@@ -5,17 +5,18 @@ declare global {
   var __nivranPool: Pool | undefined;
 }
 
+function isLocalDb(url: string) {
+  return url.includes("localhost") || url.includes("127.0.0.1");
+}
+
 export function db(): Pool {
-  if (!process.env.DATABASE_URL) {
-    throw new Error("Missing DATABASE_URL");
-  }
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("Missing DATABASE_URL");
 
   if (!global.__nivranPool) {
     global.__nivranPool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.DATABASE_URL.includes("localhost")
-        ? undefined
-        : { rejectUnauthorized: false },
+      connectionString: url,
+      ssl: isLocalDb(url) ? undefined : { rejectUnauthorized: false },
     });
   }
 
