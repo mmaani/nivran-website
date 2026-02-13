@@ -1,18 +1,9 @@
 {
-  "name": "nivran-store",
-  "image": "mcr.microsoft.com/devcontainers/typescript-node:20",
-  "postCreateCommand": "npm ci || npm install",
-  "customizations": {
-    "vscode": {
-      "extensions": [
-        "dbaeumer.vscode-eslint",
-        "esbenp.prettier-vscode",
-        "bradlc.vscode-tailwindcss"
-      ]
-    }
-  },
+  "name": "nivran-store (safe)",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
   "forwardPorts": [3000],
   "portsAttributes": {
     "3000": { "label": "Next.js", "onAutoForward": "openBrowser" }
-  }
+  },
+  "postCreateCommand": "node -v && npm -v && npm install"
 }
