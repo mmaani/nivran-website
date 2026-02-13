@@ -1,79 +1,91 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
-  getPayTabsConfig,
-  hmacSha256Hex,
-  timingSafeEqualHex,
-  parseMaybeJsonOrForm,
-  extractCartId,
-  extractTranRef,
-  isApprovedPayTabsPayload,
+  computePaytabsSignature,
+  getPaytabsEnv,
+  mapPaytabsResponseStatusToOrderStatus,
+  safeEqualHex,
 } from "@/lib/paytabs";
 
 export const runtime = "nodejs";
 
-export async function POST(req: Request) {
-  const cfg = getPayTabsConfig();
+// cache this check in-memory (per lambda warm instance)
+let _hasPayloadCol: boolean | null = null;
 
-  // Verify signature using RAW body
-  const raw = await req.text();
-  const sigHeader =
+async function hasPayloadColumn(): Promise<boolean> {
+  if (_hasPayloadCol !== null) return _hasPayloadCol;
+  const r = await db.query(
+    "select 1 from information_schema.columns where table_name='paytabs_callbacks' and column_name='payload' limit 1"
+  );
+  _hasPayloadCol = r.rowCount > 0;
+  return _hasPayloadCol;
+}
+
+export async function POST(req: Request) {
+  const { serverKey } = getPaytabsEnv();
+
+  const rawBody = await req.text(); // IMPORTANT for signature verification :contentReference[oaicite:8]{index=8}
+  const headerSig =
     req.headers.get("signature") ||
     req.headers.get("Signature") ||
-    req.headers.get("x-signature") ||
+    req.headers.get("x-paytabs-signature") ||
     "";
 
-  const computed = hmacSha256Hex(raw, cfg.serverKey);
-  const sigValid = sigHeader ? timingSafeEqualHex(computed, sigHeader) : false;
+  const computedSig = computePaytabsSignature(rawBody, serverKey);
+  const sigValid = headerSig ? safeEqualHex(headerSig, computedSig) : false;
 
-  const payload = parseMaybeJsonOrForm(raw);
-  const cartId = extractCartId(payload);
-  const tranRef = extractTranRef(payload);
-
-  const pool = db();
-
-  // Always log callback (even invalid)
+  let data: any = null;
   try {
-    await pool.query(
-      `insert into paytabs_callbacks (received_at, cart_id, tran_ref, signature_header, signature_computed, signature_valid, raw_body)
-       values (now(), $1, $2, $3, $4, $5, $6)`,
-      [cartId || null, tranRef || null, sigHeader || null, computed, sigValid, raw]
-    );
+    data = rawBody ? JSON.parse(rawBody) : null;
   } catch {
-    // ignore if table not present
+    data = null;
+  }
+
+  const cartId = String(data?.cart_id || data?.cartId || "").trim();
+  const tranRef = String(data?.tran_ref || data?.tranRef || "").trim();
+  const respStatus = String(data?.payment_result?.response_status || "").trim();
+
+  // Log callback (even if invalid signature) so you can debug
+  try {
+    const cols = await hasPayloadColumn();
+    if (cols) {
+      await db.query(
+        `insert into paytabs_callbacks (cart_id, tran_ref, signature_header, signature_computed, signature_valid, raw_body, payload)
+         values ($1,$2,$3,$4,$5,$6,$7::jsonb)`,
+        [cartId, tranRef, headerSig, computedSig, sigValid, rawBody, JSON.stringify(data ?? {})]
+      );
+    } else {
+      await db.query(
+        `insert into paytabs_callbacks (cart_id, tran_ref, signature_header, signature_computed, signature_valid, raw_body)
+         values ($1,$2,$3,$4,$5,$6)`,
+        [cartId, tranRef, headerSig, computedSig, sigValid, rawBody]
+      );
+    }
+  } catch {
+    // do not fail callback due to logging
   }
 
   if (!sigValid) {
+    // PayTabs recommends verifying signature for callbacks :contentReference[oaicite:9]{index=9}
     return NextResponse.json({ ok: false, error: "Invalid signature" }, { status: 401 });
   }
 
-  const approved = isApprovedPayTabsPayload(payload);
-
-  if (cartId) {
-    if (approved) {
-      await pool.query(
-        `update orders
-         set status = 'PAID',
-             payment_method = 'PAYTABS',
-             paytabs_last_payload = $2,
-             paytabs_last_signature = $3,
-             updated_at = now()
-         where cart_id = $1`,
-        [cartId, raw, sigHeader]
-      );
-    } else {
-      await pool.query(
-        `update orders
-         set status = 'FAILED',
-             payment_method = 'PAYTABS',
-             paytabs_last_payload = $2,
-             paytabs_last_signature = $3,
-             updated_at = now()
-         where cart_id = $1`,
-        [cartId, raw, sigHeader]
-      );
-    }
+  if (!cartId) {
+    return NextResponse.json({ ok: false, error: "Missing cart_id" }, { status: 400 });
   }
 
-  return NextResponse.json({ ok: true, cartId, tranRef, approved });
+  const newStatus = mapPaytabsResponseStatusToOrderStatus(respStatus);
+
+  // Update order
+  await db.query(
+    `update orders
+       set status=$1,
+           paytabs_last_payload=$2,
+           paytabs_last_signature=$3,
+           updated_at=now()
+     where cart_id=$4`,
+    [newStatus, JSON.stringify(data ?? {}), headerSig, cartId]
+  );
+
+  return NextResponse.json({ ok: true });
 }
