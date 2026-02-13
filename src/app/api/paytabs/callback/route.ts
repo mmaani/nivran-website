@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import {
   computePaytabsSignature,
   mapPaytabsResponseStatusToOrderStatus,
+  paymentStatusTransitionAllowedFrom,
   safeEqualHex,
 } from "@/lib/paytabs";
 
@@ -69,19 +70,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Invalid signature" }, { status: 401 });
   }
 
+  let transitioned = false;
+
   if (cartId) {
     const nextStatus = mapPaytabsResponseStatusToOrderStatus(responseStatus);
-    await db.query(
+    const allowedFrom = paymentStatusTransitionAllowedFrom(nextStatus);
+
+    const result = await db.query(
       `update orders
-          set status=$2,
+          set status=case when status = any($6::text[]) then $2 else status end,
               paytabs_tran_ref=coalesce(nullif($3,''), paytabs_tran_ref),
               paytabs_last_payload=$4,
               paytabs_last_signature=$5,
               updated_at=now()
-        where cart_id=$1`,
-      [cartId, nextStatus, tranRef, rawBody, signatureHeader]
+        where cart_id=$1
+        returning status`,
+      [cartId, nextStatus, tranRef, rawBody, signatureHeader, allowedFrom]
     );
+
+    transitioned = result.rows.length > 0 && result.rows[0].status === nextStatus;
   }
 
-  return NextResponse.json({ ok: true, signatureValid, cartId, tranRef });
+  return NextResponse.json({ ok: true, signatureValid, cartId, tranRef, transitioned });
 }

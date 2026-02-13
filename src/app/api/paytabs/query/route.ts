@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getPaytabsEnv, mapPaytabsResponseStatusToOrderStatus } from "@/lib/paytabs";
+import {
+  getPaytabsEnv,
+  mapPaytabsResponseStatusToOrderStatus,
+  paymentStatusTransitionAllowedFrom,
+} from "@/lib/paytabs";
 
 export const runtime = "nodejs";
 
@@ -36,22 +40,34 @@ async function handleQuery(input: Record<string, unknown>) {
 
   const responseStatus = String((data as any)?.payment_result?.response_status || "");
   const nextStatus = mapPaytabsResponseStatusToOrderStatus(responseStatus);
+  const allowedFrom = paymentStatusTransitionAllowedFrom(nextStatus);
   const resolvedCartId = String((data as any)?.cart_id || cartId || "");
   const resolvedTranRef = String((data as any)?.tran_ref || tranRef || "");
 
+  let transitioned = false;
+
   if (resolvedCartId) {
-    await db.query(
+    const result = await db.query(
       `update orders
-          set status=$2,
+          set status=case when status = any($5::text[]) then $2 else status end,
               paytabs_tran_ref=coalesce(nullif($3,''), paytabs_tran_ref),
               paytabs_last_payload=$4,
               updated_at=now()
-        where cart_id=$1`,
-      [resolvedCartId, nextStatus, resolvedTranRef, JSON.stringify(data)]
+        where cart_id=$1
+        returning status`,
+      [resolvedCartId, nextStatus, resolvedTranRef, JSON.stringify(data), allowedFrom]
     );
+
+    transitioned = result.rows.length > 0 && result.rows[0].status === nextStatus;
   }
 
-  return NextResponse.json({ ok: true, cartId: resolvedCartId, tranRef: resolvedTranRef, paytabs: data });
+  return NextResponse.json({
+    ok: true,
+    cartId: resolvedCartId,
+    tranRef: resolvedTranRef,
+    transitioned,
+    paytabs: data,
+  });
 }
 
 export async function POST(req: Request) {

@@ -51,3 +51,43 @@ If Vercel Deployment Protection is enabled on Preview, set `VERCEL_AUTOMATION_BY
 - **PayTabs payment:** `PENDING_PAYMENT` → `PAID` / `PAYMENT_FAILED` / `CANCELED`
 - **Fulfillment:** `PROCESSING` → `SHIPPED` → `DELIVERED`
 - **COD:** `PENDING_COD_CONFIRM` → `PROCESSING` → `SHIPPED` → `DELIVERED` → `PAID_COD`
+
+
+## Preview verification runbook
+
+- Initiate payment (replace `<preview-domain>`):
+  - `https://<preview-domain>/api/paytabs/initiate`
+- Callback endpoint:
+  - `https://<preview-domain>/api/paytabs/callback`
+- Query reconciliation endpoint:
+  - `https://<preview-domain>/api/paytabs/query`
+
+Example checks:
+
+```bash
+# 1) Create an order (example)
+curl -sS -X POST "https://<preview-domain>/api/orders" \
+  -H "content-type: application/json" \
+  -d '{"mode":"PAYTABS","locale":"en","qty":1,"customer":{"name":"Test","phone":"0790000000"},"shipping":{"city":"Amman","address":"Street 1"}}'
+
+# 2) Initiate PayTabs
+curl -sS -X POST "https://<preview-domain>/api/paytabs/initiate" \
+  -H "content-type: application/json" \
+  -d '{"cartId":"<cart-id>","locale":"en"}'
+
+# 3) Reconcile by cartId if callback is delayed
+curl -sS "https://<preview-domain>/api/paytabs/query?cartId=<cart-id>"
+```
+
+Neon SQL verification:
+
+```sql
+select cart_id, status, payment_method, paytabs_tran_ref, updated_at
+from orders
+where cart_id = '<cart-id>';
+
+select received_at, cart_id, tran_ref, signature_valid
+from paytabs_callbacks
+where cart_id = '<cart-id>'
+order by received_at desc;
+```

@@ -27,3 +27,17 @@ export function mapPaytabsResponseStatusToOrderStatus(respStatus: string): strin
   if (s === "C") return "CANCELED";
   return "PAYMENT_FAILED";
 }
+
+export function paymentStatusTransitionAllowedFrom(nextStatus: string): string[] {
+  const next = String(nextStatus || "").toUpperCase();
+  if (next === "PAID") {
+    return ["PENDING_PAYMENT", "PAYMENT_FAILED", "CANCELED", "PAID"];
+  }
+
+  if (next === "PAYMENT_FAILED" || next === "CANCELED") {
+    // Never downgrade once PAID / fulfillment has started.
+    return ["PENDING_PAYMENT", next];
+  }
+
+  return [next];
+}
