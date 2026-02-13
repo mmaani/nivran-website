@@ -1,17 +1,31 @@
 import { NextResponse } from "next/server";
-import { reserveStock } from "@/lib/stock";
+import { db } from "@/lib/db";
+
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
-  if (!body) return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
+  const input = await req.json();
 
-  const items = Array.isArray(body.items) ? body.items : [];
-  if (!items.length) return NextResponse.json({ ok: false, error: "No items" }, { status: 400 });
+  const cartId = String(input.cartId || `NIVRAN-${Date.now()}`);
+  const amount = Number(input.amount || 0);
+  const currency = String(input.currency || "JOD");
+  const locale = String(input.locale || "en");
 
-  await reserveStock(items.map((i: any) => ({
-    skuOrProductId: String(i.skuOrProductId || i.productId || ""),
-    qty: Number(i.qty || 0)
-  })));
+  if (!amount || amount <= 0) {
+    return NextResponse.json({ ok: false, error: "Invalid amount" }, { status: 400 });
+  }
 
-  return NextResponse.json({ ok: true, orderId: `ord_${Date.now()}` });
+  const customer = input.customer || {};
+  const customerEmail = customer.email || null;
+  const customerName = customer.name || null;
+
+  const pool = db();
+  await pool.query(
+    `insert into orders (cart_id, status, amount, currency, locale, customer_email, customer_name)
+     values ($1, 'PENDING_PAYMENT', $2, $3, $4, $5, $6)
+     on conflict (cart_id) do nothing`,
+    [cartId, amount, currency, locale, customerEmail, customerName]
+  );
+
+  return NextResponse.json({ ok: true, cartId });
 }

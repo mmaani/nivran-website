@@ -1,13 +1,13 @@
 import { Pool } from "pg";
 
-let _pool: Pool | null = null;
+declare global {
+  // eslint-disable-next-line no-var
+  var __pgPool: Pool | undefined;
+}
 
 export function db() {
-  if (_pool) return _pool;
-
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) throw new Error("Missing DATABASE_URL");
-
-  _pool = new Pool({ connectionString });
-  return _pool;
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("Missing DATABASE_URL");
+  if (!global.__pgPool) global.__pgPool = new Pool({ connectionString: url });
+  return global.__pgPool;
 }
