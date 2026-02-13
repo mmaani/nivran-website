@@ -1,24 +1,25 @@
-# dependencies
-node_modules
+# deps
+node_modules/
 
-# Next.js
-.next
-out
+# next
+.next/
+out/
 
-# env files
+# env
 .env
-.env.*.local
+.env.*
+!.env.example
 
 # logs
 npm-debug.log*
+pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
 
-# OS / editor
+# OS/editor
 .DS_Store
-.vscode
-.idea
+.vscode/
+.idea/
 
-# misc
-*.tsbuildinfo
+# backups created in Codespaces steps
+.bak_*/
