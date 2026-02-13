@@ -55,6 +55,32 @@ If Vercel Deployment Protection is enabled on Preview, set `VERCEL_AUTOMATION_BY
 
 ## Preview verification runbook
 
+
+### Getting your real Preview domain
+
+Use the exact preview host from one of these places:
+
+1. GitHub PR page → Vercel Preview check → open link and copy hostname.
+2. Vercel Project → Deployments → latest Preview deployment URL.
+
+Then run:
+
+```bash
+PREVIEW_DOMAIN=<actual-preview-host>.vercel.app ./scripts/verify-preview-paytabs.sh
+```
+
+If you see `DEPLOYMENT_NOT_FOUND`, the hostname is incorrect or deployment no longer exists.
+
+### Helper scripts
+
+```bash
+# Verify branch/commit visibility from Codespaces
+PR_BRANCH=work EXPECTED_COMMIT=29d5795 BASE_BRANCH=main ./scripts/verify-pr.sh
+
+# Verify Preview PayTabs flow (smoke + initiate + query)
+PREVIEW_DOMAIN=<actual-preview-host>.vercel.app ./scripts/verify-preview-paytabs.sh
+```
+
 - Initiate payment (replace `<preview-domain>`):
   - `https://<preview-domain>/api/paytabs/initiate`
 - Callback endpoint:
@@ -90,4 +116,3 @@ select received_at, cart_id, tran_ref, signature_valid
 from paytabs_callbacks
 where cart_id = '<cart-id>'
 order by received_at desc;
-```
