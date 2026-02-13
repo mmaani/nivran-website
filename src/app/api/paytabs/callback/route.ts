@@ -1,81 +1,79 @@
 import { NextResponse } from "next/server";
-import { verifyPaytabsCallbackSignature } from "@/lib/paytabs";
 import { db } from "@/lib/db";
+import {
+  getPayTabsConfig,
+  hmacSha256Hex,
+  timingSafeEqualHex,
+  parseMaybeJsonOrForm,
+  extractCartId,
+  extractTranRef,
+  isApprovedPayTabsPayload,
+} from "@/lib/paytabs";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const rawBody = await req.text();
+  const cfg = getPayTabsConfig();
 
-  const sig =
+  // Verify signature using RAW body
+  const raw = await req.text();
+  const sigHeader =
     req.headers.get("signature") ||
     req.headers.get("Signature") ||
     req.headers.get("x-signature") ||
-    req.headers.get("X-Signature") ||
     "";
 
-  let payload: any = {};
-  try {
-    payload = JSON.parse(rawBody);
-  } catch {
-    payload = { raw: rawBody };
-  }
+  const computed = hmacSha256Hex(raw, cfg.serverKey);
+  const sigValid = sigHeader ? timingSafeEqualHex(computed, sigHeader) : false;
 
-  const cartId = String(payload?.cart_id || payload?.cartId || "");
-  const tranRef = String(payload?.tran_ref || payload?.tranRef || "");
+  const payload = parseMaybeJsonOrForm(raw);
+  const cartId = extractCartId(payload);
+  const tranRef = extractTranRef(payload);
 
   const pool = db();
 
-  // 1) Log callback FIRST (even if signature fails)
-  const ins = await pool.query(
-    `insert into paytabs_callbacks (signature, verified, cart_id, tran_ref, payload)
-     values ($1, $2, $3, $4, $5)
-     returning id`,
-    [sig || null, false, cartId || null, tranRef || null, payload]
-  );
-  const cbId = ins.rows?.[0]?.id;
+  // Always log callback (even invalid)
+  try {
+    await pool.query(
+      `insert into paytabs_callbacks (received_at, cart_id, tran_ref, signature_header, signature_computed, signature_valid, raw_body)
+       values (now(), $1, $2, $3, $4, $5, $6)`,
+      [cartId || null, tranRef || null, sigHeader || null, computed, sigValid, raw]
+    );
+  } catch {
+    // ignore if table not present
+  }
 
-  // 2) Verify signature
-  const ok = verifyPaytabsCallbackSignature(rawBody, sig);
-  if (!ok) {
+  if (!sigValid) {
     return NextResponse.json({ ok: false, error: "Invalid signature" }, { status: 401 });
   }
 
-  // 3) Mark THIS callback as verified (avoid updating "latest row")
-  if (cbId) {
-    await pool.query(`update paytabs_callbacks set verified=true where id=$1`, [cbId]);
-  }
+  const approved = isApprovedPayTabsPayload(payload);
 
-  // 4) Determine payment status
-  const responseStatus =
-    payload?.payment_result?.response_status ??
-    payload?.payment_result?.responseStatus ??
-    payload?.response_status ??
-    null;
-
-  const responseMessage =
-    payload?.payment_result?.response_message ??
-    payload?.payment_result?.responseMessage ??
-    payload?.response_message ??
-    null;
-
-  const s = String(responseStatus || "").toLowerCase();
-  const newStatus = s === "a" || s === "approved" ? "PAID" : "FAILED";
-
-  // 5) Update order by cart_id
   if (cartId) {
-    await pool.query(
-      `update orders
-       set status=$2,
-           paytabs_tran_ref=$3,
-           paytabs_response_status=$4,
-           paytabs_response_message=$5,
-           paytabs_payload=$6,
-           updated_at=now()
-       where cart_id=$1`,
-      [cartId, newStatus, tranRef || null, responseStatus, responseMessage, payload]
-    );
+    if (approved) {
+      await pool.query(
+        `update orders
+         set status = 'PAID',
+             payment_method = 'PAYTABS',
+             paytabs_last_payload = $2,
+             paytabs_last_signature = $3,
+             updated_at = now()
+         where cart_id = $1`,
+        [cartId, raw, sigHeader]
+      );
+    } else {
+      await pool.query(
+        `update orders
+         set status = 'FAILED',
+             payment_method = 'PAYTABS',
+             paytabs_last_payload = $2,
+             paytabs_last_signature = $3,
+             updated_at = now()
+         where cart_id = $1`,
+        [cartId, raw, sigHeader]
+      );
+    }
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, cartId, tranRef, approved });
 }
