@@ -3,61 +3,63 @@ import { db } from "@/lib/db";
 
 export const runtime = "nodejs";
 
-const ALLOWED = new Set(["PENDING_PAYMENT","PAID","SHIPPED","DELIVERED","REFUNDED","FAILED"]);
+function isAllowedTransition(paymentMethod: string, current: string, next: string) {
+  const pm = String(paymentMethod || "").toUpperCase();
 
-export async function POST(req: Request): Promise<Response> {
-  try {
-    const token = process.env.ADMIN_TOKEN || "";
-    if (!token) return NextResponse.json({ ok: false, error: "Missing ADMIN_TOKEN on server" }, { status: 500 });
-
-    const header = req.headers.get("authorization") || "";
-    const got = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-    if (!got || got !== token) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-
-    const input = await req.json().catch(() => ({} as any));
-    const cartId = String(input?.cartId || "");
-    const nextStatus = String(input?.status || "");
-
-    if (!cartId || !nextStatus) {
-      return NextResponse.json({ ok: false, error: "cartId and status are required" }, { status: 400 });
-    }
-    if (!ALLOWED.has(nextStatus)) {
-      return NextResponse.json({ ok: false, error: "Invalid status" }, { status: 400 });
-    }
-
-    const pool = db();
-
-    // Load current order
-    const cur = await pool.query(
-      `select status, paytabs_response_status, paytabs_response_message
-       from orders where cart_id=$1`,
-      [cartId]
-    );
-    if (!cur.rows.length) return NextResponse.json({ ok: false, error: "Order not found" }, { status: 404 });
-
-    const currentStatus = String(cur.rows[0].status || "");
-    const paytabsStatus = String(cur.rows[0].paytabs_response_status || "").toUpperCase(); // e.g. C=Cancelled
-
-    // Prevent shipping/delivery unless PAID
-    if ((nextStatus === "SHIPPED" || nextStatus === "DELIVERED") && currentStatus !== "PAID") {
-      return NextResponse.json({ ok: false, error: "Only PAID orders can be shipped/delivered" }, { status: 400 });
-    }
-
-    // If PayTabs indicates cancelled/failed, do not allow moving away from FAILED
-    if (paytabsStatus === "C" && nextStatus !== "FAILED") {
-      return NextResponse.json({ ok: false, error: "PayTabs shows Cancelled. Keep status FAILED." }, { status: 400 });
-    }
-
-    const { rows } = await pool.query(
-      `update orders
-       set status=$2, updated_at=now()
-       where cart_id=$1
-       returning id, cart_id, status, updated_at`,
-      [cartId, nextStatus]
-    );
-
-    return NextResponse.json({ ok: true, updated: rows[0] });
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || "Server error" }, { status: 500 });
+  // PayTabs guardrail: can't ship unless PAID
+  if (pm === "PAYTABS") {
+    if ((next === "SHIPPED" || next === "DELIVERED") && current !== "PAID") return false;
   }
+
+  // COD recommended flow
+  if (pm === "COD") {
+    const allowed = new Set([
+      "PENDING_COD_CONFIRM",
+      "PROCESSING",
+      "SHIPPED",
+      "DELIVERED",
+      "PAID_COD",
+      "CANCELED",
+    ]);
+    if (!allowed.has(next)) return false;
+  }
+
+  return true;
+}
+
+export async function POST(req: Request) {
+  const body = await req.json().catch(() => ({} as any));
+  const id = Number(body?.id);
+  const nextStatus = String(body?.status || "");
+
+  if (!id || !nextStatus) {
+    return NextResponse.json({ ok: false, error: "id and status are required" }, { status: 400 });
+  }
+
+  const pool = db();
+  const { rows } = await pool.query(
+    `select id, status, payment_method from orders where id=$1`,
+    [id]
+  );
+  if (!rows.length) {
+    return NextResponse.json({ ok: false, error: "Order not found" }, { status: 404 });
+  }
+
+  const order = rows[0];
+  const current = String(order.status || "");
+  const pm = String(order.payment_method || "");
+
+  if (!isAllowedTransition(pm, current, nextStatus)) {
+    return NextResponse.json(
+      { ok: false, error: `Transition not allowed: ${pm} ${current} -> ${nextStatus}` },
+      { status: 400 }
+    );
+  }
+
+  await pool.query(
+    `update orders set status=$2, updated_at=now() where id=$1`,
+    [id, nextStatus]
+  );
+
+  return NextResponse.json({ ok: true });
 }

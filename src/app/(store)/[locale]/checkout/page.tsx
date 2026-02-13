@@ -1,123 +1,174 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 
-type Props = { params: Promise<{ locale: string }> };
-type Order = {
-  cart_id: string;
-  status: string;
-  amount: number;
-  currency: string;
-  paytabs_tran_ref: string | null;
-  paytabs_response_status: string | null;
-  paytabs_response_message: string | null;
-};
+const SHIPPING = 3.5;
+const PRICE = 18.0;
 
-export default function CheckoutPage({ params }: Props) {
-  const [locale, setLocale] = useState("en");
+function waLink(phoneE164: string, msg: string) {
+  const text = encodeURIComponent(msg);
+  return `https://wa.me/${phoneE164}?text=${text}`;
+}
+
+export default function CheckoutPage() {
+  const p = useParams<{ locale?: string }>();
+  const locale = p?.locale === "ar" ? "ar" : "en";
+  const isAr = locale === "ar";
+
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [city, setCity] = useState("");
+  const [address, setAddress] = useState("");
+  const [notes, setNotes] = useState("");
+
   const [cartId, setCartId] = useState<string | null>(null);
-  const [result, setResult] = useState<string | null>(null);
-  const [order, setOrder] = useState<Order | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => {
-    params.then(p => setLocale(p.locale || "en"));
-  }, [params]);
-
-  useEffect(() => {
-    const u = new URL(window.location.href);
-    setResult(u.searchParams.get("result"));
-    setCartId(u.searchParams.get("cart_id"));
+  const totals = useMemo(() => {
+    const subtotal = PRICE;
+    const total = Number((subtotal + SHIPPING).toFixed(2));
+    return { subtotal, shipping: SHIPPING, total };
   }, []);
 
-  async function refresh() {
-    if (!cartId) return;
+  const COPY = {
+    title: isAr ? "الدفع" : "Checkout",
+    subtitle: isAr ? "نيفـران — ارتدِ الهدوء" : "NIVRAN — Wear the calm.",
+    payCard: isAr ? "ادفع بالبطاقة" : "Pay by Card",
+    cod: isAr ? "الدفع عند الاستلام" : "Cash on Delivery",
+    confirmWa: isAr ? "تأكيد عبر واتساب" : "Confirm on WhatsApp",
+    required: isAr ? "الاسم ورقم الهاتف والعنوان مطلوبة" : "Name, phone, and address are required",
+    summary: isAr ? "ملخص الطلب" : "Order summary",
+    product: isAr ? "منتج (100مل)" : "Product (100ml)",
+    shipping: isAr ? "الشحن" : "Shipping",
+    total: isAr ? "الإجمالي" : "Total",
+    processing: isAr ? "جارٍ المعالجة…" : "Processing…",
+    status: isAr ? "الحالة" : "Status",
+  };
+
+  function validate() {
+    if (!name.trim() || !phone.trim() || !address.trim()) {
+      setErr(COPY.required);
+      return false;
+    }
+    return true;
+  }
+
+  async function createOrder(mode: "PAYTABS" | "COD") {
+    const res = await fetch("/api/orders", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        mode,
+        locale,
+        qty: 1,
+        customer: { name, phone },
+        shipping: { city, address, notes },
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || "Order create failed");
+    setCartId(data.cartId);
+    setStatus(data.status);
+    return data.cartId as string;
+  }
+
+  async function payByCard() {
+    if (!validate()) return;
     setLoading(true);
     setErr(null);
     try {
-      const res = await fetch(`/api/order-status?cart_id=${encodeURIComponent(cartId)}`, { cache: "no-store" });
+      const cid = await createOrder("PAYTABS");
+      const res = await fetch("/api/paytabs/initiate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ cartId: cid }),
+      });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "Failed");
-      setOrder(data.order);
+      if (!res.ok || !data.ok) throw new Error(data.error || "PayTabs initiate failed");
+      window.location.href = data.redirect_url;
     } catch (e: any) {
       setErr(e?.message || "Error");
-      setOrder(null);
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => {
-    if (result === "paytabs" && cartId) refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [result, cartId]);
+  async function cashOnDelivery() {
+    if (!validate()) return;
+    setLoading(true);
+    setErr(null);
+    try {
+      await createOrder("COD");
+    } catch (e: any) {
+      setErr(e?.message || "Error");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  const title = useMemo(() => {
-    if (!result) return "Checkout";
-    if (!order) return "Checkout";
-    if (order.status === "PAID") return "Payment successful";
-    if (order.status === "FAILED") return "Payment failed";
-    return "Payment pending";
-  }, [result, order]);
+  const WHATSAPP_E164 = (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "").trim();
+
+  const waMsg = cartId
+    ? `NIVRAN / نيفـران — COD Confirmation\nCart: ${cartId}\nName: ${name}\nPhone: ${phone}\nCity: ${city}\nAddress: ${address}\nNotes: ${notes}\nTotal: ${totals.total} JOD (Shipping ${totals.shipping} JOD)\nTagline: Wear the calm. / ارتدِ الهدوء`
+    : "";
 
   return (
     <div style={{ padding: 24, fontFamily: "system-ui", maxWidth: 760, margin: "0 auto" }}>
-      <h1>{title}</h1>
-      <p style={{ opacity: 0.75 }}>Locale: {locale}</p>
+      <h1 style={{ marginBottom: 6 }}>{COPY.title}</h1>
+      <p style={{ opacity: 0.75, marginTop: 0 }}>{COPY.subtitle}</p>
 
-      {result === "paytabs" && cartId && (
-        <div style={{ border: "1px solid #eee", borderRadius: 14, padding: 14, marginTop: 12 }}>
-          <div style={{ fontFamily: "monospace", fontSize: 13, opacity: 0.8 }}>cart_id: {cartId}</div>
+      <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={isAr ? "الاسم الكامل" : "Full name"} style={{ padding: 12, borderRadius: 12, border: "1px solid #ddd" }} />
+        <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={isAr ? "رقم الهاتف" : "Phone"} style={{ padding: 12, borderRadius: 12, border: "1px solid #ddd" }} />
+        <input value={city} onChange={(e) => setCity(e.target.value)} placeholder={isAr ? "المدينة" : "City"} style={{ padding: 12, borderRadius: 12, border: "1px solid #ddd" }} />
+        <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder={isAr ? "العنوان" : "Address"} style={{ padding: 12, borderRadius: 12, border: "1px solid #ddd" }} />
+        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={isAr ? "ملاحظات (اختياري)" : "Notes (optional)"} rows={3} style={{ padding: 12, borderRadius: 12, border: "1px solid #ddd" }} />
+      </div>
 
-          {loading && <p>Checking payment status…</p>}
-          {err && <p style={{ color: "crimson" }}>{err}</p>}
-
-          {order && (
-            <>
-              <p style={{ marginTop: 8 }}>
-                Status: <b>{order.status}</b>
-              </p>
-              <p>
-                Total: <b>{Number(order.amount).toFixed(2)} {order.currency}</b>
-              </p>
-              <p style={{ fontSize: 13, opacity: 0.8 }}>
-                PayTabs: {order.paytabs_tran_ref || "—"} / {order.paytabs_response_status || "—"} {order.paytabs_response_message ? `(${order.paytabs_response_message})` : ""}
-              </p>
-
-              {order.status === "PAID" && (
-                <div style={{ marginTop: 10, padding: 12, borderRadius: 12, border: "1px solid #d7f2dd" }}>
-                  <b>Thank you.</b> Your order is confirmed. Wear the calm.
-                </div>
-              )}
-
-              {order.status === "FAILED" && (
-                <div style={{ marginTop: 10, padding: 12, borderRadius: 12, border: "1px solid #f2d7d7" }}>
-                  <b>Payment didn’t complete.</b> You can try again from checkout.
-                </div>
-              )}
-            </>
-          )}
-
-          <button
-            onClick={refresh}
-            disabled={!cartId || loading}
-            style={{ marginTop: 10, padding: "10px 14px", borderRadius: 10, border: "1px solid #ddd" }}
-          >
-            Refresh status
-          </button>
-        </div>
-      )}
+      {err && <p style={{ color: "crimson", marginTop: 10 }}>{err}</p>}
 
       <div style={{ marginTop: 16, border: "1px solid #eee", borderRadius: 14, padding: 14 }}>
-        <h3 style={{ marginTop: 0 }}>Subtotal</h3>
-        <p>18.00 JOD</p>
-        <h3>Shipping</h3>
-        <p>3.50 JOD</p>
-        <h3>Total</h3>
-        <p><b>21.50 JOD</b></p>
-        <p style={{ fontSize: 13, opacity: 0.75 }}>Checkout UI + PayTabs flow goes here.</p>
+        <h3 style={{ marginTop: 0 }}>{COPY.summary}</h3>
+        <p>{COPY.product}: <b>{PRICE.toFixed(2)} JOD</b></p>
+        <p>{COPY.shipping}: <b>{SHIPPING.toFixed(2)} JOD</b></p>
+        <p>{COPY.total}: <b>{totals.total.toFixed(2)} JOD</b></p>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+          <button onClick={payByCard} disabled={loading} style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #ddd" }}>
+            {loading ? COPY.processing : COPY.payCard}
+          </button>
+          <button onClick={cashOnDelivery} disabled={loading} style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #ddd" }}>
+            {loading ? COPY.processing : COPY.cod}
+          </button>
+        </div>
+
+        {cartId && status && (
+          <div style={{ marginTop: 12, padding: 12, borderRadius: 12, border: "1px solid #eee" }}>
+            <div style={{ fontFamily: "monospace", fontSize: 13, opacity: 0.8 }}>cart_id: {cartId}</div>
+            <div style={{ marginTop: 6 }}>
+              {COPY.status}: <b>{status}</b>
+            </div>
+
+            {status === "PENDING_COD_CONFIRM" && WHATSAPP_E164 && (
+              <a
+                href={waLink(WHATSAPP_E164, waMsg)}
+                target="_blank"
+                rel="noreferrer"
+                style={{ display: "inline-block", marginTop: 10, padding: "10px 14px", borderRadius: 12, border: "1px solid #ddd", textDecoration: "none" }}
+              >
+                {COPY.confirmWa}
+              </a>
+            )}
+          </div>
+        )}
       </div>
+
+      <p style={{ fontSize: 12, opacity: 0.7, marginTop: 14 }}>
+        NIVRAN/نيفـران uses claim-safe wording only (no medical or therapeutic claims). Keep away from heat and flame.
+      </p>
     </div>
   );
 }

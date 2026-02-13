@@ -1,28 +1,35 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-
-const SUPPORTED = new Set(["en", "ar"]);
-const PUBLIC_FILE = /\.(.*)$/;
+import { NextRequest, NextResponse } from "next/server";
 
 export function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
+  const path = req.nextUrl.pathname;
 
-  if (
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/api") ||
-    PUBLIC_FILE.test(pathname)
-  ) {
-    return NextResponse.next();
+  const adminToken = process.env.ADMIN_TOKEN || "";
+  const cookieToken = req.cookies.get("admin_token")?.value || "";
+
+  const isAdminRoute = path.startsWith("/admin");
+  const isAdminApi = path.startsWith("/api/admin");
+
+  if (!isAdminRoute && !isAdminApi) return NextResponse.next();
+
+  // If ADMIN_TOKEN isn't set, lock down admin completely
+  if (!adminToken) {
+    return isAdminApi
+      ? NextResponse.json({ ok: false, error: "ADMIN_TOKEN not configured" }, { status: 500 })
+      : NextResponse.redirect(new URL("/admin/login", req.url));
   }
 
-  const seg1 = pathname.split("/")[1];
-  if (SUPPORTED.has(seg1)) return NextResponse.next();
+  if (cookieToken !== adminToken) {
+    if (isAdminApi) {
+      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    }
+    const url = new URL("/admin/login", req.url);
+    url.searchParams.set("next", path);
+    return NextResponse.redirect(url);
+  }
 
-  const url = req.nextUrl.clone();
-  url.pathname = `/en${pathname === "/" ? "" : pathname}`;
-  return NextResponse.redirect(url);
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/:path*"]
+  matcher: ["/admin/:path*", "/api/admin/:path*"],
 };

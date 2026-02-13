@@ -1,8 +1,8 @@
-export default function AdminLogin() {
-  return (
-    <div style={{ padding: 24, fontFamily: "system-ui" }}>
-      <h1>Admin Login</h1>
-      <p style={{ opacity: 0.7 }}>MVP placeholder.</p>
-    </div>
-  );
+import LoginClient from "./LoginClient";
+
+export const dynamic = "force-dynamic";
+
+export default function AdminLoginPage({ searchParams }: any) {
+  const nextPath = typeof searchParams?.next === "string" ? searchParams.next : "/admin/orders";
+  return <LoginClient nextPath={nextPath} />;
 }

@@ -1,13 +1,37 @@
-import { Pool } from "pg";
+import { Pool, QueryResult, QueryResultRow } from "pg";
 
 declare global {
   // eslint-disable-next-line no-var
-  var __pgPool: Pool | undefined;
+  var __nivranPool: Pool | undefined;
 }
 
-export function db() {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("Missing DATABASE_URL");
-  if (!global.__pgPool) global.__pgPool = new Pool({ connectionString: url });
-  return global.__pgPool;
+function getPool(): Pool {
+  const cs = process.env.DATABASE_URL;
+  if (!cs) throw new Error("Missing DATABASE_URL");
+
+  if (!global.__nivranPool) {
+    global.__nivranPool = new Pool({
+      connectionString: cs,
+      ssl: cs.includes("localhost") ? undefined : { rejectUnauthorized: false },
+    });
+  }
+  return global.__nivranPool;
 }
+
+type DB = {
+  (): Pool;
+  query<T extends QueryResultRow = any>(
+    text: string,
+    params?: any[]
+  ): Promise<QueryResult<T>>;
+};
+
+// db() -> Pool
+// db.query(...) -> convenience wrapper
+export const db: DB = Object.assign(
+  (() => getPool()) as any,
+  {
+    query: <T extends QueryResultRow = any>(text: string, params?: any[]) =>
+      getPool().query<T>(text, params),
+  }
+);

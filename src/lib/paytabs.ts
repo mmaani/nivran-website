@@ -1,72 +1,31 @@
 import crypto from "crypto";
 
-type PayTabsRequest = Record<string, any>;
-
-function mustEnv(name: string): string {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing env var: ${name}`);
-  return v;
+export function getPaytabsEnv() {
+  const profileId = process.env.PAYTABS_PROFILE_ID || "";
+  const serverKey = process.env.PAYTABS_SERVER_KEY || "";
+  const apiBase = process.env.PAYTABS_API_BASE_URL || ""; // e.g. https://secure.paytabs.com  (region-specific)
+  if (!profileId) throw new Error("Missing PAYTABS_PROFILE_ID");
+  if (!serverKey) throw new Error("Missing PAYTABS_SERVER_KEY");
+  if (!apiBase) throw new Error("Missing PAYTABS_API_BASE_URL");
+  return { profileId, serverKey, apiBase: apiBase.replace(/\/+$/, "") };
 }
 
-export function paytabsConfig() {
-  return {
-    profileId: mustEnv("PAYTABS_PROFILE_ID"),
-    serverKey: mustEnv("PAYTABS_SERVER_KEY"),
-    baseUrl: (process.env.PAYTABS_BASE_URL || "https://secure-jordan.paytabs.com").replace(/\/$/, ""),
-    callbackUrl: mustEnv("PAYTABS_CALLBACK_URL"),
-    returnUrl: mustEnv("PAYTABS_RETURN_URL"),
-  };
+export function computePaytabsSignature(rawBody: string, serverKey: string): string {
+  return crypto.createHmac("sha256", serverKey).update(rawBody, "utf8").digest("hex");
 }
 
-// HPP initiate request: POST {domain}/payment/request
-export async function paytabsInitiate(body: PayTabsRequest) {
-  const { baseUrl, serverKey } = paytabsConfig();
-  const url = `${baseUrl}/payment/request`;
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      // PayTabs requires server key in the authorization header for /payment/request
-      // Example shown by PayTabs docs: --header 'authorization: <server_key>'
-      authorization: serverKey,
-    },
-    body: JSON.stringify(body),
-    cache: "no-store",
-  });
-
-  const text = await res.text();
-  let data: any;
-  try { data = JSON.parse(text); } catch { data = { raw: text }; }
-
-  if (!res.ok) {
-    const msg =
-      data?.message ||
-      data?.response_message ||
-      data?.responseMessage ||
-      `PayTabs error (${res.status})`;
-    const err: any = new Error(msg);
-    err.paytabs = data;
-    err.status = res.status;
-    throw err;
-  }
-
-  return data;
+export function safeEqualHex(a: string, b: string): boolean {
+  const aa = Buffer.from(String(a || "").trim().toLowerCase(), "utf8");
+  const bb = Buffer.from(String(b || "").trim().toLowerCase(), "utf8");
+  if (aa.length !== bb.length) return false;
+  return crypto.timingSafeEqual(aa, bb);
 }
 
-// Callback/IPN signature verification:
-// signature = HMAC-SHA256(raw_body, serverKey) compared to Header "Signature"
-export function verifyPaytabsCallbackSignature(rawBody: string, signatureHeader: string | null) {
-  if (!signatureHeader) return false;
-  const { serverKey } = paytabsConfig();
-
-  const computed = crypto
-    .createHmac("sha256", serverKey)
-    .update(rawBody, "utf8")
-    .digest("hex");
-
-  const a = Buffer.from(computed, "utf8");
-  const b = Buffer.from(signatureHeader, "utf8");
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
+export function mapPaytabsResponseStatusToOrderStatus(respStatus: string): string {
+  // PayTabs commonly uses payment_result.response_status values like A/H/P/D/E... (A = approved)
+  const s = String(respStatus || "").trim().toUpperCase();
+  if (s === "A") return "PAID";
+  if (s === "H") return "PENDING_REVIEW";
+  if (s === "P") return "PENDING_PAYMENT";
+  return "PAYMENT_FAILED";
 }
