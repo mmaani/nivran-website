@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 type Props = { params: Promise<{ locale: string }> };
+
 type Order = {
   cart_id: string;
   status: string;
@@ -11,18 +12,25 @@ type Order = {
   paytabs_tran_ref: string | null;
   paytabs_response_status: string | null;
   paytabs_response_message: string | null;
+  updated_at: string;
 };
+
+function pillStyle() {
+  return { display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 999, border: "1px solid #ddd" } as const;
+}
 
 export default function CheckoutPage({ params }: Props) {
   const [locale, setLocale] = useState("en");
+
   const [cartId, setCartId] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    params.then(p => setLocale(p.locale || "en"));
+    params.then(p => setLocale(p?.locale || "en"));
   }, [params]);
 
   useEffect(() => {
@@ -31,7 +39,7 @@ export default function CheckoutPage({ params }: Props) {
     setCartId(u.searchParams.get("cart_id"));
   }, []);
 
-  async function refresh() {
+  async function fetchStatus() {
     if (!cartId) return;
     setLoading(true);
     setErr(null);
@@ -48,75 +56,132 @@ export default function CheckoutPage({ params }: Props) {
     }
   }
 
+  // Auto-fetch when returning from PayTabs
   useEffect(() => {
-    if (result === "paytabs" && cartId) refresh();
+    if (result === "paytabs" && cartId) fetchStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result, cartId]);
 
-  const title = useMemo(() => {
-    if (!result) return "Checkout";
+  const heading = useMemo(() => {
+    if (result !== "paytabs") return "Checkout";
     if (!order) return "Checkout";
     if (order.status === "PAID") return "Payment successful";
     if (order.status === "FAILED") return "Payment failed";
     return "Payment pending";
   }, [result, order]);
 
+  const statusBadge = useMemo(() => {
+    if (!order) return null;
+    const s = String(order.status || "");
+    return (
+      <span style={pillStyle()}>
+        <b>Status:</b> <span style={{ fontFamily: "monospace" }}>{s}</span>
+      </span>
+    );
+  }, [order]);
+
+  // Dummy totals for MVP (keep your existing numbers)
+  const subtotal = 18.0;
+  const shipping = 3.5;
+  const total = subtotal + shipping;
+
+  function retryLink() {
+    // In your MVP, “retry” can simply reload checkout and click PayTabs again.
+    // If you later implement "initiate" to reuse cart_id, we can wire it.
+    return `/${locale}/checkout`;
+  }
+
   return (
-    <div style={{ padding: 24, fontFamily: "system-ui", maxWidth: 760, margin: "0 auto" }}>
-      <h1>{title}</h1>
-      <p style={{ opacity: 0.75 }}>Locale: {locale}</p>
+    <div style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860, margin: "0 auto" }}>
+      <h1 style={{ marginBottom: 6 }}>{heading}</h1>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", opacity: 0.85 }}>
+        <span style={pillStyle()}>Locale: <b>{locale}</b></span>
+        {cartId && <span style={pillStyle()}><b>cart_id:</b> <span style={{ fontFamily: "monospace" }}>{cartId}</span></span>}
+        {statusBadge}
+      </div>
 
-      {result === "paytabs" && cartId && (
-        <div style={{ border: "1px solid #eee", borderRadius: 14, padding: 14, marginTop: 12 }}>
-          <div style={{ fontFamily: "monospace", fontSize: 13, opacity: 0.8 }}>cart_id: {cartId}</div>
+      {result === "paytabs" && (
+        <div style={{ marginTop: 14, border: "1px solid #eee", borderRadius: 16, padding: 16 }}>
+          {loading && <p style={{ margin: 0 }}>Checking payment status…</p>}
+          {err && <p style={{ margin: 0, color: "crimson" }}>{err}</p>}
 
-          {loading && <p>Checking payment status…</p>}
-          {err && <p style={{ color: "crimson" }}>{err}</p>}
-
-          {order && (
+          {!loading && !err && order && (
             <>
-              <p style={{ marginTop: 8 }}>
-                Status: <b>{order.status}</b>
-              </p>
-              <p>
-                Total: <b>{Number(order.amount).toFixed(2)} {order.currency}</b>
-              </p>
-              <p style={{ fontSize: 13, opacity: 0.8 }}>
-                PayTabs: {order.paytabs_tran_ref || "—"} / {order.paytabs_response_status || "—"} {order.paytabs_response_message ? `(${order.paytabs_response_message})` : ""}
-              </p>
+              <div style={{ marginTop: 6, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <span style={pillStyle()}>
+                  <b>Total:</b> {Number(order.amount ?? total).toFixed(2)} {order.currency || "JOD"}
+                </span>
+                <span style={pillStyle()}>
+                  <b>PayTabs:</b>{" "}
+                  <span style={{ fontFamily: "monospace" }}>{order.paytabs_tran_ref || "—"}</span>
+                </span>
+                <span style={pillStyle()}>
+                  <b>Response:</b>{" "}
+                  <span style={{ fontFamily: "monospace" }}>{order.paytabs_response_status || "—"}</span>{" "}
+                  {order.paytabs_response_message ? `(${order.paytabs_response_message})` : ""}
+                </span>
+              </div>
 
               {order.status === "PAID" && (
-                <div style={{ marginTop: 10, padding: 12, borderRadius: 12, border: "1px solid #d7f2dd" }}>
-                  <b>Thank you.</b> Your order is confirmed. Wear the calm.
+                <div style={{ marginTop: 12, padding: 14, borderRadius: 14, border: "1px solid #d7f2dd" }}>
+                  <b>Order confirmed.</b> Thank you — Wear the calm.
                 </div>
               )}
 
-              {order.status === "FAILED" && (
-                <div style={{ marginTop: 10, padding: 12, borderRadius: 12, border: "1px solid #f2d7d7" }}>
-                  <b>Payment didn’t complete.</b> You can try again from checkout.
+              {order.status !== "PAID" && (
+                <div style={{ marginTop: 12, padding: 14, borderRadius: 14, border: "1px solid #f2d7d7" }}>
+                  <b>Not completed.</b> If you cancelled, that’s okay — you can try again.
+                  <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <button
+                      onClick={fetchStatus}
+                      disabled={loading}
+                      style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #ddd" }}
+                    >
+                      Refresh status
+                    </button>
+                    <a
+                      href={retryLink()}
+                      style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #ddd", textDecoration: "none", display: "inline-block" }}
+                    >
+                      Retry payment
+                    </a>
+                  </div>
                 </div>
               )}
             </>
           )}
 
-          <button
-            onClick={refresh}
-            disabled={!cartId || loading}
-            style={{ marginTop: 10, padding: "10px 14px", borderRadius: 10, border: "1px solid #ddd" }}
-          >
-            Refresh status
-          </button>
+          {!loading && !err && !order && (
+            <div style={{ marginTop: 6 }}>
+              <p style={{ marginTop: 0 }}>We couldn’t load your order yet.</p>
+              <button
+                onClick={fetchStatus}
+                disabled={!cartId || loading}
+                style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #ddd" }}
+              >
+                Refresh status
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      <div style={{ marginTop: 16, border: "1px solid #eee", borderRadius: 14, padding: 14 }}>
+      <div style={{ marginTop: 14, border: "1px solid #eee", borderRadius: 16, padding: 16 }}>
         <h3 style={{ marginTop: 0 }}>Subtotal</h3>
-        <p>18.00 JOD</p>
+        <p>{subtotal.toFixed(2)} JOD</p>
         <h3>Shipping</h3>
-        <p>3.50 JOD</p>
+        <p>{shipping.toFixed(2)} JOD</p>
         <h3>Total</h3>
-        <p><b>21.50 JOD</b></p>
-        <p style={{ fontSize: 13, opacity: 0.75 }}>Checkout UI + PayTabs flow goes here.</p>
+        <p><b>{total.toFixed(2)} JOD</b></p>
+
+        <div style={{ marginTop: 12 }}>
+          <button style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #ddd" }}>
+            Pay with PayTabs
+          </button>
+          <p style={{ marginTop: 8, fontSize: 13, opacity: 0.75 }}>
+            (Your existing PayTabs initiate button/flow stays here — this page now just shows the result cleanly after return.)
+          </p>
+        </div>
       </div>
     </div>
   );
