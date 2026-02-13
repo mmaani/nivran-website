@@ -33,7 +33,10 @@ export async function POST(req: Request) {
     }
 
     const { profileId, callbackUrl } = paytabsConfig();
-    const origin = req.headers.get("origin") || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+    const origin =
+      req.headers.get("origin") ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      "http://localhost:3000";
     const base = String(origin).replace(/\/$/, "");
     const locale = String(order.locale || "en") === "ar" ? "ar" : "en";
     const returnUrl = `${base}/${locale}/checkout?result=paytabs&cart_id=${encodeURIComponent(cartId)}`;
@@ -47,7 +50,7 @@ export async function POST(req: Request) {
       cart_currency: String(order.currency || "JOD"),
       cart_amount: Number(order.amount),
       callback: callbackUrl,
-      return: returnUrl
+      return: returnUrl,
     };
 
     const pt = await paytabsInitiate(payload);

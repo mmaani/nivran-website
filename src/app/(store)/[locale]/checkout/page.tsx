@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-
-type Props = { params: { locale: string } };
+import { useParams } from "next/navigation";
 
 const SHIPPING = 3.5;
 const PRICE = 18.0;
@@ -12,8 +11,9 @@ function waLink(phoneE164: string, msg: string) {
   return `https://wa.me/${phoneE164}?text=${text}`;
 }
 
-export default function CheckoutPage({ params }: Props) {
-  const locale = params?.locale === "ar" ? "ar" : "en";
+export default function CheckoutPage() {
+  const p = useParams<{ locale?: string }>();
+  const locale = p?.locale === "ar" ? "ar" : "en";
   const isAr = locale === "ar";
 
   const [name, setName] = useState("");
@@ -137,19 +137,10 @@ export default function CheckoutPage({ params }: Props) {
         <p>{COPY.total}: <b>{totals.total.toFixed(2)} JOD</b></p>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
-          <button
-            onClick={payByCard}
-            disabled={loading}
-            style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #ddd" }}
-          >
+          <button onClick={payByCard} disabled={loading} style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #ddd" }}>
             {loading ? COPY.processing : COPY.payCard}
           </button>
-
-          <button
-            onClick={cashOnDelivery}
-            disabled={loading}
-            style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #ddd" }}
-          >
+          <button onClick={cashOnDelivery} disabled={loading} style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #ddd" }}>
             {loading ? COPY.processing : COPY.cod}
           </button>
         </div>
@@ -170,12 +161,6 @@ export default function CheckoutPage({ params }: Props) {
               >
                 {COPY.confirmWa}
               </a>
-            )}
-
-            {status === "PENDING_COD_CONFIRM" && !WHATSAPP_E164 && (
-              <p style={{ fontSize: 13, opacity: 0.75, marginTop: 10 }}>
-                Set <code>NEXT_PUBLIC_WHATSAPP_NUMBER</code> (E.164) to enable WhatsApp confirmation.
-              </p>
             )}
           </div>
         )}

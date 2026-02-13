@@ -1,11 +1,12 @@
-export default function StoreLocaleLayout({
+export default async function StoreLocaleLayout({
   children,
   params,
 }: {
   children: React.ReactNode;
-  params: { locale: string };
+  params: Promise<{ locale: string }>;
 }) {
-  const locale = params?.locale === "ar" ? "ar" : "en";
+  const { locale: raw } = await params;
+  const locale = raw === "ar" ? "ar" : "en";
   const dir = locale === "ar" ? "rtl" : "ltr";
 
   return (

@@ -4,12 +4,13 @@ import { db } from "@/lib/db";
 export const runtime = "nodejs";
 
 const SHIPPING_FEE_JOD = 3.5;
-const DEFAULT_ITEM_PRICE_JOD = 18.0; // MVP: 100ml single SKU price placeholder
+const DEFAULT_ITEM_PRICE_JOD = 18.0; // MVP placeholder: 100ml
 
 export async function POST(req: Request) {
   const input = await req.json().catch(() => ({} as any));
 
-  const mode = String(input?.mode || "PAYTABS").toUpperCase(); // PAYTABS | COD
+  const modeRaw = String(input?.mode || "PAYTABS").toUpperCase();
+  const mode = modeRaw === "COD" ? "COD" : "PAYTABS"; // allow only COD | PAYTABS
   const locale = String(input?.locale || "en") === "ar" ? "ar" : "en";
   const qty = Math.max(1, Number(input?.qty || 1));
 
