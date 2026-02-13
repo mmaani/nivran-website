@@ -19,6 +19,12 @@ export async function POST(req: Request) {
   let payload: any = {};
   try { payload = JSON.parse(rawBody); } catch { payload = { raw: rawBody }; }
 
+  const pool = db();
+
+  // 1) log every callback
+  await pool.query(`insert into paytabs_callbacks (payload) values ($1)`, [payload]);
+
+  // 2) update order if cart_id exists
   const cartId = payload?.cart_id || payload?.cartId;
   const tranRef = payload?.tran_ref || payload?.tranRef;
 
@@ -34,12 +40,10 @@ export async function POST(req: Request) {
     payload?.response_message ??
     null;
 
-  // PayTabs commonly uses "A" for approved in some payloads; keep mapping simple for MVP.
   const s = String(responseStatus || "").toLowerCase();
   const newStatus = (s === "a" || s === "approved") ? "PAID" : "FAILED";
 
   if (cartId) {
-    const pool = db();
     await pool.query(
       `update orders
        set status=$2,
