@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_FILE = /\.(.*)$/;
 const SUPPORTED = new Set(["en", "ar"]);
+const PUBLIC_FILE = /\.(.*)$/;
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -24,5 +24,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next|api).*)"]
+  matcher: ["/:path*"]
 };
