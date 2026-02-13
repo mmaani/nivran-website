@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getCustomerIdFromRequest } from "@/lib/identity";
 
 export const runtime = "nodejs";
 
@@ -7,6 +8,7 @@ const SHIPPING_FEE_JOD = 3.5;
 const DEFAULT_ITEM_PRICE_JOD = 18.0; // MVP placeholder: 100ml
 
 export async function POST(req: Request) {
+  const customerId = await getCustomerIdFromRequest(req);
   const input = await req.json().catch(() => ({} as any));
 
   const modeRaw = String(input?.mode || "PAYTABS").toUpperCase();
@@ -28,9 +30,9 @@ export async function POST(req: Request) {
     `insert into orders (
         cart_id, status, amount, currency, locale,
         payment_method, customer, shipping,
-        customer_email, customer_name
+        customer_email, customer_name, customer_id
      )
-     values ($1,$2,$3,'JOD',$4,$5,$6,$7,$8,$9)
+     values ($1,$2,$3,'JOD',$4,$5,$6,$7,$8,$9,$10)
      on conflict (cart_id) do update
        set status=excluded.status,
            amount=excluded.amount,
@@ -40,6 +42,7 @@ export async function POST(req: Request) {
            shipping=excluded.shipping,
            customer_email=excluded.customer_email,
            customer_name=excluded.customer_name,
+           customer_id=excluded.customer_id,
            updated_at=now()`,
     [
       cartId,
@@ -51,6 +54,7 @@ export async function POST(req: Request) {
       shipping,
       customer.email || null,
       customer.name || null,
+      customerId,
     ]
   );
 
