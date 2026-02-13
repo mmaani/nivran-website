@@ -116,4 +116,3 @@ select received_at, cart_id, tran_ref, signature_valid
 from paytabs_callbacks
 where cart_id = '<cart-id>'
 order by received_at desc;
-```
