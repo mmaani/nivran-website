@@ -88,7 +88,7 @@ export default function CheckoutPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || "PayTabs initiate failed");
-      window.location.href = data.redirect_url;
+      window.location.href = data.redirectUrl || data.redirect_url;
     } catch (e: any) {
       setErr(e?.message || "Error");
     } finally {
