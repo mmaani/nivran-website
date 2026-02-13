@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 export default function PayResultPage({ params, searchParams }: any) {
   const locale = (params?.locale === "ar" ? "ar" : "en") as "ar" | "en";
   const isAr = locale === "ar";
-  const cartId = String(searchParams?.cart_id || "");
+  const cartId = String(searchParams?.cartId || searchParams?.cart_id || "");
 
   const [status, setStatus] = useState<string>("...");
   const [method, setMethod] = useState<string>("");
