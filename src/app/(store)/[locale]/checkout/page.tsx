@@ -1,90 +1,122 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-export default function Checkout(props: any) {
-  const locale = props?.params?.locale ?? "en";
+type Props = { params: Promise<{ locale: string }> };
+type Order = {
+  cart_id: string;
+  status: string;
+  amount: number;
+  currency: string;
+  paytabs_tran_ref: string | null;
+  paytabs_response_status: string | null;
+  paytabs_response_message: string | null;
+};
+
+export default function CheckoutPage({ params }: Props) {
+  const [locale, setLocale] = useState("en");
+  const [cartId, setCartId] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+  const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // MVP demo totals (replace with real cart later)
-  const order = useMemo(() => {
-    const subtotal = 18; // JOD
-    const shipping = Number(process.env.NEXT_PUBLIC_FLAT_SHIPPING_JOD || 3.5);
-    const total = Number((subtotal + shipping).toFixed(2));
-    return { subtotal, shipping, total };
+  useEffect(() => {
+    params.then(p => setLocale(p.locale || "en"));
+  }, [params]);
+
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    setResult(u.searchParams.get("result"));
+    setCartId(u.searchParams.get("cart_id"));
   }, []);
 
-  async function startPaytabs() {
+  async function refresh() {
+    if (!cartId) return;
     setLoading(true);
     setErr(null);
-
     try {
-      const res = await fetch("/api/paytabs/initiate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          locale,
-          cartId: `NIVRAN-${Date.now()}`,
-          cartDescription: "NIVRAN Order",
-          amount: order.total,
-          currency: "JOD",
-          customer: {
-            name: "Test Customer",
-            email: "test@example.com",
-            phone: "962700000000",
-            street1: "Amman",
-            city: "Amman",
-            state: "Amman",
-            country: "JO",
-            zip: "11118",
-          },
-        }),
-      });
-
+      const res = await fetch(`/api/order-status?cart_id=${encodeURIComponent(cartId)}`, { cache: "no-store" });
       const data = await res.json();
-      if (!res.ok || !data?.ok) throw new Error(data?.error || "PayTabs initiate failed");
-
-      window.location.href = data.redirect_url;
+      if (!res.ok || !data.ok) throw new Error(data.error || "Failed");
+      setOrder(data.order);
     } catch (e: any) {
       setErr(e?.message || "Error");
+      setOrder(null);
     } finally {
       setLoading(false);
     }
   }
 
+  useEffect(() => {
+    if (result === "paytabs" && cartId) refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result, cartId]);
+
+  const title = useMemo(() => {
+    if (!result) return "Checkout";
+    if (!order) return "Checkout";
+    if (order.status === "PAID") return "Payment successful";
+    if (order.status === "FAILED") return "Payment failed";
+    return "Payment pending";
+  }, [result, order]);
+
   return (
-    <div style={{ padding: 24, fontFamily: "system-ui" }}>
-      <h1>Checkout</h1>
-      <p style={{ opacity: 0.7 }}>Locale: {locale}</p>
+    <div style={{ padding: 24, fontFamily: "system-ui", maxWidth: 760, margin: "0 auto" }}>
+      <h1>{title}</h1>
+      <p style={{ opacity: 0.75 }}>Locale: {locale}</p>
 
-      <div style={{ marginTop: 14, padding: 14, border: "1px solid #e5e5e5", borderRadius: 12, maxWidth: 420 }}>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <span>Subtotal</span><span>{order.subtotal.toFixed(2)} JOD</span>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-          <span>Shipping</span><span>{order.shipping.toFixed(2)} JOD</span>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, fontWeight: 700 }}>
-          <span>Total</span><span>{order.total.toFixed(2)} JOD</span>
-        </div>
+      {result === "paytabs" && cartId && (
+        <div style={{ border: "1px solid #eee", borderRadius: 14, padding: 14, marginTop: 12 }}>
+          <div style={{ fontFamily: "monospace", fontSize: 13, opacity: 0.8 }}>cart_id: {cartId}</div>
 
-        <button
-          onClick={startPaytabs}
-          disabled={loading}
-          style={{
-            marginTop: 14,
-            width: "100%",
-            padding: "10px 14px",
-            borderRadius: 10,
-            border: "1px solid #ddd",
-            cursor: loading ? "not-allowed" : "pointer",
-          }}
-        >
-          {loading ? "Redirecting…" : "Pay with PayTabs"}
-        </button>
+          {loading && <p>Checking payment status…</p>}
+          {err && <p style={{ color: "crimson" }}>{err}</p>}
 
-        {err && <p style={{ color: "crimson", marginTop: 12 }}>{err}</p>}
+          {order && (
+            <>
+              <p style={{ marginTop: 8 }}>
+                Status: <b>{order.status}</b>
+              </p>
+              <p>
+                Total: <b>{Number(order.amount).toFixed(2)} {order.currency}</b>
+              </p>
+              <p style={{ fontSize: 13, opacity: 0.8 }}>
+                PayTabs: {order.paytabs_tran_ref || "—"} / {order.paytabs_response_status || "—"} {order.paytabs_response_message ? `(${order.paytabs_response_message})` : ""}
+              </p>
+
+              {order.status === "PAID" && (
+                <div style={{ marginTop: 10, padding: 12, borderRadius: 12, border: "1px solid #d7f2dd" }}>
+                  <b>Thank you.</b> Your order is confirmed. Wear the calm.
+                </div>
+              )}
+
+              {order.status === "FAILED" && (
+                <div style={{ marginTop: 10, padding: 12, borderRadius: 12, border: "1px solid #f2d7d7" }}>
+                  <b>Payment didn’t complete.</b> You can try again from checkout.
+                </div>
+              )}
+            </>
+          )}
+
+          <button
+            onClick={refresh}
+            disabled={!cartId || loading}
+            style={{ marginTop: 10, padding: "10px 14px", borderRadius: 10, border: "1px solid #ddd" }}
+          >
+            Refresh status
+          </button>
+        </div>
+      )}
+
+      <div style={{ marginTop: 16, border: "1px solid #eee", borderRadius: 14, padding: 14 }}>
+        <h3 style={{ marginTop: 0 }}>Subtotal</h3>
+        <p>18.00 JOD</p>
+        <h3>Shipping</h3>
+        <p>3.50 JOD</p>
+        <h3>Total</h3>
+        <p><b>21.50 JOD</b></p>
+        <p style={{ fontSize: 13, opacity: 0.75 }}>Checkout UI + PayTabs flow goes here.</p>
       </div>
     </div>
   );
