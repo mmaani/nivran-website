@@ -1,4 +1,4 @@
-import { benefits, featuredProduct, testimonials } from "@/lib/siteContent";
+import { benefits, categoryLabels, featuredProduct, mainProductMessage, products, testimonials } from "@/lib/siteContent";
 
 export default async function Home({ params }: { params: Promise<{ locale: string }> }) {
   const { locale: raw } = await params;
@@ -18,6 +18,9 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
       email: "Your email",
       join: "Join now",
       quick: "Quick facts",
+      categories: "Categories",
+      catalog: "Browse catalog",
+      perfumeFocus: "Perfume focus",
     },
     ar: {
       hero: "تجربة تسوق عطور أنيقة بطابع فاخر وسهولة محلية.",
@@ -31,6 +34,9 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
       email: "بريدك الإلكتروني",
       join: "اشترك الآن",
       quick: "معلومات سريعة",
+      categories: "الفئات",
+      catalog: "تصفح المنتجات",
+      perfumeFocus: "تركيزنا على العطور",
     },
   }[locale];
 
@@ -51,6 +57,9 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
 
           <aside className="feature-card">
             <p className="muted" style={{ marginTop: 0 }}>{t.quick}</p>
+            <div className="badge-row" style={{ marginBottom: ".6rem" }}>
+              {Object.entries(categoryLabels).map(([key, label]) => <span className="badge" key={key}>{label[locale]}</span>)}
+            </div>
             <h3 style={{ margin: "0 0 .3rem" }}>{featuredProduct.name[locale]}</h3>
             <p className="muted" style={{ marginTop: 0 }}>{featuredProduct.subtitle[locale]}</p>
             <p style={{ marginBottom: ".45rem" }}><strong>{featuredProduct.priceJod.toFixed(2)} JOD</strong> · {featuredProduct.size}</p>
@@ -59,6 +68,24 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
               {featuredProduct.notes[locale].map((n) => <span className="badge" key={n}>{n}</span>)}
             </div>
           </aside>
+        </div>
+      </section>
+
+      <section className="section">
+        <h2 className="section-title">{t.categories}</h2>
+        <p className="muted" style={{ marginTop: 0 }}>{mainProductMessage[locale]}</p>
+        <div className="grid-3">
+          {products.slice(0, 6).map((item) => (
+            <article key={item.slug} className="panel">
+              <p className="muted" style={{ marginTop: 0 }}>{categoryLabels[item.category][locale]} · {item.size}</p>
+              <h3 style={{ margin: "0 0 .3rem" }}>{item.name[locale]}</h3>
+              <p className="muted">{item.subtitle[locale]}</p>
+              <p style={{ marginBottom: 0 }}><strong>{item.priceJod.toFixed(2)} JOD</strong></p>
+            </article>
+          ))}
+        </div>
+        <div className="cta-row" style={{ marginTop: ".8rem" }}>
+          <a className="btn" href={`/${locale}/product`}>{t.catalog}</a>
         </div>
       </section>
 

@@ -1,25 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { ensureIdentityTables, hashPassword } from "@/lib/identity";
+import { getCustomerIdFromRequest, hashPassword } from "@/lib/identity";
 
 export const runtime = "nodejs";
 
-async function getCustomerIdFromCookie(req: Request) {
-  await ensureIdentityTables();
-  const token = req.headers.get("cookie")?.match(/customer_session=([^;]+)/)?.[1] || "";
-  if (!token) return null;
-  const { rows } = await db.query<{ customer_id: number }>(
-    `select customer_id
-     from customer_sessions
-     where token=$1 and revoked_at is null and expires_at > now()
-     limit 1`,
-    [token]
-  );
-  return rows[0]?.customer_id || null;
-}
-
 export async function GET(req: Request) {
-  const customerId = await getCustomerIdFromCookie(req);
+  const customerId = await getCustomerIdFromRequest(req);
   if (!customerId) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
 
   const [profileRes, ordersRes] = await Promise.all([
@@ -42,7 +28,7 @@ export async function GET(req: Request) {
 }
 
 export async function PUT(req: Request) {
-  const customerId = await getCustomerIdFromCookie(req);
+  const customerId = await getCustomerIdFromRequest(req);
   if (!customerId) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
 
   const input = await req.json().catch(() => ({} as any));
@@ -72,7 +58,7 @@ export async function PUT(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const customerId = await getCustomerIdFromCookie(req);
+  const customerId = await getCustomerIdFromRequest(req);
   if (!customerId) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
 
   await db.query(`update customers set is_active=false, updated_at=now() where id=$1`, [customerId]);
