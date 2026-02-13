@@ -1,30 +1,20 @@
-export default async function StoryPage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}) {
+export default async function StoryPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale: raw } = await params;
   const locale = raw === "ar" ? "ar" : "en";
   const isAr = locale === "ar";
 
   return (
-    <div style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860, margin: "0 auto" }}>
-      <a href={`/${locale}`} style={{ textDecoration: "underline" }}>
-        {isAr ? "رجوع" : "Back"}
-      </a>
-
-      <h1 style={{ marginTop: 14 }}>{isAr ? "قصة نيفـران" : "The NIVRAN story"}</h1>
-
-      <div style={{ border: "1px solid #eee", borderRadius: 14, padding: 14 }}>
-        <p style={{ marginTop: 0 }}>
+    <section style={{ padding: "1.2rem 0" }}>
+      <article className="panel">
+        <div className="kicker">{isAr ? "عن العلامة" : "About the brand"}</div>
+        <h1 className="title">{isAr ? "قصة نيفـران" : "The NIVRAN story"}</h1>
+        <p>
           {isAr
-            ? "نيفـران علامة عطور أردنية داخلية التصنيع بروح نظيفة وبسيطة. نركز على تجربة عطرية منعشة ومحايدة بعبارات آمنة للادعاءات."
-            : "NIVRAN is an in-house Jordan perfume brand with a clean, minimalist point of view. We focus on a fresh unisex profile with claim-safe language."}
+            ? "بدأت نيفـران لتقديم تجربة عطور راقية بلمسة محلية حديثة: تصميم واضح، مكونات دقيقة، وخدمة سريعة. هدفنا أن نجعل اختيار العطر أسهل وأكثر ثقة على الجوال والكمبيوتر."
+            : "NIVRAN started to deliver a premium fragrance experience with a modern local identity: clear design, intentional formulas, and fast service. We focus on making fragrance shopping easier on both mobile and desktop."}
         </p>
-        <p style={{ marginBottom: 0 }}>
-          {isAr ? "الشعار: ارتدِ الهدوء." : "Tagline direction: Wear the calm."}
-        </p>
-      </div>
-    </div>
+        <p style={{ marginBottom: 0 }}>{isAr ? "الشعار: ارتدِ الهدوء." : "Tagline: Wear the calm."}</p>
+      </article>
+    </section>
   );
 }

@@ -1,4 +1,4 @@
-import { Inter, Noto_Sans_Arabic, Playfair_Display } from "next/font/google";
+import { Cairo, Inter, Playfair_Display } from "next/font/google";
 
 export const inter = Inter({
   subsets: ["latin"],
@@ -6,10 +6,11 @@ export const inter = Inter({
   display: "swap",
 });
 
-export const notoSansArabic = Noto_Sans_Arabic({
-  subsets: ["arabic"],
+export const cairoArabic = Cairo({
+  subsets: ["arabic", "latin"],
   variable: "--font-arabic",
   display: "swap",
+  weight: ["400", "500", "600", "700"],
 });
 
 export const playfairDisplay = Playfair_Display({
