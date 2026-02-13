@@ -18,8 +18,20 @@ function getPool(): Pool {
   return global.__nivranPool;
 }
 
-export const db = {
-  query<T extends QueryResultRow = any>(text: string, params?: any[]): Promise<QueryResult<T>> {
-    return getPool().query<T>(text, params);
-  },
+type DB = {
+  (): Pool;
+  query<T extends QueryResultRow = any>(
+    text: string,
+    params?: any[]
+  ): Promise<QueryResult<T>>;
 };
+
+// db() -> Pool
+// db.query(...) -> convenience wrapper
+export const db: DB = Object.assign(
+  (() => getPool()) as any,
+  {
+    query: <T extends QueryResultRow = any>(text: string, params?: any[]) =>
+      getPool().query<T>(text, params),
+  }
+);
