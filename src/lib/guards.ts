@@ -1,11 +1,10 @@
-import { NextResponse } from "next/server";
-
 export function requireAdmin(req: Request) {
-  const token = req.headers.get("x-admin-token") || "";
-  const expected = process.env.ADMIN_TOKEN || "";
+  const token = process.env.ADMIN_TOKEN || "";
+  if (!token) return { ok: false, error: "Missing ADMIN_TOKEN on server" };
 
-  if (!expected || token !== expected) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
-  return null;
+  const header = req.headers.get("authorization") || "";
+  const got = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+
+  if (!got || got !== token) return { ok: false, error: "Unauthorized" };
+  return { ok: true };
 }
