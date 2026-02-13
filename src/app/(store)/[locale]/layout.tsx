@@ -1,96 +1,60 @@
 const LINKS = {
-  en: {
-    home: "Home",
-    story: "Story",
-    faq: "FAQ",
-    contact: "Contact",
-    product: "Product",
-    shipping: "Shipping",
-    returns: "Returns",
-    privacy: "Privacy",
-    terms: "Terms",
-    compliance: "Compliance",
-    cart: "Cart",
-    checkout: "Checkout",
-  },
-  ar: {
-    home: "الرئيسية",
-    story: "القصة",
-    faq: "الأسئلة",
-    contact: "تواصل",
-    product: "المنتج",
-    shipping: "الشحن",
-    returns: "الاستبدال/الاسترجاع",
-    privacy: "الخصوصية",
-    terms: "الشروط",
-    compliance: "التنبيهات",
-    cart: "السلة",
-    checkout: "الدفع",
-  },
+  en: { home: "Home", story: "Story", product: "Shop", faq: "FAQ", contact: "Contact", checkout: "Checkout", account: "Account", admin: "Admin", menu: "Menu", lang: "العربية" },
+  ar: { home: "الرئيسية", story: "قصتنا", product: "المتجر", faq: "الأسئلة", contact: "تواصل", checkout: "الدفع", account: "حسابي", admin: "الإدارة", menu: "القائمة", lang: "English" },
 };
 
-export default async function StoreLocaleLayout({
-  children,
-  params,
-}: {
-  children: React.ReactNode;
-  params: Promise<{ locale: string }>;
-}) {
+export default async function StoreLocaleLayout({ children, params }: { children: React.ReactNode; params: Promise<{ locale: string }> }) {
   const { locale: raw } = await params;
   const locale = raw === "ar" ? "ar" : "en";
   const isAr = locale === "ar";
   const t = LINKS[locale];
-
   const href = (p: string) => `/${locale}${p}`;
+  const switchTo = locale === "ar" ? "en" : "ar";
 
   return (
-    <div lang={locale} dir={isAr ? "rtl" : "ltr"} style={{ minHeight: "100vh", fontFamily: "system-ui" }}>
-      <header style={{ borderBottom: "1px solid #eee" }}>
-        <div style={{ maxWidth: 980, margin: "0 auto", padding: "14px 18px", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-          <a href={href("")} style={{ textDecoration: "none", color: "inherit" }}>
-            <div style={{ fontWeight: 800, letterSpacing: 0.6 }}>
-              {isAr ? "نيفـران" : "NIVRAN"}
-            </div>
-            <div style={{ fontSize: 12, opacity: 0.7 }}>
-              {isAr ? "ارتدِ الهدوء" : "Wear the calm."}
-            </div>
+    <div lang={locale} dir={isAr ? "rtl" : "ltr"}>
+      <header className="site-header">
+        <div className="shell topbar">
+          <a className="brand" href={href("")}>
+            <strong>{isAr ? "نيفـران" : "NIVRAN"}</strong>
+            <span>{isAr ? "ارتدِ الهدوء" : "Wear the calm."}</span>
           </a>
 
-          <nav style={{ display: "flex", gap: 12, flexWrap: "wrap", marginInlineStart: isAr ? 0 : "auto", marginInlineEnd: isAr ? "auto" : 0 }}>
-            <a href={href("")} style={{ textDecoration: "underline" }}>{t.home}</a>
-            <a href={href("/story")} style={{ textDecoration: "underline" }}>{t.story}</a>
-            <a href={href("/product/nivran-calm-100ml")} style={{ textDecoration: "underline" }}>{t.product}</a>
-            <a href={href("/faq")} style={{ textDecoration: "underline" }}>{t.faq}</a>
-            <a href={href("/contact")} style={{ textDecoration: "underline" }}>{t.contact}</a>
-            <a href={href("/cart")} style={{ textDecoration: "underline" }}>{t.cart}</a>
-            <a href={href("/checkout")} style={{ textDecoration: "underline" }}>{t.checkout}</a>
+          <nav className="main-nav desktop-nav">
+            <a href={href("")}>{t.home}</a>
+            <a href={href("/story")}>{t.story}</a>
+            <a href={href("/product/nivran-calm-100ml")}>{t.product}</a>
+            <a href={href("/faq")}>{t.faq}</a>
+            <a href={href("/contact")}>{t.contact}</a>
+            <a className="nav-cta" href={href("/checkout")}>{t.checkout}</a>
+            <a href={href("/account")}>{t.account}</a>
+            <a href={`/${switchTo}`}>{t.lang}</a>
+            <a href="/admin/orders">{t.admin}</a>
           </nav>
+
+          <details className="mobile-nav" role="navigation">
+            <summary>{t.menu}</summary>
+            <div className="mobile-nav-panel">
+              <a href={href("")}>{t.home}</a>
+              <a href={href("/story")}>{t.story}</a>
+              <a href={href("/product/nivran-calm-100ml")}>{t.product}</a>
+              <a href={href("/faq")}>{t.faq}</a>
+              <a href={href("/contact")}>{t.contact}</a>
+              <a className="nav-cta" href={href("/checkout")}>{t.checkout}</a>
+              <a href={href("/account")}>{t.account}</a>
+              <a href={`/${switchTo}`}>{t.lang}</a>
+              <a href="/admin/orders">{t.admin}</a>
+            </div>
+          </details>
         </div>
       </header>
 
-      <main style={{ maxWidth: 980, margin: "0 auto", padding: "18px" }}>
-        {children}
-      </main>
+      <main className="shell">{children}</main>
 
-      <footer style={{ borderTop: "1px solid #eee", marginTop: 20 }}>
-        <div style={{ maxWidth: 980, margin: "0 auto", padding: "16px 18px", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <div style={{ fontSize: 12, opacity: 0.75 }}>
-            © {new Date().getFullYear()} {isAr ? "نيفـران" : "NIVRAN"} — {isAr ? "ارتدِ الهدوء" : "Wear the calm."}
-          </div>
-
-          <div style={{ marginInlineStart: isAr ? 0 : "auto", marginInlineEnd: isAr ? "auto" : 0, display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <a href={href("/shipping")} style={{ textDecoration: "underline", fontSize: 12 }}>{t.shipping}</a>
-            <a href={href("/returns")} style={{ textDecoration: "underline", fontSize: 12 }}>{t.returns}</a>
-            <a href={href("/privacy")} style={{ textDecoration: "underline", fontSize: 12 }}>{t.privacy}</a>
-            <a href={href("/terms")} style={{ textDecoration: "underline", fontSize: 12 }}>{t.terms}</a>
-            <a href={href("/compliance")} style={{ textDecoration: "underline", fontSize: 12 }}>{t.compliance}</a>
-          </div>
-
-          <div style={{ width: "100%", fontSize: 12, opacity: 0.65, marginTop: 6 }}>
-            {isAr
-              ? "تنبيه: نستخدم صياغة آمنة للادعاءات بدون أي ادعاءات طبية أو علاجية."
-              : "Notice: claim-safe wording only — no medical or therapeutic claims."}
-          </div>
+      <footer className="site-footer">
+        <div className="shell" style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+          <div>© {new Date().getFullYear()} NIVRAN · Jordan</div>
+          <div style={{ marginInlineStart: "auto" }}>{isAr ? "صياغة آمنة بدون ادعاءات علاجية." : "Claim-safe wording. No therapeutic claims."}</div>
         </div>
       </footer>
     </div>

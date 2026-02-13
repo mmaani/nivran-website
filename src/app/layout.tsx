@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { inter, notoSansArabic, playfairDisplay } from "./ui/fonts";
+import { cairoArabic, inter, playfairDisplay } from "./ui/fonts";
 
 export const metadata: Metadata = {
   title: "NIVRAN — Wear the calm.",
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${notoSansArabic.variable} ${playfairDisplay.variable}`}>
+    <html lang="en" className={`${inter.variable} ${cairoArabic.variable} ${playfairDisplay.variable}`}>
       <body>{children}</body>
     </html>
   );

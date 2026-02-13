@@ -59,6 +59,9 @@ export default async function AdminOrdersPage() {
     <div style={{ fontFamily: "system-ui", maxWidth: 1100, margin: "20px auto", padding: 18 }}>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         <h1 style={{ margin: 0 }}>NIVRAN Admin — Orders</h1>
+        <a href="/admin/catalog" style={{ textDecoration: "underline" }}>Catalog CRM</a>
+        <a href="/admin/inbox" style={{ textDecoration: "underline" }}>Inbox</a>
+        <a href="/admin/staff" style={{ textDecoration: "underline" }}>Staff</a>
         <form action="/api/admin/logout" method="post" style={{ marginInlineStart: "auto" }}>
           <button style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #ddd" }}>Logout</button>
         </form>

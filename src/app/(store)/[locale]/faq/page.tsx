@@ -1,39 +1,27 @@
-export default async function FAQPage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}) {
+export default async function FAQPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale: raw } = await params;
   const locale = raw === "ar" ? "ar" : "en";
   const isAr = locale === "ar";
 
+  const faqs = isAr
+    ? [
+        ["هل لديكم ادعاءات طبية؟", "لا، نعتمد صياغة آمنة بدون ادعاءات علاجية."],
+        ["كم رسوم الشحن؟", "رسوم ثابتة 3.5 دينار داخل الأردن."],
+        ["كم مدة التوصيل؟", "عادة خلال 1-3 أيام عمل حسب المنطقة."],
+      ]
+    : [
+        ["Do you make therapeutic claims?", "No. We use claim-safe wording only."],
+        ["What is the shipping fee?", "Flat 3.5 JOD across Jordan."],
+        ["How long does delivery take?", "Usually 1-3 business days by region."],
+      ];
+
   return (
-    <div style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860, margin: "0 auto" }}>
-      <a href={`/${locale}`} style={{ textDecoration: "underline" }}>
-        {isAr ? "رجوع" : "Back"}
-      </a>
-
-      <h1 style={{ marginTop: 14 }}>{isAr ? "الأسئلة الشائعة" : "FAQ"}</h1>
-
-      <div style={{ border: "1px solid #eee", borderRadius: 14, padding: 14 }}>
-        <h3>{isAr ? "هل لديكم ادعاءات طبية؟" : "Do you make medical claims?"}</h3>
-        <p style={{ marginTop: 0 }}>
-          {isAr
-            ? "لا. نستخدم صياغة آمنة للادعاءات بدون أي ادعاءات طبية أو علاجية."
-            : "No. We use claim-safe wording without medical or therapeutic claims."}
-        </p>
-
-        <h3>{isAr ? "ما هي رسوم الشحن داخل الأردن؟" : "What is shipping fee in Jordan?"}</h3>
-        <p style={{ marginTop: 0 }}>
-          {isAr ? "رسوم ثابتة ٣٫٥ دينار أردني داخل الأردن." : "Flat fee 3.5 JOD nationwide in Jordan."}
-        </p>
-
-        <h3>{isAr ? "هل المنتج قابل للاشتعال؟" : "Is the product flammable?"}</h3>
-        <p style={{ marginTop: 0 }}>
-          {isAr
-            ? "نعم، العطور الكحولية قابلة للاشتعال. يُحفظ بعيدًا عن الحرارة واللهب."
-            : "Yes. Alcohol-based perfumes are flammable. Keep away from heat and flame."}
-        </p>
+    <div style={{ padding: "1.2rem 0" }}>
+      <h1 className="title">{isAr ? "الأسئلة الشائعة" : "Frequently asked questions"}</h1>
+      <div style={{ display: "grid", gap: ".8rem" }}>
+        {faqs.map(([q, a]) => (
+          <article key={q} className="panel"><h3 style={{ marginTop: 0 }}>{q}</h3><p style={{ marginBottom: 0 }}>{a}</p></article>
+        ))}
       </div>
     </div>
   );
