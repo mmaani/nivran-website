@@ -1,18 +1,31 @@
 import { NextResponse } from "next/server";
-import { hmacSha256Hex, timingSafeEqualHex } from "@/lib/paytabs";
+import { verifyPaytabsCallbackSignature } from "@/lib/paytabs";
+
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const serverKey = process.env.PAYTABS_SERVER_KEY || "";
-  if (!serverKey) return NextResponse.json({ ok: false, error: "Missing PAYTABS_SERVER_KEY" }, { status: 500 });
+  const rawBody = await req.text();
 
-  const signature = req.headers.get("signature") || req.headers.get("Signature") || "";
-  const raw = await req.text();
+  const sig =
+    req.headers.get("signature") ||
+    req.headers.get("Signature") ||
+    req.headers.get("x-signature") ||
+    req.headers.get("X-Signature");
 
-  const expected = hmacSha256Hex(serverKey, raw);
-  if (!timingSafeEqualHex(signature, expected)) {
+  const ok = verifyPaytabsCallbackSignature(rawBody, sig);
+
+  if (!ok) {
     return NextResponse.json({ ok: false, error: "Invalid signature" }, { status: 401 });
   }
 
-  const payload = JSON.parse(raw);
-  return NextResponse.json({ ok: true, received: true, payload });
+  // Parse after verifying signature
+  let payload: any = {};
+  try {
+    payload = JSON.parse(rawBody);
+  } catch {
+    payload = { raw: rawBody };
+  }
+
+  // MVP: acknowledge receipt. Next step will update order status in DB using payload.
+  return NextResponse.json({ ok: true });
 }
