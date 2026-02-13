@@ -1,188 +1,189 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
-type Props = { params: Promise<{ locale: string }> };
+type Props = { params: { locale: string } };
 
-type Order = {
-  cart_id: string;
-  status: string;
-  amount: number;
-  currency: string;
-  paytabs_tran_ref: string | null;
-  paytabs_response_status: string | null;
-  paytabs_response_message: string | null;
-  updated_at: string;
-};
+const SHIPPING = 3.5;
+const PRICE = 18.0;
 
-function pillStyle() {
-  return { display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 999, border: "1px solid #ddd" } as const;
+function waLink(phoneE164: string, msg: string) {
+  const text = encodeURIComponent(msg);
+  return `https://wa.me/${phoneE164}?text=${text}`;
 }
 
 export default function CheckoutPage({ params }: Props) {
-  const [locale, setLocale] = useState("en");
+  const locale = params?.locale === "ar" ? "ar" : "en";
+  const isAr = locale === "ar";
+
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [city, setCity] = useState("");
+  const [address, setAddress] = useState("");
+  const [notes, setNotes] = useState("");
 
   const [cartId, setCartId] = useState<string | null>(null);
-  const [result, setResult] = useState<string | null>(null);
-
-  const [order, setOrder] = useState<Order | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => {
-    params.then(p => setLocale(p?.locale || "en"));
-  }, [params]);
-
-  useEffect(() => {
-    const u = new URL(window.location.href);
-    setResult(u.searchParams.get("result"));
-    setCartId(u.searchParams.get("cart_id"));
+  const totals = useMemo(() => {
+    const subtotal = PRICE;
+    const total = Number((subtotal + SHIPPING).toFixed(2));
+    return { subtotal, shipping: SHIPPING, total };
   }, []);
 
-  async function fetchStatus() {
-    if (!cartId) return;
+  const COPY = {
+    title: isAr ? "الدفع" : "Checkout",
+    subtitle: isAr ? "نيفـران — ارتدِ الهدوء" : "NIVRAN — Wear the calm.",
+    payCard: isAr ? "ادفع بالبطاقة" : "Pay by Card",
+    cod: isAr ? "الدفع عند الاستلام" : "Cash on Delivery",
+    confirmWa: isAr ? "تأكيد عبر واتساب" : "Confirm on WhatsApp",
+    required: isAr ? "الاسم ورقم الهاتف والعنوان مطلوبة" : "Name, phone, and address are required",
+    summary: isAr ? "ملخص الطلب" : "Order summary",
+    product: isAr ? "منتج (100مل)" : "Product (100ml)",
+    shipping: isAr ? "الشحن" : "Shipping",
+    total: isAr ? "الإجمالي" : "Total",
+    processing: isAr ? "جارٍ المعالجة…" : "Processing…",
+    status: isAr ? "الحالة" : "Status",
+  };
+
+  function validate() {
+    if (!name.trim() || !phone.trim() || !address.trim()) {
+      setErr(COPY.required);
+      return false;
+    }
+    return true;
+  }
+
+  async function createOrder(mode: "PAYTABS" | "COD") {
+    const res = await fetch("/api/orders", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        mode,
+        locale,
+        qty: 1,
+        customer: { name, phone },
+        shipping: { city, address, notes },
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || "Order create failed");
+    setCartId(data.cartId);
+    setStatus(data.status);
+    return data.cartId as string;
+  }
+
+  async function payByCard() {
+    if (!validate()) return;
     setLoading(true);
     setErr(null);
     try {
-      const res = await fetch(`/api/order-status?cart_id=${encodeURIComponent(cartId)}`, { cache: "no-store" });
+      const cid = await createOrder("PAYTABS");
+      const res = await fetch("/api/paytabs/initiate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ cartId: cid }),
+      });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "Failed");
-      setOrder(data.order);
+      if (!res.ok || !data.ok) throw new Error(data.error || "PayTabs initiate failed");
+      window.location.href = data.redirect_url;
     } catch (e: any) {
       setErr(e?.message || "Error");
-      setOrder(null);
     } finally {
       setLoading(false);
     }
   }
 
-  // Auto-fetch when returning from PayTabs
-  useEffect(() => {
-    if (result === "paytabs" && cartId) fetchStatus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [result, cartId]);
-
-  const heading = useMemo(() => {
-    if (result !== "paytabs") return "Checkout";
-    if (!order) return "Checkout";
-    if (order.status === "PAID") return "Payment successful";
-    if (order.status === "FAILED") return "Payment failed";
-    return "Payment pending";
-  }, [result, order]);
-
-  const statusBadge = useMemo(() => {
-    if (!order) return null;
-    const s = String(order.status || "");
-    return (
-      <span style={pillStyle()}>
-        <b>Status:</b> <span style={{ fontFamily: "monospace" }}>{s}</span>
-      </span>
-    );
-  }, [order]);
-
-  // Dummy totals for MVP (keep your existing numbers)
-  const subtotal = 18.0;
-  const shipping = 3.5;
-  const total = subtotal + shipping;
-
-  function retryLink() {
-    // In your MVP, “retry” can simply reload checkout and click PayTabs again.
-    // If you later implement "initiate" to reuse cart_id, we can wire it.
-    return `/${locale}/checkout`;
+  async function cashOnDelivery() {
+    if (!validate()) return;
+    setLoading(true);
+    setErr(null);
+    try {
+      await createOrder("COD");
+    } catch (e: any) {
+      setErr(e?.message || "Error");
+    } finally {
+      setLoading(false);
+    }
   }
 
+  const WHATSAPP_E164 = (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "").trim();
+
+  const waMsg = cartId
+    ? `NIVRAN / نيفـران — COD Confirmation\nCart: ${cartId}\nName: ${name}\nPhone: ${phone}\nCity: ${city}\nAddress: ${address}\nNotes: ${notes}\nTotal: ${totals.total} JOD (Shipping ${totals.shipping} JOD)\nTagline: Wear the calm. / ارتدِ الهدوء`
+    : "";
+
   return (
-    <div style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860, margin: "0 auto" }}>
-      <h1 style={{ marginBottom: 6 }}>{heading}</h1>
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", opacity: 0.85 }}>
-        <span style={pillStyle()}>Locale: <b>{locale}</b></span>
-        {cartId && <span style={pillStyle()}><b>cart_id:</b> <span style={{ fontFamily: "monospace" }}>{cartId}</span></span>}
-        {statusBadge}
+    <div style={{ padding: 24, fontFamily: "system-ui", maxWidth: 760, margin: "0 auto" }}>
+      <h1 style={{ marginBottom: 6 }}>{COPY.title}</h1>
+      <p style={{ opacity: 0.75, marginTop: 0 }}>{COPY.subtitle}</p>
+
+      <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={isAr ? "الاسم الكامل" : "Full name"} style={{ padding: 12, borderRadius: 12, border: "1px solid #ddd" }} />
+        <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={isAr ? "رقم الهاتف" : "Phone"} style={{ padding: 12, borderRadius: 12, border: "1px solid #ddd" }} />
+        <input value={city} onChange={(e) => setCity(e.target.value)} placeholder={isAr ? "المدينة" : "City"} style={{ padding: 12, borderRadius: 12, border: "1px solid #ddd" }} />
+        <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder={isAr ? "العنوان" : "Address"} style={{ padding: 12, borderRadius: 12, border: "1px solid #ddd" }} />
+        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={isAr ? "ملاحظات (اختياري)" : "Notes (optional)"} rows={3} style={{ padding: 12, borderRadius: 12, border: "1px solid #ddd" }} />
       </div>
 
-      {result === "paytabs" && (
-        <div style={{ marginTop: 14, border: "1px solid #eee", borderRadius: 16, padding: 16 }}>
-          {loading && <p style={{ margin: 0 }}>Checking payment status…</p>}
-          {err && <p style={{ margin: 0, color: "crimson" }}>{err}</p>}
+      {err && <p style={{ color: "crimson", marginTop: 10 }}>{err}</p>}
 
-          {!loading && !err && order && (
-            <>
-              <div style={{ marginTop: 6, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <span style={pillStyle()}>
-                  <b>Total:</b> {Number(order.amount ?? total).toFixed(2)} {order.currency || "JOD"}
-                </span>
-                <span style={pillStyle()}>
-                  <b>PayTabs:</b>{" "}
-                  <span style={{ fontFamily: "monospace" }}>{order.paytabs_tran_ref || "—"}</span>
-                </span>
-                <span style={pillStyle()}>
-                  <b>Response:</b>{" "}
-                  <span style={{ fontFamily: "monospace" }}>{order.paytabs_response_status || "—"}</span>{" "}
-                  {order.paytabs_response_message ? `(${order.paytabs_response_message})` : ""}
-                </span>
-              </div>
+      <div style={{ marginTop: 16, border: "1px solid #eee", borderRadius: 14, padding: 14 }}>
+        <h3 style={{ marginTop: 0 }}>{COPY.summary}</h3>
+        <p>{COPY.product}: <b>{PRICE.toFixed(2)} JOD</b></p>
+        <p>{COPY.shipping}: <b>{SHIPPING.toFixed(2)} JOD</b></p>
+        <p>{COPY.total}: <b>{totals.total.toFixed(2)} JOD</b></p>
 
-              {order.status === "PAID" && (
-                <div style={{ marginTop: 12, padding: 14, borderRadius: 14, border: "1px solid #d7f2dd" }}>
-                  <b>Order confirmed.</b> Thank you — Wear the calm.
-                </div>
-              )}
-
-              {order.status !== "PAID" && (
-                <div style={{ marginTop: 12, padding: 14, borderRadius: 14, border: "1px solid #f2d7d7" }}>
-                  <b>Not completed.</b> If you cancelled, that’s okay — you can try again.
-                  <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <button
-                      onClick={fetchStatus}
-                      disabled={loading}
-                      style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #ddd" }}
-                    >
-                      Refresh status
-                    </button>
-                    <a
-                      href={retryLink()}
-                      style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #ddd", textDecoration: "none", display: "inline-block" }}
-                    >
-                      Retry payment
-                    </a>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
-          {!loading && !err && !order && (
-            <div style={{ marginTop: 6 }}>
-              <p style={{ marginTop: 0 }}>We couldn’t load your order yet.</p>
-              <button
-                onClick={fetchStatus}
-                disabled={!cartId || loading}
-                style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #ddd" }}
-              >
-                Refresh status
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      <div style={{ marginTop: 14, border: "1px solid #eee", borderRadius: 16, padding: 16 }}>
-        <h3 style={{ marginTop: 0 }}>Subtotal</h3>
-        <p>{subtotal.toFixed(2)} JOD</p>
-        <h3>Shipping</h3>
-        <p>{shipping.toFixed(2)} JOD</p>
-        <h3>Total</h3>
-        <p><b>{total.toFixed(2)} JOD</b></p>
-
-        <div style={{ marginTop: 12 }}>
-          <button style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #ddd" }}>
-            Pay with PayTabs
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+          <button
+            onClick={payByCard}
+            disabled={loading}
+            style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #ddd" }}
+          >
+            {loading ? COPY.processing : COPY.payCard}
           </button>
-          <p style={{ marginTop: 8, fontSize: 13, opacity: 0.75 }}>
-            (Your existing PayTabs initiate button/flow stays here — this page now just shows the result cleanly after return.)
-          </p>
+
+          <button
+            onClick={cashOnDelivery}
+            disabled={loading}
+            style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #ddd" }}
+          >
+            {loading ? COPY.processing : COPY.cod}
+          </button>
         </div>
+
+        {cartId && status && (
+          <div style={{ marginTop: 12, padding: 12, borderRadius: 12, border: "1px solid #eee" }}>
+            <div style={{ fontFamily: "monospace", fontSize: 13, opacity: 0.8 }}>cart_id: {cartId}</div>
+            <div style={{ marginTop: 6 }}>
+              {COPY.status}: <b>{status}</b>
+            </div>
+
+            {status === "PENDING_COD_CONFIRM" && WHATSAPP_E164 && (
+              <a
+                href={waLink(WHATSAPP_E164, waMsg)}
+                target="_blank"
+                rel="noreferrer"
+                style={{ display: "inline-block", marginTop: 10, padding: "10px 14px", borderRadius: 12, border: "1px solid #ddd", textDecoration: "none" }}
+              >
+                {COPY.confirmWa}
+              </a>
+            )}
+
+            {status === "PENDING_COD_CONFIRM" && !WHATSAPP_E164 && (
+              <p style={{ fontSize: 13, opacity: 0.75, marginTop: 10 }}>
+                Set <code>NEXT_PUBLIC_WHATSAPP_NUMBER</code> (E.164) to enable WhatsApp confirmation.
+              </p>
+            )}
+          </div>
+        )}
       </div>
+
+      <p style={{ fontSize: 12, opacity: 0.7, marginTop: 14 }}>
+        NIVRAN/نيفـران uses claim-safe wording only (no medical or therapeutic claims). Keep away from heat and flame.
+      </p>
     </div>
   );
 }

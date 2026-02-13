@@ -2,12 +2,22 @@ import { Pool } from "pg";
 
 declare global {
   // eslint-disable-next-line no-var
-  var __pgPool: Pool | undefined;
+  var __nivranPool: Pool | undefined;
 }
 
-export function db() {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("Missing DATABASE_URL");
-  if (!global.__pgPool) global.__pgPool = new Pool({ connectionString: url });
-  return global.__pgPool;
+export function db(): Pool {
+  if (!process.env.DATABASE_URL) {
+    throw new Error("Missing DATABASE_URL");
+  }
+
+  if (!global.__nivranPool) {
+    global.__nivranPool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.DATABASE_URL.includes("localhost")
+        ? undefined
+        : { rejectUnauthorized: false },
+    });
+  }
+
+  return global.__nivranPool;
 }

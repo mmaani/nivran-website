@@ -1,67 +1,53 @@
 import { NextResponse } from "next/server";
 import { paytabsConfig, paytabsInitiate } from "@/lib/paytabs";
+import { db } from "@/lib/db";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
+    const input = await req.json().catch(() => ({} as any));
+    const cartId = String(input?.cartId || "");
+    if (!cartId) {
+      return NextResponse.json({ ok: false, error: "cartId is required" }, { status: 400 });
+    }
+
+    const pool = db();
+    const { rows } = await pool.query(
+      `select cart_id, status, amount, currency, locale, payment_method
+       from orders where cart_id=$1`,
+      [cartId]
+    );
+
+    if (!rows.length) {
+      return NextResponse.json({ ok: false, error: "Order not found" }, { status: 404 });
+    }
+
+    const order = rows[0];
+    if (String(order.payment_method || "").toUpperCase() !== "PAYTABS") {
+      return NextResponse.json({ ok: false, error: "Order is not PAYTABS" }, { status: 400 });
+    }
+
+    if (order.status === "PAID") {
+      return NextResponse.json({ ok: false, error: "Order already PAID" }, { status: 400 });
+    }
+
     const { profileId, callbackUrl } = paytabsConfig();
-    const input = await req.json();
-
-    const cartId = String(input.cartId || `NIVRAN-${Date.now()}`);
-    const amount = Number(input.amount || 0);
-    const currency = String(input.currency || "JOD");
-    const locale = String(input.locale || "en");
-
-    if (!amount || amount <= 0) {
-      return NextResponse.json({ ok: false, error: "Invalid amount" }, { status: 400 });
-    }
-
-    // Create pending order
-    const origin =
-      req.headers.get("origin") ||
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      "http://localhost:3000";
-
-    const orderRes = await fetch(`${origin}/api/orders`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        cartId,
-        amount,
-        currency,
-        locale,
-        customer: input.customer || {},
-      }),
-      cache: "no-store",
-    });
-
-    const orderData = await orderRes.json();
-    if (!orderRes.ok || !orderData.ok) {
-      return NextResponse.json(
-        { ok: false, error: orderData?.error || "Order create failed" },
-        { status: 500 }
-      );
-    }
-
-    // Locale-aware return URL
-    const base = (process.env.NEXT_PUBLIC_SITE_URL || origin).replace(/\/$/, "");
+    const origin = req.headers.get("origin") || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+    const base = String(origin).replace(/\/$/, "");
+    const locale = String(order.locale || "en") === "ar" ? "ar" : "en";
     const returnUrl = `${base}/${locale}/checkout?result=paytabs&cart_id=${encodeURIComponent(cartId)}`;
 
-    // Initiate PayTabs HPP
     const payload = {
       profile_id: profileId,
       tran_type: "sale",
       tran_class: "ecom",
       cart_id: cartId,
-      cart_description: input.cartDescription || "NIVRAN Order",
-      cart_currency: currency,
-      cart_amount: amount,
+      cart_description: "NIVRAN Order",
+      cart_currency: String(order.currency || "JOD"),
+      cart_amount: Number(order.amount),
       callback: callbackUrl,
-      return: returnUrl,
-      customer_details: input.customer || undefined,
-      shipping_details: input.shipping || undefined,
-      user_defined: { ud1: locale },
+      return: returnUrl
     };
 
     const pt = await paytabsInitiate(payload);

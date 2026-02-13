@@ -15,38 +15,35 @@ export async function POST(req: Request) {
     "";
 
   let payload: any = {};
-  try {
-    payload = JSON.parse(rawBody);
-  } catch {
-    payload = { raw: rawBody };
-  }
+  try { payload = JSON.parse(rawBody); } catch { payload = { raw: rawBody }; }
 
   const cartId = String(payload?.cart_id || payload?.cartId || "");
   const tranRef = String(payload?.tran_ref || payload?.tranRef || "");
 
   const pool = db();
 
-  // 1) Log callback FIRST (even if signature fails)
-  const ins = await pool.query(
+  // 1) Log FIRST (even if signature is wrong)
+  await pool.query(
     `insert into paytabs_callbacks (signature, verified, cart_id, tran_ref, payload)
-     values ($1, $2, $3, $4, $5)
-     returning id`,
+     values ($1, $2, $3, $4, $5)`,
     [sig || null, false, cartId || null, tranRef || null, payload]
   );
-  const cbId = ins.rows?.[0]?.id;
 
-  // 2) Verify signature
+  // 2) Verify signature (PayTabs sends Signature header hashed using Profile Server Key)
+  // Ref: PayTabs Signature Verification docs. :contentReference[oaicite:1]{index=1}
   const ok = verifyPaytabsCallbackSignature(rawBody, sig);
   if (!ok) {
     return NextResponse.json({ ok: false, error: "Invalid signature" }, { status: 401 });
   }
 
-  // 3) Mark THIS callback as verified (avoid updating "latest row")
-  if (cbId) {
-    await pool.query(`update paytabs_callbacks set verified=true where id=$1`, [cbId]);
-  }
+  // 3) Mark latest callback row as verified
+  await pool.query(
+    `update paytabs_callbacks
+     set verified=true
+     where id = (select id from paytabs_callbacks order by id desc limit 1)`
+  );
 
-  // 4) Determine payment status
+  // 4) Update order status (basic mapping)
   const responseStatus =
     payload?.payment_result?.response_status ??
     payload?.payment_result?.responseStatus ??
@@ -60,9 +57,8 @@ export async function POST(req: Request) {
     null;
 
   const s = String(responseStatus || "").toLowerCase();
-  const newStatus = s === "a" || s === "approved" ? "PAID" : "FAILED";
+  const newStatus = (s === "a" || s === "approved") ? "PAID" : "FAILED";
 
-  // 5) Update order by cart_id
   if (cartId) {
     await pool.query(
       `update orders

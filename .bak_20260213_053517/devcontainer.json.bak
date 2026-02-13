@@ -1,9 +1,10 @@
 {
-  "name": "nivran-store",
+  "name": "nivran-store (safe)",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
   "forwardPorts": [3000],
   "portsAttributes": {
     "3000": { "label": "Next.js", "onAutoForward": "openBrowser" }
   },
-  "postCreateCommand": "node -v && corepack enable && COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack prepare pnpm@10.28.0 --activate && pnpm -v && pnpm install"
+  "postCreateCommand": "node -v && npm -v && npm install"
 }
+
