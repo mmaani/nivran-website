@@ -1,32 +1,48 @@
 import { NextResponse } from "next/server";
-import { paytabsEnv } from "@/lib/paytabs";
+import { paytabsConfig, paytabsInitiate } from "@/lib/paytabs";
+
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
-  if (!body) return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
+  try {
+    const { profileId, callbackUrl, returnUrl } = paytabsConfig();
+    const input = await req.json();
 
-  const { profileId, serverKey, baseUrl } = paytabsEnv();
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+    const cartId = String(input.cartId || `NIVRAN-${Date.now()}`);
+    const amount = Number(input.amount || 0);
+    const currency = String(input.currency || "JOD");
 
-  const payload = {
-    profile_id: profileId,
-    tran_type: "sale",
-    tran_class: "ecom",
-    cart_id: body.orderId || `cart_${Date.now()}`,
-    cart_description: "NIVRAN Order",
-    cart_currency: "JOD",
-    cart_amount: body.amountJod || 0,
-    callback: `${siteUrl}/api/paytabs/callback`,
-    return: `${siteUrl}/en/checkout?result=paytabs`,
-    customer_details: body.customer || {}
-  };
+    if (!amount || amount <= 0) {
+      return NextResponse.json({ ok: false, error: "Invalid amount" }, { status: 400 });
+    }
 
-  const res = await fetch(`${baseUrl}/payment/request`, {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: serverKey },
-    body: JSON.stringify(payload)
-  });
+    const payload = {
+      profile_id: profileId,
+      tran_type: "sale",
+      tran_class: "ecom",
+      cart_id: cartId,
+      cart_description: input.cartDescription || "NIVRAN Order",
+      cart_currency: currency,
+      cart_amount: amount,
+      callback: callbackUrl,
+      return: returnUrl,
+      customer_details: input.customer || undefined,
+      shipping_details: input.shipping || undefined,
+      user_defined: { ud1: input.locale || "en" },
+    };
 
-  const data = await res.json().catch(() => ({}));
-  return NextResponse.json({ ok: res.ok, data }, { status: res.ok ? 200 : 400 });
+    const pt = await paytabsInitiate(payload);
+    const redirectUrl = pt?.redirect_url || pt?.redirectUrl || pt?.redirect;
+
+    if (!redirectUrl) {
+      return NextResponse.json({ ok: false, error: "No redirect_url from PayTabs", pt }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: true, redirect_url: redirectUrl, pt });
+  } catch (e: any) {
+    return NextResponse.json(
+      { ok: false, error: e?.message || "Initiate failed", paytabs: e?.paytabs || null },
+      { status: e?.status || 500 }
+    );
+  }
 }
