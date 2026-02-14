@@ -19,6 +19,15 @@ type OrdersRow = {
   shipping: unknown;
 };
 
+function T({ en, ar }: { en: string; ar: string }) {
+  return (
+    <>
+      <span className="t-en">{en}</span>
+      <span className="t-ar">{ar}</span>
+    </>
+  );
+}
+
 async function hasColumn(columnName: string): Promise<boolean> {
   const { rows } = await db.query<{ exists: boolean }>(
     `select exists (
@@ -35,17 +44,14 @@ async function hasColumn(columnName: string): Promise<boolean> {
 
 export default async function AdminOrdersPage() {
   await ensureOrdersTables();
+
   const [hasPaymentMethod, hasTranRef] = await Promise.all([
     hasColumn("payment_method"),
     hasColumn("paytabs_tran_ref"),
   ]);
 
-  const paymentMethodSelect = hasPaymentMethod
-    ? "payment_method"
-    : "'PAYTABS'::text as payment_method";
-  const tranRefSelect = hasTranRef
-    ? "paytabs_tran_ref"
-    : "null::text as paytabs_tran_ref";
+  const paymentMethodSelect = hasPaymentMethod ? "payment_method" : "'PAYTABS'::text as payment_method";
+  const tranRefSelect = hasTranRef ? "paytabs_tran_ref" : "null::text as paytabs_tran_ref";
 
   const { rows } = await db.query<OrdersRow>(
     `select id, cart_id, status, amount, currency, locale,
@@ -58,22 +64,22 @@ export default async function AdminOrdersPage() {
   );
 
   return (
-    <div style={{ fontFamily: "system-ui", maxWidth: 1100, margin: "20px auto", padding: 18 }}>
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <h1 style={{ margin: 0 }}>NIVRAN Admin — Orders</h1>
-        <a href="/admin/catalog" style={{ textDecoration: "underline" }}>Catalog CRM</a>
-        <a href="/admin/inbox" style={{ textDecoration: "underline" }}>Inbox</a>
-        <a href="/admin/staff" style={{ textDecoration: "underline" }}>Staff</a>
-        <form action="/api/admin/logout" method="post" style={{ marginInlineStart: "auto" }}>
-          <button style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #ddd" }}>Logout</button>
-        </form>
+    <div className="admin-grid">
+      <div className="admin-card">
+        <h1 className="admin-h1">
+          <T en="Orders" ar="الطلبات" />
+        </h1>
+        <p className="admin-muted">
+          <T
+            en="Guardrails: PayTabs must be PAID before SHIPPING. COD flow: PENDING_COD_CONFIRM → PROCESSING → SHIPPED → DELIVERED → PAID_COD."
+            ar="ضوابط الحالة: يجب أن تكون PayTabs «مدفوع» قبل الشحن. مسار الدفع عند الاستلام: انتظار تأكيد الدفع → قيد المعالجة → تم الشحن → تم التسليم → مدفوع."
+          />
+        </p>
       </div>
 
-      <p style={{ opacity: 0.7, marginTop: 8 }}>
-        Status guardrails: PayTabs must be PAID before SHIPPING; COD uses PENDING_COD_CONFIRM → PROCESSING → SHIPPED → DELIVERED → PAID_COD.
-      </p>
-
-      <OrdersClient initialRows={rows} />
+      <div className="admin-card" style={{ padding: 0 }}>
+        <OrdersClient initialRows={rows} />
+      </div>
     </div>
   );
 }

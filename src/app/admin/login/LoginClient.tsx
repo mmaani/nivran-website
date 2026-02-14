@@ -3,6 +3,15 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+function T({ en, ar }: { en: string; ar: string }) {
+  return (
+    <>
+      <span className="t-en">{en}</span>
+      <span className="t-ar">{ar}</span>
+    </>
+  );
+}
+
 export default function LoginClient({ nextPath }: { nextPath: string }) {
   const router = useRouter();
   const [token, setToken] = useState("");
@@ -10,7 +19,6 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
   const [err, setErr] = useState("");
 
   const safeNext = useMemo(() => {
-    // only allow internal redirects
     if (!nextPath || typeof nextPath !== "string") return "/admin/orders";
     if (!nextPath.startsWith("/")) return "/admin/orders";
     if (nextPath.startsWith("//")) return "/admin/orders";
@@ -27,8 +35,8 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ token }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) throw new Error(data.error || "Login failed");
+      const data = await res.json().catch(() => ({} as any));
+      if (!res.ok || !data?.ok) throw new Error(data?.error || "Login failed");
       router.replace(safeNext);
     } catch (e: any) {
       setErr(e?.message || "Login failed");
@@ -38,43 +46,53 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
   }
 
   return (
-    <div style={{ maxWidth: 520, margin: "0 auto", padding: 18, fontFamily: "system-ui" }}>
-      <h1 style={{ margin: "0 0 8px 0" }}>Admin Login</h1>
-      <p style={{ marginTop: 0, opacity: 0.75 }}>
-        Enter the admin token to access the dashboard. Token value is set in Vercel as ADMIN_TOKEN.
-      </p>
+    <div className="admin-shell">
+      <div className="admin-content">
+        <div className="admin-card admin-grid" style={{ maxWidth: 560, margin: "0 auto" }}>
+          <h1 className="admin-h1">
+            <T en="Admin Login" ar="تسجيل دخول الإدارة" />
+          </h1>
 
-      <form onSubmit={submit} style={{ display: "grid", gap: 10 }}>
-        <input
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          placeholder="ADMIN_TOKEN"
-          autoComplete="off"
-          spellCheck={false}
-          style={{
-            padding: "10px 12px",
-            border: "1px solid #ddd",
-            borderRadius: 10,
-            fontFamily: "monospace",
-          }}
-        />
+          <p className="admin-muted">
+            <T
+              en="Enter the admin token to access the dashboard. Token value is set in Vercel as ADMIN_TOKEN."
+              ar="أدخل رمز الإدارة للوصول إلى لوحة التحكم. يتم ضبط الرمز في Vercel باسم ADMIN_TOKEN."
+            />
+          </p>
 
-        <button
-          type="submit"
-          disabled={loading || !token.trim()}
-          style={{
-            padding: "10px 12px",
-            borderRadius: 10,
-            border: "1px solid #ddd",
-            background: loading ? "#f6f6f6" : "white",
-            cursor: loading ? "default" : "pointer",
-          }}
-        >
-          {loading ? "Signing in..." : "Sign in"}
-        </button>
+          <form onSubmit={submit} className="admin-grid">
+            <div>
+              <div className="admin-label" style={{ marginBottom: 6 }}>
+                <T en="ADMIN_TOKEN" ar="رمز الإدارة" />
+              </div>
+              <input
+                className="admin-input"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                placeholder="ADMIN_TOKEN"
+                autoComplete="off"
+                spellCheck={false}
+                style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}
+              />
+            </div>
 
-        {err ? <div style={{ color: "crimson" }}>{err}</div> : null}
-      </form>
+            <button className="btn btn-primary" type="submit" disabled={loading || !token.trim()}>
+              {loading ? (
+                <T en="Signing in…" ar="جارٍ تسجيل الدخول…" />
+              ) : (
+                <T en="Sign in" ar="دخول" />
+              )}
+            </button>
+
+            {err ? (
+              <div style={{ color: "crimson" }}>
+                <T en="Error: " ar="خطأ: " />
+                {err}
+              </div>
+            ) : null}
+          </form>
+        </div>
+      </div>
     </div>
   );
 }
