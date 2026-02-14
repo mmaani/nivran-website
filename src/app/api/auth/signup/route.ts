@@ -1,51 +1,49 @@
+// src/app/api/auth/signup/route.ts
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { createSessionToken, ensureIdentityTables, hashPassword } from "@/lib/identity";
+import { createCustomer, createSessionToken, CUSTOMER_SESSION_COOKIE } from "@/lib/identity";
 
 export const runtime = "nodejs";
 
-export async function POST(req: Request) {
-  await ensureIdentityTables();
-  const input = await req.json().catch(() => ({} as any));
-
-  const email = String(input?.email || "").trim().toLowerCase();
-  const password = String(input?.password || "");
-  const firstName = String(input?.firstName || "").trim() || null;
-  const lastName = String(input?.lastName || "").trim() || null;
-  const phone = String(input?.phone || "").trim() || null;
-  const locale = String(input?.locale || "en") === "ar" ? "ar" : "en";
-
-  if (!email.includes("@") || password.length < 8) {
-    return NextResponse.json({ ok: false, error: "Invalid email or weak password" }, { status: 400 });
-  }
-
-  const passwordHash = hashPassword(password);
-  const { rows } = await db.query<{ id: number }>(
-    `insert into customers (email, password_hash, first_name, last_name, phone, locale)
-     values ($1,$2,$3,$4,$5,$6)
-     on conflict (email) do nothing
-     returning id`,
-    [email, passwordHash, firstName, lastName, phone, locale]
-  );
-
-  if (!rows[0]?.id) {
-    return NextResponse.json({ ok: false, error: "Email already exists" }, { status: 409 });
-  }
-
-  const token = createSessionToken();
-  await db.query(
-    `insert into customer_sessions (customer_id, token, expires_at)
-     values ($1,$2, now() + interval '30 days')`,
-    [rows[0].id, token]
-  );
-
-  const res = NextResponse.json({ ok: true });
-  res.cookies.set("customer_session", token, {
+function cookieOpts() {
+  return {
     httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: true,
+    sameSite: "lax" as const,
     path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  });
+    maxAge: 60 * 60 * 24 * 30, // 30 days
+  };
+}
+
+export async function POST(req: Request): Promise<Response> {
+  const ct = req.headers.get("content-type") || "";
+  const isForm = ct.includes("application/x-www-form-urlencoded") || ct.includes("multipart/form-data");
+  const body = isForm ? Object.fromEntries((await req.formData()).entries()) : await req.json().catch(() => ({}));
+
+  const email = String((body as any)?.email || "").trim().toLowerCase();
+  const password = String((body as any)?.password || "").trim();
+  const fullName = String((body as any)?.full_name || (body as any)?.fullName || "").trim() || null;
+  const locale = String((body as any)?.locale || "en") === "ar" ? "ar" : "en";
+
+  if (!email || !email.includes("@") || password.length < 6) {
+    const payload = { ok: false, error: "Invalid email or password" };
+    if (isForm) return NextResponse.redirect(new URL(`/${locale}?signup=0`, req.url));
+    return NextResponse.json(payload, { status: 400 });
+  }
+
+  const id = await createCustomer({ email, fullName, password });
+  if (!id) {
+    const payload = { ok: false, error: "Email already registered" };
+    if (isForm) return NextResponse.redirect(new URL(`/${locale}?signup=exists`, req.url));
+    return NextResponse.json(payload, { status: 409 });
+  }
+
+  // ✅ FIX: createSessionToken requires customerId
+  const token = await createSessionToken(id);
+
+  const res = isForm
+    ? NextResponse.redirect(new URL(`/${locale}?signup=1`, req.url))
+    : NextResponse.json({ ok: true });
+
+  res.cookies.set(CUSTOMER_SESSION_COOKIE, token, cookieOpts());
   return res;
 }
