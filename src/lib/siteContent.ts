@@ -2,31 +2,17 @@ export type Locale = "en" | "ar";
 
 export type ProductCategory = "perfume" | "hand-gel" | "cream" | "air-freshener" | "soap";
 export type Audience = "women" | "men" | "unisex";
-export type ScentFamily = "fresh" | "citrus" | "musk";
-export type Concentration = "EDP" | "EDT" | "CARE";
-
-export type ProductVariant = {
-  id: string;
-  sizeLabel: "10ml" | "60ml" | "75ml" | "100ml" | "120g" | "250ml";
-  sizeSort: number;
-  priceJod: number;
-  compareAtPriceJod?: number;
-  inStock: boolean;
-  isDefault?: boolean;
-};
 
 export type Product = {
   slug: string;
   category: ProductCategory;
   audience: Audience;
-  concentration: Concentration;
-  scentFamily: ScentFamily[];
   name: Record<Locale, string>;
   subtitle: Record<Locale, string>;
   description: Record<Locale, string>;
   notes: Record<Locale, string[]>;
-  images: string[]; // up to 5 images
-  variants: ProductVariant[];
+  size: string;
+  priceJod: number;
   featured?: boolean;
 };
 
@@ -38,130 +24,155 @@ export const categoryLabels: Record<ProductCategory, Record<Locale, string>> = {
   soap: { en: "Soap", ar: "صابون" },
 };
 
-export const scentFamilyLabels: Record<ScentFamily, Record<Locale, string>> = {
-  fresh: { en: "Fresh", ar: "منعش" },
-  citrus: { en: "Citrus", ar: "حمضيات" },
-  musk: { en: "Musk", ar: "مسك" },
-};
-
-export const concentrationLabels: Record<Concentration, Record<Locale, string>> = {
-  EDP: { en: "EDP", ar: "أو دو برفيوم" },
-  EDT: { en: "EDT", ar: "أو دو تواليت" },
-  CARE: { en: "Care", ar: "عناية" },
-};
-
-function variant(id: string, sizeLabel: ProductVariant["sizeLabel"], sizeSort: number, priceJod: number, isDefault = false): ProductVariant {
-  return { id, sizeLabel, sizeSort, priceJod, inStock: true, isDefault };
-}
-
 export const products: Product[] = [
   {
-    slug: "nivran-calm",
+    slug: "nivran-calm-100ml",
     category: "perfume",
     audience: "unisex",
-    concentration: "EDP",
-    scentFamily: ["fresh", "citrus", "musk"],
     name: { en: "NIVRAN Calm", ar: "نيفـران كالم" },
     subtitle: {
-      en: "Clean citrus and white musk for everyday balance",
-      ar: "حمضيات نظيفة ومسك أبيض لتوازن يومي",
+      en: "Refined eau de parfum created for all-day elegance",
+      ar: "عطر راقٍ مصمم للأناقة طوال اليوم",
     },
     description: {
-      en: "A bright opening with soft white musk and a smooth clean trail that feels calm, close, and modern.",
-      ar: "افتتاحية مشرقة مع مسك أبيض ناعم وأثر نظيف هادئ بقرب أنيق وعصري.",
+      en: "A clean profile that opens bright, settles soft, and stays balanced from day to night.",
+      ar: "تركيبة نظيفة تبدأ منعشة ثم تستقر بنعومة وتبقى متوازنة من الصباح للمساء.",
     },
     notes: {
-      en: ["Bergamot", "White musk", "Soft cedar"],
-      ar: ["برغموت", "مسك أبيض", "أرز ناعم"],
+      en: ["Bergamot", "White tea", "Soft cedar"],
+      ar: ["برغموت", "شاي أبيض", "أرز ناعم"],
     },
-    images: [
-      "/products/calm-1.svg",
-      "/products/calm-2.svg",
-      "/products/calm-3.svg",
-      "/products/calm-4.svg",
-      "/products/calm-5.svg",
-    ],
-    variants: [
-      variant("calm-100", "100ml", 100, 18, true),
-      variant("calm-10", "10ml", 10, 4.5),
-    ],
+    size: "100ml",
+    priceJod: 18,
     featured: true,
   },
   {
-    slug: "nivran-noir",
+    slug: "nivran-noir-100ml",
     category: "perfume",
     audience: "men",
-    concentration: "EDP",
-    scentFamily: ["musk", "fresh"],
     name: { en: "NIVRAN Noir", ar: "نيفـران نوير" },
     subtitle: {
-      en: "Deep wood and amber signature for evenings",
-      ar: "توقيع خشبي وعنبر دافئ للمساء",
+      en: "Deep woody signature for evening confidence",
+      ar: "توقيع خشبي عميق لثقة المساء",
     },
     description: {
-      en: "A richer profile with warm woods and musky depth made for confident evening wear.",
-      ar: "تركيبة أغنى بنفحات خشبية وعمق مسكي لثقة المساء.",
+      en: "A richer profile with warm woods and amber depth designed for long evening wear.",
+      ar: "تركيبة أغنى بنفحات خشبية وعنبريّة لثبات مناسب لفترات المساء.",
     },
-    notes: { en: ["Cardamom", "Amber wood", "Patchouli"], ar: ["هيل", "خشب عنبري", "باتشولي"] },
-    images: ["/products/noir-1.svg", "/products/noir-2.svg", "/products/noir-3.svg"],
-    variants: [variant("noir-100", "100ml", 100, 22, true), variant("noir-10", "10ml", 10, 5.2)],
+    notes: {
+      en: ["Cardamom", "Amber wood", "Patchouli"],
+      ar: ["هيل", "خشب عنبري", "باتشولي"],
+    },
+    size: "100ml",
+    priceJod: 22,
   },
   {
-    slug: "nivran-bloom",
+    slug: "nivran-bloom-75ml",
     category: "perfume",
     audience: "women",
-    concentration: "EDT",
-    scentFamily: ["fresh", "citrus"],
     name: { en: "NIVRAN Bloom", ar: "نيفـران بلوم" },
-    subtitle: { en: "Soft floral freshness with smooth musk", ar: "انتعاش زهري ناعم مع مسك لطيف" },
-    description: {
-      en: "A bright floral composition designed for graceful daytime wear.",
-      ar: "تركيبة زهرية مشرقة للاستخدام النهاري الأنيق.",
+    subtitle: {
+      en: "Soft floral blend for daily feminine wear",
+      ar: "مزيج زهري ناعم للاستخدام اليومي",
     },
-    notes: { en: ["Peony", "Orange blossom", "Clean musk"], ar: ["فاوانيا", "زهر البرتقال", "مسك نقي"] },
-    images: ["/products/bloom-1.svg", "/products/bloom-2.svg"],
-    variants: [variant("bloom-75", "75ml", 75, 19, true), variant("bloom-10", "10ml", 10, 4.8)],
+    description: {
+      en: "A bright floral composition with smooth musk designed for fresh daytime style.",
+      ar: "تركيبة زهرية مشرقة مع مسك ناعم تمنح حضوراً منعشاً خلال النهار.",
+    },
+    notes: {
+      en: ["Peony", "Orange blossom", "Clean musk"],
+      ar: ["فاوانيا", "زهر البرتقال", "مسك نقي"],
+    },
+    size: "75ml",
+    priceJod: 19,
   },
   {
-    slug: "nivran-care-hand-gel",
+    slug: "nivran-care-hand-gel-60ml",
     category: "hand-gel",
     audience: "unisex",
-    concentration: "CARE",
-    scentFamily: ["fresh", "citrus"],
     name: { en: "NIVRAN Care Hand Gel", ar: "نيفـران كير جل يدين" },
-    subtitle: { en: "Quick-clean hand gel with light scent", ar: "جل يدين سريع بعطر خفيف" },
-    description: { en: "Portable hand gel for everyday hygiene.", ar: "جل يدين محمول للنظافة اليومية." },
+    subtitle: {
+      en: "Quick-clean hand gel with light fragrance",
+      ar: "جل يدين سريع التنظيف بعطر خفيف",
+    },
+    description: {
+      en: "Portable hand gel for everyday hygiene with a clean, light scent.",
+      ar: "جل يدين محمول للنظافة اليومية مع رائحة خفيفة ونظيفة.",
+    },
     notes: { en: ["Clean citrus"], ar: ["حمضيات نظيفة"] },
-    images: ["/products/care-1.svg"],
-    variants: [variant("care-60", "60ml", 60, 4.5, true)],
+    size: "60ml",
+    priceJod: 4.5,
+  },
+  {
+    slug: "nivran-soft-cream-100ml",
+    category: "cream",
+    audience: "unisex",
+    name: { en: "NIVRAN Soft Cream", ar: "نيفـران سوفت كريم" },
+    subtitle: {
+      en: "Light daily hand & body cream",
+      ar: "كريم يومي خفيف لليدين والجسم",
+    },
+    description: {
+      en: "Fast-absorbing cream with subtle scent for smooth daily care.",
+      ar: "كريم سريع الامتصاص برائحة لطيفة للعناية اليومية.",
+    },
+    notes: { en: ["Cotton musk"], ar: ["مسك قطني"] },
+    size: "100ml",
+    priceJod: 6.5,
+  },
+  {
+    slug: "nivran-air-freshener-250ml",
+    category: "air-freshener",
+    audience: "unisex",
+    name: { en: "NIVRAN Air Freshener", ar: "نيفـران معطر جو" },
+    subtitle: {
+      en: "Room mist for home and office",
+      ar: "رذاذ منزلي للمكتب والمنزل",
+    },
+    description: {
+      en: "Refreshing room spray with balanced scent projection for shared spaces.",
+      ar: "معطر رذاذ منعش بثبات متوازن للمساحات المشتركة.",
+    },
+    notes: { en: ["Green tea", "Citrus"], ar: ["شاي أخضر", "حمضيات"] },
+    size: "250ml",
+    priceJod: 7.5,
+  },
+  {
+    slug: "nivran-gentle-soap-120g",
+    category: "soap",
+    audience: "unisex",
+    name: { en: "NIVRAN Gentle Soap", ar: "نيفـران صابون لطيف" },
+    subtitle: {
+      en: "Mild scented cleansing bar",
+      ar: "صابون تنظيف لطيف برائحة خفيفة",
+    },
+    description: {
+      en: "Everyday cleansing bar with soft foam and comfortable fragrance.",
+      ar: "قطعة صابون يومية برغوة ناعمة ورائحة مريحة.",
+    },
+    notes: { en: ["Fresh musk"], ar: ["مسك منعش"] },
+    size: "120g",
+    priceJod: 2,
   },
 ];
-
-export function defaultVariant(product: Product) {
-  return product.variants.find((v) => v.isDefault) || product.variants[0];
-}
-
-export function minPrice(product: Product) {
-  return Math.min(...product.variants.map((v) => v.priceJod));
-}
 
 export const featuredProduct = products.find((p) => p.featured) || products[0];
 
 export const mainProductMessage = {
-  en: "Our core line is perfume, with selected lifestyle categories expanding gradually.",
-  ar: "خطنا الأساسي هو العطور، مع توسع تدريجي في فئات لايف ستايل مختارة.",
+  en: "Our core line is perfume, with new lifestyle categories expanding gradually.",
+  ar: "خطنا الأساسي هو العطور، مع توسع تدريجي في فئات لايف ستايل إضافية.",
 };
 
 export const benefits = {
   en: [
-    { title: "Perfume-first craft", body: "NIVRAN is built around signature perfumes with clean, wearable depth." },
-    { title: "Scalable product architecture", body: "One fragrance page supports multiple size variants for clarity and SEO." },
-    { title: "Built for Jordan", body: "Nationwide Jordan shipping with flat 3.5 JOD and responsive support." },
+    { title: "Perfume-first craft", body: "Our fragrance line is the core of NIVRAN, built with premium scent balance." },
+    { title: "Multi-category roadmap", body: "Hand gel, cream, air freshener, and soap are expanding in selected sizes." },
+    { title: "Built for Jordan", body: "Pricing, delivery, and support designed for local convenience." },
   ],
   ar: [
-    { title: "خبرة عطور أولاً", body: "نيفـران مبنية حول عطور أساسية متوازنة وسهلة الارتداء يومياً." },
-    { title: "هيكل منتجات قابل للتوسع", body: "صفحة العطر الواحدة تدعم أحجام متعددة لوضوح أفضل وتجربة بحث أقوى." },
-    { title: "مصمم للأردن", body: "شحن لجميع مناطق الأردن برسوم ثابتة 3.5 دينار مع دعم سريع." },
+    { title: "خبرة عطور أولاً", body: "العطور هي قلب نيفـران مع تركيبات متوازنة بجودة عالية." },
+    { title: "توسع متعدد الفئات", body: "جل اليدين والكريم ومعطر الجو والصابون تتوسع تدريجياً بأحجام مختارة." },
+    { title: "مصمم للأردن", body: "تسعير وتوصيل وخدمة مناسبة للعميل المحلي." },
   ],
 };
 

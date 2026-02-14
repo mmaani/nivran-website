@@ -14,7 +14,6 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    await ensureOrdersTables();
     const customerId = await getCustomerIdFromRequest(req);
     const input = await req.json().catch(() => ({} as any));
 

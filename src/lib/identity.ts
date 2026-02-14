@@ -106,8 +106,3 @@ export async function getCustomerIdFromRequest(req: Request) {
 
   return rows[0]?.customer_id || null;
 }
-
-
-export function createPasswordResetToken() {
-  return crypto.randomBytes(SESSION_BYTES).toString("hex");
-}
