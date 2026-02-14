@@ -31,7 +31,7 @@ export default async function ProductPage({ params }: { params: Promise<{ locale
             <p style={{ marginBottom: 4 }}>{isAr ? "النوتات" : "Notes"}: {product.notes[locale].join(" • ")}</p>
             <p className="muted" style={{ marginTop: 0 }}>{isAr ? "الأحجام" : "Variants"}</p>
             <ul>
-              {product.variants.map((v) => (
+              {(product.variants || [{ id: `${product.slug}-base`, sizeLabel: product.size, priceJod: product.priceJod }]).map((v) => (
                 <li key={v.id}>{v.sizeLabel} — <strong>{v.priceJod.toFixed(2)} JOD</strong></li>
               ))}
             </ul>
