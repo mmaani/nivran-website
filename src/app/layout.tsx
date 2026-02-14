@@ -6,6 +6,10 @@ export const metadata: Metadata = {
   title: "NIVRAN — Wear the calm.",
   description: "Clean, minimalist, unisex fragrance brand.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://nivran.com"),
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/icon.svg" }],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

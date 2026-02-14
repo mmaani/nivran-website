@@ -5,6 +5,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: `${base}/en`, lastModified: new Date() },
     { url: `${base}/en/story`, lastModified: new Date() },
+    { url: `${base}/en/product`, lastModified: new Date() },
     { url: `${base}/en/contact`, lastModified: new Date() },
     { url: `${base}/en/faq`, lastModified: new Date() }
   ];

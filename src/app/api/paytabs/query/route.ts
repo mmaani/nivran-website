@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { ensureOrdersTables } from "@/lib/orders";
 import {
   getPaytabsEnv,
   mapPaytabsResponseStatusToOrderStatus,
@@ -15,6 +16,7 @@ function readInput(input: Record<string, unknown>) {
 }
 
 async function handleQuery(input: Record<string, unknown>) {
+  await ensureOrdersTables();
   const { apiBase, profileId, serverKey } = getPaytabsEnv();
   const { cartId, tranRef } = readInput(input);
 

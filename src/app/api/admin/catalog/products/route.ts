@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
+import { requireAdmin } from "@/lib/guards";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
+  const auth = requireAdmin(req);
+  if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: 401 });
   await ensureCatalogTables();
   const form = await req.formData();
   const action = String(form.get("action") || "create");
@@ -58,6 +61,13 @@ export async function POST(req: Request) {
          where id=$1`,
         [id, price, compareAt ? Number(compareAt) : null, inventory, isActive]
       );
+    }
+  }
+
+  if (action === "delete") {
+    const id = Number(form.get("id") || 0);
+    if (id > 0) {
+      await db.query(`delete from products where id=$1`, [id]);
     }
   }
 

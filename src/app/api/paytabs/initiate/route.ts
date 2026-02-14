@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { ensureOrdersTables } from "@/lib/orders";
 import { getPaytabsEnv } from "@/lib/paytabs";
 
 export const runtime = "nodejs";
@@ -17,6 +18,7 @@ function withVercelBypass(url: string) {
 }
 
 export async function POST(req: Request) {
+  await ensureOrdersTables();
   try {
     const input = await req.json().catch(() => ({} as Record<string, unknown>));
     const cartId = String(input?.cartId || "").trim();

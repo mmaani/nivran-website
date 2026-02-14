@@ -1,3 +1,4 @@
+import Image from "next/image";
 const LINKS = {
   en: { home: "Home", story: "Story", product: "Shop", faq: "FAQ", contact: "Contact", checkout: "Checkout", account: "Account", admin: "Admin", menu: "Menu", lang: "العربية" },
   ar: { home: "الرئيسية", story: "قصتنا", product: "المتجر", faq: "الأسئلة", contact: "تواصل", checkout: "الدفع", account: "حسابي", admin: "الإدارة", menu: "القائمة", lang: "English" },
@@ -15,15 +16,18 @@ export default async function StoreLocaleLayout({ children, params }: { children
     <div lang={locale} dir={isAr ? "rtl" : "ltr"}>
       <header className="site-header">
         <div className="shell topbar">
-          <a className="brand" href={href("")}>
-            <strong>{isAr ? "نيفـران" : "NIVRAN"}</strong>
-            <span>{isAr ? "ارتدِ الهدوء" : "Wear the calm."}</span>
+          <a className="brand" href={href("")} style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
+            <Image src="/brand/logo.svg" alt="NIVRAN" width={44} height={44} style={{ borderRadius: "50%", border: "1px solid rgba(200,163,100,.6)" }} />
+            <span style={{ display: "inline-grid" }}>
+              <strong>{isAr ? "نيفـران" : "NIVRAN"}</strong>
+              <span>{isAr ? "ارتدِ الهدوء" : "Wear the calm."}</span>
+            </span>
           </a>
 
           <nav className="main-nav desktop-nav">
             <a href={href("")}>{t.home}</a>
             <a href={href("/story")}>{t.story}</a>
-            <a href={href("/product/nivran-calm-100ml")}>{t.product}</a>
+            <a href={href("/product")}>{t.product}</a>
             <a href={href("/faq")}>{t.faq}</a>
             <a href={href("/contact")}>{t.contact}</a>
             <a className="nav-cta" href={href("/checkout")}>{t.checkout}</a>
@@ -37,7 +41,7 @@ export default async function StoreLocaleLayout({ children, params }: { children
             <div className="mobile-nav-panel">
               <a href={href("")}>{t.home}</a>
               <a href={href("/story")}>{t.story}</a>
-              <a href={href("/product/nivran-calm-100ml")}>{t.product}</a>
+              <a href={href("/product")}>{t.product}</a>
               <a href={href("/faq")}>{t.faq}</a>
               <a href={href("/contact")}>{t.contact}</a>
               <a className="nav-cta" href={href("/checkout")}>{t.checkout}</a>

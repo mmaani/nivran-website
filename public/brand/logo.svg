@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="NIVRAN logo">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="#f2f1ef"/>
+      <stop offset="100%" stop-color="#e7e5e1"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="198" fill="none" stroke="#c8a364" stroke-width="3"/>
+  <text x="256" y="255" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="74" fill="#101216" letter-spacing="2">NIVRAN</text>
+  <text x="256" y="325" text-anchor="middle" font-family="Tahoma, Arial, sans-serif" font-size="66" fill="#101216">نيفـران</text>
+  <text x="256" y="373" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="28" fill="#4f5357">Wear the calm.</text>
+</svg>
