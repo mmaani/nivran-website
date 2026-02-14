@@ -75,6 +75,10 @@ export function createSessionToken() {
   return crypto.randomBytes(SESSION_BYTES).toString("hex");
 }
 
+export function createPasswordResetToken() {
+  return crypto.randomBytes(SESSION_BYTES).toString("hex");
+}
+
 function getCookieValue(req: Request, name: string) {
   const header = req.headers.get("cookie") || "";
   for (const part of header.split(";")) {

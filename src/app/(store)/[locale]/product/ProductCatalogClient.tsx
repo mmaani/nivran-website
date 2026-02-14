@@ -25,9 +25,9 @@ export default function ProductCatalogClient({ locale, initialProducts }: { loca
 
   const products = useMemo(() => {
     const filtered = initialProducts.filter((p) => {
-      if (family !== "all" && !p.scentFamily.includes(family)) return false;
+      if (family !== "all" && !(p.scentFamily || []).includes(family)) return false;
       if (concentration !== "all" && p.concentration !== concentration) return false;
-      const variants = p.variants.filter((v) => (size === "all" ? true : v.sizeLabel === size) && matchPrice(v, price));
+      const variants = (p.variants || []).filter((v) => (size === "all" ? true : v.sizeLabel === size) && matchPrice(v, price));
       return variants.length > 0;
     });
 
@@ -111,7 +111,7 @@ export default function ProductCatalogClient({ locale, initialProducts }: { loca
           return (
             <article key={product.slug} className="panel">
               <Image
-                src={product.images[0]}
+                src={(product.images && product.images[0]) || "/products/calm-1.svg"}
                 alt={product.name[locale]}
                 width={600}
                 height={600}
