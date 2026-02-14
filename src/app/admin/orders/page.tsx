@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { ensureOrdersTables } from "@/lib/orders";
 import OrdersClient from "./ui";
+import { adminT, getAdminLang } from "@/lib/admin-lang";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,15 +20,6 @@ type OrdersRow = {
   shipping: unknown;
 };
 
-function T({ en, ar }: { en: string; ar: string }) {
-  return (
-    <>
-      <span className="t-en">{en}</span>
-      <span className="t-ar">{ar}</span>
-    </>
-  );
-}
-
 async function hasColumn(columnName: string): Promise<boolean> {
   const { rows } = await db.query<{ exists: boolean }>(
     `select exists (
@@ -44,6 +36,9 @@ async function hasColumn(columnName: string): Promise<boolean> {
 
 export default async function AdminOrdersPage() {
   await ensureOrdersTables();
+
+  const lang = await getAdminLang();
+  const t = adminT(lang);
 
   const [hasPaymentMethod, hasTranRef] = await Promise.all([
     hasColumn("payment_method"),
@@ -63,23 +58,19 @@ export default async function AdminOrdersPage() {
      limit 200`
   );
 
+  const hint =
+    lang === "ar"
+      ? "قواعد الحالة: يجب أن تكون PayTabs «PAID» قبل الشحن؛ والدفع عند الاستلام يستخدم: PENDING_COD_CONFIRM → PROCESSING → SHIPPED → DELIVERED → PAID_COD."
+      : "Status guardrails: PayTabs must be PAID before SHIPPING; COD uses PENDING_COD_CONFIRM → PROCESSING → SHIPPED → DELIVERED → PAID_COD.";
+
   return (
     <div className="admin-grid">
-      <div className="admin-card">
-        <h1 className="admin-h1">
-          <T en="Orders" ar="الطلبات" />
-        </h1>
-        <p className="admin-muted">
-          <T
-            en="Guardrails: PayTabs must be PAID before SHIPPING. COD flow: PENDING_COD_CONFIRM → PROCESSING → SHIPPED → DELIVERED → PAID_COD."
-            ar="ضوابط الحالة: يجب أن تكون PayTabs «مدفوع» قبل الشحن. مسار الدفع عند الاستلام: انتظار تأكيد الدفع → قيد المعالجة → تم الشحن → تم التسليم → مدفوع."
-          />
-        </p>
+      <div>
+        <h1 className="admin-h1">{t("orders")}</h1>
+        <p className="admin-muted">{hint}</p>
       </div>
 
-      <div className="admin-card" style={{ padding: 0 }}>
-        <OrdersClient initialRows={rows} />
-      </div>
+      <OrdersClient initialRows={rows as any} lang={lang} />
     </div>
   );
 }

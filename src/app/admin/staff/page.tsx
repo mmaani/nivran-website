@@ -1,5 +1,7 @@
+// src/app/admin/staff/page.tsx
 import { db } from "@/lib/db";
 import { ensureIdentityTables } from "@/lib/identity";
+import { getAdminLang } from "@/lib/admin-lang";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,15 +15,6 @@ type StaffRow = {
   created_at: string;
 };
 
-function T({ en, ar }: { en: string; ar: string }) {
-  return (
-    <>
-      <span className="t-en">{en}</span>
-      <span className="t-ar">{ar}</span>
-    </>
-  );
-}
-
 const ROLE_LABELS: Record<string, { en: string; ar: string }> = {
   admin: { en: "Admin", ar: "مدير" },
   ops: { en: "Operations", ar: "عمليات" },
@@ -30,6 +23,58 @@ const ROLE_LABELS: Record<string, { en: string; ar: string }> = {
 
 export default async function AdminStaffPage() {
   await ensureIdentityTables();
+  const lang = await getAdminLang();
+
+  const L =
+    lang === "ar"
+      ? {
+          title: "إدارة الموظفين",
+          subtitle: "إنشاء وإدارة حسابات الموظفين/المشغلين لفريق العمل.",
+          createTitle: "إنشاء مستخدم موظف",
+          staffList: "قائمة الموظفين",
+          fullName: "الاسم الكامل",
+          email: "البريد الإلكتروني",
+          role: "الدور",
+          password: "كلمة مرور مؤقتة",
+          active: "نشط",
+          saveStaff: "حفظ الموظف",
+          helper: "استخدم كلمة مرور مؤقتة واطلب من الموظف تغييرها.",
+          th_id: "المعرّف",
+          th_name: "الاسم",
+          th_email: "البريد",
+          th_role: "الدور",
+          th_status: "الحالة",
+          th_created: "تاريخ الإنشاء",
+          inactive: "غير نشط",
+          noStaff: "لا يوجد موظفون بعد.",
+          roleStaff: "موظف",
+          roleOps: "عمليات",
+          roleAdmin: "مدير",
+        }
+      : {
+          title: "Staff Management",
+          subtitle: "Create and manage staff/operator accounts used by your team.",
+          createTitle: "Create staff user",
+          staffList: "Staff list",
+          fullName: "Full name",
+          email: "Email",
+          role: "Role",
+          password: "Temporary password",
+          active: "Active",
+          saveStaff: "Save staff",
+          helper: "Use a temporary password and ask the staff member to change it.",
+          th_id: "ID",
+          th_name: "Name",
+          th_email: "Email",
+          th_role: "Role",
+          th_status: "Status",
+          th_created: "Created",
+          inactive: "Inactive",
+          noStaff: "No staff users yet.",
+          roleStaff: "Staff",
+          roleOps: "Operations",
+          roleAdmin: "Admin",
+        };
 
   const { rows } = await db.query<StaffRow>(
     `select id, email, full_name, role, is_active, created_at::text
@@ -41,121 +86,98 @@ export default async function AdminStaffPage() {
   return (
     <div className="admin-grid">
       <div className="admin-card">
-        <h1 className="admin-h1">
-          <T en="Staff Management" ar="إدارة الموظفين" />
-        </h1>
-        <p className="admin-muted">
-          <T
-            en="Create and manage staff/operator accounts used by your team."
-            ar="إنشاء وإدارة حسابات الموظفين/المشغلين لفريق العمل."
-          />
-        </p>
+        <h1 className="admin-h1">{L.title}</h1>
+        <p className="admin-muted">{L.subtitle}</p>
       </div>
 
       {/* Create staff */}
       <section className="admin-card admin-grid">
-        <h2 style={{ margin: 0 }}>
-          <T en="Create staff user" ar="إنشاء مستخدم موظف" />
-        </h2>
+        <h2 style={{ margin: 0 }}>{L.createTitle}</h2>
 
         <form
           action="/api/admin/staff"
           method="post"
           className="admin-grid"
-          style={{ gridTemplateColumns: "repeat(2,minmax(0,1fr))" as any }}
+          style={{ gridTemplateColumns: "repeat(2,minmax(0,1fr))", alignItems: "end" }}
         >
-          <input className="admin-input" name="full_name" placeholder="Full name / الاسم الكامل" />
-          <input className="admin-input" name="email" type="email" required placeholder="staff@email.com" />
+          <div className="admin-grid" style={{ gap: 8 }}>
+            <label style={{ fontSize: 13, opacity: 0.8 }}>{L.fullName}</label>
+            <input className="admin-input" name="full_name" placeholder={L.fullName} />
+          </div>
 
-          <select className="admin-select" name="role" defaultValue="staff">
-            <option value="staff">
-              staff — {ROLE_LABELS.staff.en} / {ROLE_LABELS.staff.ar}
-            </option>
-            <option value="ops">
-              ops — {ROLE_LABELS.ops.en} / {ROLE_LABELS.ops.ar}
-            </option>
-            <option value="admin">
-              admin — {ROLE_LABELS.admin.en} / {ROLE_LABELS.admin.ar}
-            </option>
-          </select>
+          <div className="admin-grid" style={{ gap: 8 }}>
+            <label style={{ fontSize: 13, opacity: 0.8 }}>{L.email}</label>
+            <input className="admin-input ltr" name="email" type="email" required placeholder="staff@email.com" />
+          </div>
 
-          <input
-            className="admin-input"
-            name="password"
-            type="password"
-            required
-            minLength={8}
-            placeholder="Temporary password / كلمة مرور مؤقتة"
-          />
+          <div className="admin-grid" style={{ gap: 8 }}>
+            <label style={{ fontSize: 13, opacity: 0.8 }}>{L.role}</label>
+            <select className="admin-select" name="role" defaultValue="staff">
+              <option value="staff">{lang === "ar" ? "staff — موظف" : "staff — Staff"}</option>
+              <option value="ops">{lang === "ar" ? "ops — عمليات" : "ops — Operations"}</option>
+              <option value="admin">{lang === "ar" ? "admin — مدير" : "admin — Admin"}</option>
+            </select>
+          </div>
 
-          <label className="admin-row" style={{ gap: 8 }}>
+          <div className="admin-grid" style={{ gap: 8 }}>
+            <label style={{ fontSize: 13, opacity: 0.8 }}>{L.password}</label>
+            <input
+              className="admin-input"
+              name="password"
+              type="password"
+              required
+              minLength={8}
+              placeholder={L.password}
+            />
+          </div>
+
+          <label style={{ display: "flex", gap: 10, alignItems: "center", gridColumn: "1 / -1" }}>
             <input name="is_active" type="checkbox" defaultChecked />
-            <span>
-              <T en="Active" ar="نشط" />
-            </span>
+            <span>{L.active}</span>
           </label>
 
-          <div className="admin-row" style={{ gridColumn: "1 / -1" }}>
-            <button className="btn btn-primary" style={{ width: "fit-content" }} type="submit">
-              <T en="Save staff" ar="حفظ الموظف" />
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", gridColumn: "1 / -1" }}>
+            <button className="admin-btn admin-btn-primary" style={{ width: "fit-content" }} type="submit">
+              {L.saveStaff}
             </button>
-            <span className="admin-label">
-              <T
-                en="Use a temporary password and ask the staff member to change it."
-                ar="استخدم كلمة مرور مؤقتة واطلب من الموظف تغييرها."
-              />
-            </span>
+            <span style={{ fontSize: 13, opacity: 0.75 }}>{L.helper}</span>
           </div>
         </form>
       </section>
 
       {/* Staff list */}
       <section className="admin-card admin-grid">
-        <h2 style={{ margin: 0 }}>
-          <T en="Staff list" ar="قائمة الموظفين" />
-        </h2>
+        <h2 style={{ margin: 0 }}>{L.staffList}</h2>
 
-        <div className="table-wrap">
-          <table className="table">
+        <div className="admin-table-wrap">
+          <table className="admin-table">
             <thead>
               <tr>
-                <th>
-                  <T en="ID" ar="المعرف" />
-                </th>
-                <th>
-                  <T en="Name" ar="الاسم" />
-                </th>
-                <th>
-                  <T en="Email" ar="البريد" />
-                </th>
-                <th>
-                  <T en="Role" ar="الدور" />
-                </th>
-                <th>
-                  <T en="Status" ar="الحالة" />
-                </th>
-                <th>
-                  <T en="Created" ar="تاريخ الإنشاء" />
-                </th>
+                <th>{L.th_id}</th>
+                <th>{L.th_name}</th>
+                <th>{L.th_email}</th>
+                <th>{L.th_role}</th>
+                <th>{L.th_status}</th>
+                <th>{L.th_created}</th>
               </tr>
             </thead>
+
             <tbody>
               {rows.map((r) => {
-                const role = (r.role || "staff").toLowerCase();
-                const roleLabel = ROLE_LABELS[role] || { en: role, ar: role };
+                const roleKey = String(r.role || "staff").toLowerCase();
+                const roleLabel = ROLE_LABELS[roleKey] || { en: roleKey, ar: roleKey };
+                const roleText = lang === "ar" ? roleLabel.ar : roleLabel.en;
+
                 return (
                   <tr key={r.id}>
-                    <td>{r.id}</td>
+                    <td className="ltr">{r.id}</td>
                     <td>{r.full_name || "—"}</td>
-                    <td className="mono">{r.email}</td>
+                    <td className="ltr">{r.email}</td>
                     <td>
-                      <b className="mono">{role}</b>
-                      <div style={{ fontSize: 12, opacity: 0.75, marginTop: 2 }}>
-                        <span className="t-en">{roleLabel.en}</span>
-                        <span className="t-ar">{roleLabel.ar}</span>
-                      </div>
+                      <b className="ltr">{roleKey}</b>
+                      <div style={{ fontSize: 12, opacity: 0.75, marginTop: 2 }}>{roleText}</div>
                     </td>
-                    <td>{r.is_active ? <T en="Active" ar="نشط" /> : <T en="Inactive" ar="غير نشط" />}</td>
+                    <td>{r.is_active ? L.active : L.inactive}</td>
                     <td style={{ fontSize: 12, opacity: 0.8 }}>{new Date(r.created_at).toLocaleString()}</td>
                   </tr>
                 );
@@ -164,7 +186,7 @@ export default async function AdminStaffPage() {
               {rows.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ padding: 14, opacity: 0.7 }}>
-                    <T en="No staff users yet." ar="لا يوجد موظفون بعد." />
+                    {L.noStaff}
                   </td>
                 </tr>
               ) : null}

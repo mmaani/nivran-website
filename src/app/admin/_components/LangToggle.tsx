@@ -1,39 +1,41 @@
+// src/app/admin/_components/LangToggle.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
-const KEY = "nivran_admin_lang";
-type Lang = "en" | "ar";
+export default function LangToggle({ initialLang }: { initialLang: "en" | "ar" }) {
+  const [isAr, setIsAr] = useState(initialLang === "ar");
+  const pathname = usePathname();
+  const router = useRouter();
 
-function applyLang(lang: Lang) {
-  const root = document.documentElement;
-
-  root.classList.toggle("admin-lang-ar", lang === "ar");
-  root.setAttribute("dir", lang === "ar" ? "rtl" : "ltr");
-  root.setAttribute("lang", lang === "ar" ? "ar" : "en");
-}
-
-export default function LangToggle() {
-  const [lang, setLang] = useState<Lang>("en");
-
-  useEffect(() => {
-    const saved = (window.localStorage.getItem(KEY) as Lang) || "en";
-    const initial: Lang = saved === "ar" ? "ar" : "en";
-    setLang(initial);
-    applyLang(initial);
-  }, []);
-
-  function toggle() {
-    const next: Lang = lang === "en" ? "ar" : "en";
-    setLang(next);
-    window.localStorage.setItem(KEY, next);
-    applyLang(next);
+  async function onToggle(nextAr: boolean) {
+    setIsAr(nextAr);
+    try {
+      await fetch("/api/admin/lang", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ lang: nextAr ? "ar" : "en", next: pathname }),
+      });
+    } finally {
+      // Refresh server components so layout dir/lang updates immediately
+      router.refresh();
+    }
   }
 
   return (
-    <button className="btn btn-secondary" type="button" onClick={toggle} title="EN/AR">
-      <span className="t-en">{lang === "en" ? "AR" : "EN"}</span>
-      <span className="t-ar">{lang === "en" ? "عربي" : "English"}</span>
+    <button
+      type="button"
+      className="lang-toggle"
+      onClick={() => onToggle(!isAr)}
+      aria-pressed={isAr}
+      title={isAr ? "Switch to English" : "التحويل إلى العربية"}
+    >
+      <span className="lang-toggle-track" aria-hidden="true">
+        <span className="lang-toggle-thumb" />
+      </span>
+      <span className="lang-toggle-label">{isAr ? "AR" : "EN"}</span>
     </button>
   );
 }

@@ -1,44 +1,29 @@
 /* src/app/admin/admin.css */
-
-/* ---------- Language visibility helpers ---------- */
-.t-en { display: inline; }
-.t-ar { display: none; }
-
-html.admin-lang-ar .t-en { display: none; }
-html.admin-lang-ar .t-ar { display: inline; }
-
-/* Use RTL in Arabic mode */
-html.admin-lang-ar,
-html.admin-lang-ar body {
-  direction: rtl;
-}
-
-/* ---------- Admin shell look ---------- */
-:root {
-  --admin-bg: #f6f7f9;
-  --admin-card: #ffffff;
-  --admin-text: #0f172a;
-  --admin-muted: rgba(15, 23, 42, 0.65);
-  --admin-border: rgba(15, 23, 42, 0.10);
-  --admin-border-strong: rgba(15, 23, 42, 0.16);
-  --admin-radius: 16px;
-  --admin-radius-sm: 12px;
-}
+/* Uses NIVRAN global palette from globals.css: --bg, --bg-soft, --ink, --muted, --line, --shadow, --gold */
 
 .admin-shell {
-  min-height: 100vh;
-  background: var(--admin-bg);
-  color: var(--admin-text);
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--ink);
 }
 
+/* Hide/show bilingual spans based on admin_lang */
+.admin-shell .t-ar { display: none; }
+.admin-shell[data-lang="ar"] .t-en { display: none; }
+.admin-shell[data-lang="ar"] .t-ar { display: inline; }
+
+/* If you used block-ish bilingual spans somewhere */
+.admin-shell .t-en.block,
+.admin-shell .t-ar.block { display: block; }
+
+/* Top bar */
 .admin-topbar {
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 20;
+  background: rgba(255, 255, 255, 0.65);
   backdrop-filter: blur(10px);
-  background: rgba(246, 247, 249, 0.85);
-  border-bottom: 1px solid var(--admin-border);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .admin-topbar-inner {
@@ -46,47 +31,57 @@ html.admin-lang-ar body {
   margin: 0 auto;
   padding: 14px 16px;
   display: flex;
-  gap: 12px;
+  gap: 14px;
   align-items: center;
   flex-wrap: wrap;
 }
 
 .admin-brand {
   display: flex;
-  align-items: baseline;
   gap: 10px;
-  margin-inline-end: 10px;
-}
-.admin-logo {
-  font-weight: 800;
-  letter-spacing: 0.2px;
-  text-decoration: none;
-  color: inherit;
-}
-.admin-subtitle {
-  opacity: 0.65;
-  font-size: 13px;
+  align-items: baseline;
 }
 
+.admin-logo {
+  text-decoration: none;
+  color: var(--ink);
+  font-weight: 700;
+  letter-spacing: 0.10em;
+}
+
+.admin-subtitle {
+  font-size: 12px;
+  opacity: 0.72;
+}
+
+/* Nav */
 .admin-nav {
   display: flex;
-  gap: 10px;
+  gap: 8px;
+  align-items: center;
   flex-wrap: wrap;
 }
+
 .admin-nav a {
   text-decoration: none;
-  color: inherit;
-  opacity: 0.85;
-  padding: 6px 10px;
+  color: var(--ink);
+  padding: 8px 10px;
   border-radius: 999px;
   border: 1px solid transparent;
-}
-.admin-nav a:hover {
-  opacity: 1;
-  border-color: var(--admin-border);
-  background: rgba(255,255,255,0.65);
+  background: transparent;
 }
 
+.admin-nav a:hover {
+  border-color: rgba(0,0,0,.10);
+  background: rgba(255,255,255,.55);
+}
+
+.admin-nav-disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* Actions */
 .admin-actions {
   margin-inline-start: auto;
   display: flex;
@@ -95,34 +90,36 @@ html.admin-lang-ar body {
   flex-wrap: wrap;
 }
 
+/* Content */
 .admin-content {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 18px 16px 28px;
+  padding: 18px 16px 40px;
 }
 
-.admin-card {
-  background: var(--admin-card);
-  border: 1px solid var(--admin-border);
-  border-radius: var(--admin-radius);
-  padding: 14px;
-}
-
+/* Headings + muted text */
 .admin-h1 {
-  margin: 0;
+  margin: 0 0 6px 0;
   font-size: 22px;
-  letter-spacing: -0.2px;
 }
+
 .admin-muted {
-  margin: 8px 0 0;
-  color: var(--admin-muted);
-  font-size: 13px;
-  line-height: 1.45;
+  margin: 0;
+  opacity: 0.75;
+}
+
+/* Cards */
+.admin-card {
+  border: 1px solid rgba(0,0,0,.10);
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(255,255,255,.72);
+  box-shadow: 0 8px 24px var(--shadow);
 }
 
 .admin-grid {
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .admin-row {
@@ -132,69 +129,175 @@ html.admin-lang-ar body {
   flex-wrap: wrap;
 }
 
-.admin-label {
-  font-size: 12px;
-  color: var(--admin-muted);
+.admin-page {
+  display: grid;
+  gap: 14px;
 }
 
-.admin-input, .admin-select {
+/* Inputs */
+.admin-input, .admin-select,
+.admin-shell input[type="number"],
+.admin-shell input[type="text"],
+.admin-shell input[type="email"],
+.admin-shell input[type="password"],
+.admin-shell select {
   width: 100%;
   padding: 10px 12px;
-  border-radius: var(--admin-radius-sm);
-  border: 1px solid var(--admin-border-strong);
-  background: #fff;
-  outline: none;
-}
-.admin-input:focus, .admin-select:focus {
-  border-color: rgba(15, 23, 42, 0.28);
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,.14);
+  background: rgba(255,255,255,.86);
+  color: var(--ink);
 }
 
-.btn {
-  padding: 10px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--admin-border-strong);
-  background: #fff;
-  cursor: pointer;
-  color: inherit;
-}
-.btn:hover { border-color: rgba(15, 23, 42, 0.28); }
-
-.btn-primary {
-  border-color: rgba(15, 23, 42, 0.22);
-  background: #fff;
-  font-weight: 600;
+.admin-shell[dir="rtl"] input,
+.admin-shell[dir="rtl"] select,
+.admin-shell[dir="rtl"] textarea {
+  text-align: right;
 }
 
-.btn-secondary {
-  opacity: 0.9;
-}
-
-.table-wrap {
+/* Table */
+.admin-table-wrap,
+.table-wrap,
+.admin-scroll {
   overflow-x: auto;
-  border: 1px solid var(--admin-border);
-  border-radius: var(--admin-radius);
-  background: #fff;
+  border: 1px solid rgba(0,0,0,.10);
+  border-radius: 14px;
+  background: rgba(255,255,255,.78);
 }
 
-.table {
+.admin-table,
+.table,
+.admin-scroll table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
 }
-.table th {
+
+.admin-table th,
+.table th,
+.admin-scroll th {
   text-align: start;
   padding: 10px;
-  background: rgba(15,23,42,0.03);
-  border-bottom: 1px solid var(--admin-border);
+  border-bottom: 1px solid rgba(0,0,0,.08);
+  background: rgba(0,0,0,.03);
   white-space: nowrap;
 }
-.table td {
+
+.admin-table td,
+.table td,
+.admin-scroll td {
   padding: 10px;
-  border-bottom: 1px solid rgba(15,23,42,0.06);
+  border-bottom: 1px solid rgba(0,0,0,.06);
   vertical-align: top;
 }
 
-.mono {
+.admin-table tbody tr:hover,
+.table tbody tr:hover,
+.admin-scroll tbody tr:hover {
+  background: rgba(255,255,255,.60);
+}
+
+/* Badge */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,.12);
+  background: rgba(255,255,255,.65);
+}
+
+/* Monospace utility */
+.mono, .ltr {
+  direction: ltr;
+  unicode-bidi: plaintext;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+/* Buttons (admin-scoped) — supports your current "btn btn-primary" usage */
+.admin-shell .btn {
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,.16);
+  background: rgba(255,255,255,.78);
+  color: var(--ink);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-shell .btn:hover {
+  border-color: rgba(0,0,0,.26);
+  background: rgba(255,255,255,.92);
+}
+
+.admin-shell .btn-primary {
+  background: var(--ink);
+  color: white;
+  border-color: var(--ink);
+}
+
+.admin-shell .btn-primary:hover {
+  background: #1a1a1d;
+}
+
+.admin-shell .btn-secondary {
+  background: rgba(255,255,255,.60);
+}
+
+.admin-shell .btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+/* Language toggle (button) */
+.lang-toggle {
+  border: 1px solid rgba(0,0,0,.14);
+  background: rgba(255,255,255,.78);
+  border-radius: 999px;
+  padding: 6px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.lang-toggle:hover {
+  background: rgba(255,255,255,.92);
+  border-color: rgba(0,0,0,.22);
+}
+
+.lang-toggle-track {
+  width: 42px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(0,0,0,.10);
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.lang-toggle-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: white;
+  border: 1px solid rgba(0,0,0,.12);
+  position: absolute;
+  top: 1.5px;
+  left: 2px;
+  transition: transform 160ms ease;
+}
+
+.admin-shell[data-lang="ar"] .lang-toggle-thumb {
+  transform: translateX(20px);
+}
+
+.lang-toggle-label {
+  font-weight: 700;
+  letter-spacing: 0.06em;
   font-size: 12px;
+  color: var(--ink);
 }
