@@ -12,6 +12,11 @@
 
 * { box-sizing: border-box; }
 
+
+.font-inter { --font-inter: "Inter"; }
+.font-arabic { --font-arabic: "Cairo"; }
+.font-serif { --font-serif: "Playfair Display"; }
+
 html {
   scroll-behavior: smooth;
   scrollbar-gutter: stable;

@@ -2,6 +2,15 @@ export type Locale = "en" | "ar";
 
 export type ProductCategory = "perfume" | "hand-gel" | "cream" | "air-freshener" | "soap";
 export type Audience = "women" | "men" | "unisex";
+export type ScentFamily = "fresh" | "citrus" | "musk";
+export type Concentration = "EDP" | "EDT" | "CARE";
+
+export type ProductVariant = {
+  id: string;
+  sizeLabel: string;
+  priceJod: number;
+  isDefault?: boolean;
+};
 
 export type Product = {
   slug: string;
@@ -14,6 +23,10 @@ export type Product = {
   size: string;
   priceJod: number;
   featured?: boolean;
+  variants?: ProductVariant[];
+  images?: string[];
+  scentFamily?: ScentFamily[];
+  concentration?: Concentration;
 };
 
 export const categoryLabels: Record<ProductCategory, Record<Locale, string>> = {
@@ -188,3 +201,47 @@ export const testimonials = {
     { name: "رنا", text: "الدفع كان سلس والتغليف فعلاً فاخر." },
   ],
 };
+
+
+export const scentFamilyLabels: Record<ScentFamily, Record<Locale, string>> = {
+  fresh: { en: "Fresh", ar: "منعش" },
+  citrus: { en: "Citrus", ar: "حمضي" },
+  musk: { en: "Musk", ar: "مسك" },
+};
+
+export const concentrationLabels: Record<Concentration, Record<Locale, string>> = {
+  EDP: { en: "Eau de Parfum", ar: "أو دو بارفان" },
+  EDT: { en: "Eau de Toilette", ar: "أو دو تواليت" },
+  CARE: { en: "Care", ar: "عناية" },
+};
+
+export function defaultVariant(product: Product): ProductVariant {
+  return product.variants?.find((v) => v.isDefault) || product.variants?.[0] || {
+    id: `${product.slug}-default`,
+    sizeLabel: product.size,
+    priceJod: product.priceJod,
+    isDefault: true,
+  };
+}
+
+export function minPrice(product: Product): number {
+  if (!product.variants?.length) return product.priceJod;
+  return Math.min(...product.variants.map((v) => v.priceJod));
+}
+
+for (const product of products) {
+  if (!product.variants?.length) {
+    product.variants = [{
+      id: `${product.slug}-base`,
+      sizeLabel: product.size,
+      priceJod: product.priceJod,
+      isDefault: true,
+    }];
+  }
+  if (!product.images?.length) {
+    const family = product.slug.includes("noir") ? "noir" : product.slug.includes("bloom") ? "bloom" : "calm";
+    product.images = [`/products/${family}-1.svg`];
+  }
+  if (!product.scentFamily?.length) product.scentFamily = ["fresh"];
+  if (!product.concentration) product.concentration = product.category === "perfume" ? "EDP" : "CARE";
+}

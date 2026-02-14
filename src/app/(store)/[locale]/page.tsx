@@ -33,9 +33,9 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
   const benefits = (siteContent as any).benefits || { en: [], ar: [] };
   const featuredProduct = (siteContent as any).featuredProduct || null;
   const mainProductMessage = (siteContent as any).mainProductMessage || { en: "", ar: "" };
-  const products = (siteContent as any).products || [];
+  const products: any[] = (siteContent as any).products || [];
   const testimonials = (siteContent as any).testimonials || { en: [], ar: [] };
-  const categoryLabels = (siteContent as any).categoryLabels || fallbackCategoryLabels;
+  const categoryLabels: Record<string, Record<Locale, string>> = (siteContent as any).categoryLabels || fallbackCategoryLabels;
 
   const t = {
     en: {
@@ -92,7 +92,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
           <aside className="feature-card">
             <p className="muted" style={{ marginTop: 0 }}>{t.quick}</p>
             <div className="badge-row" style={{ marginBottom: ".6rem" }}>
-              {Object.entries(categoryLabels).map(([key, label]) => <span className="badge" key={key}>{label[locale]}</span>)}
+              {Object.entries(categoryLabels).map(([key, label]) => <span className="badge" key={key}>{(label as Record<Locale, string>)[locale]}</span>)}
             </div>
             <h3 style={{ margin: "0 0 .3rem" }}>{featuredProduct.name[locale]}</h3>
             <p className="muted" style={{ marginTop: 0 }}>{featuredProduct.subtitle[locale]}</p>
@@ -109,7 +109,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
         <h2 className="section-title">{t.categories}</h2>
         <p className="muted" style={{ marginTop: 0 }}>{mainProductMessage[locale]}</p>
         <div className="grid-3">
-          {products.slice(0, 6).map((item) => (
+          {products.slice(0, 6).map((item: any) => (
             <article key={item.slug} className="panel">
               <p className="muted" style={{ marginTop: 0 }}>{categoryLabels[item.category][locale]} · {item.size}</p>
               <h3 style={{ margin: "0 0 .3rem" }}>{item.name[locale]}</h3>
