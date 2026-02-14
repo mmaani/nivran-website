@@ -1,22 +1,18 @@
 import { db } from "@/lib/db";
 
 export async function ensureOrdersTables() {
+  // 1) Create tables (only if missing)
   await db.query(`
     create table if not exists orders (
       id bigserial primary key,
       cart_id text not null unique,
       status text not null,
       amount numeric(10,2) not null,
-      currency text not null default 'JOD',
-      locale text not null default 'en',
-      customer jsonb,
-      shipping jsonb,
-      customer_name text,
-      customer_email text,
-      created_at timestamptz not null default now(),
-      updated_at timestamptz not null default now()
+      currency text not null default 'JOD'
     );
+  `);
 
+  await db.query(`
     create table if not exists paytabs_callbacks (
       id bigserial primary key,
       cart_id text,
@@ -24,17 +20,11 @@ export async function ensureOrdersTables() {
       signature_header text,
       signature_computed text,
       signature_valid boolean not null default false,
-      raw_body text,
-      created_at timestamptz not null default now()
+      raw_body text
     );
-
-    create index if not exists idx_orders_cart_id on orders(cart_id);
-    create index if not exists idx_orders_status on orders(status);
-    create index if not exists idx_orders_created_at on orders(created_at desc);
-    create index if not exists idx_paytabs_callbacks_cart_id on paytabs_callbacks(cart_id);
-    create index if not exists idx_paytabs_callbacks_created_at on paytabs_callbacks(created_at desc);
   `);
 
+  // 2) Backfill/migrate columns for older DBs
   await db.query(`alter table orders add column if not exists locale text not null default 'en'`);
   await db.query(`alter table orders add column if not exists customer jsonb`);
   await db.query(`alter table orders add column if not exists shipping jsonb`);
@@ -47,4 +37,18 @@ export async function ensureOrdersTables() {
   await db.query(`alter table orders add column if not exists paytabs_last_signature text`);
   await db.query(`alter table orders add column if not exists paytabs_response_status text`);
   await db.query(`alter table orders add column if not exists paytabs_response_message text`);
+
+  // ✅ missing in your current migration:
+  await db.query(`alter table orders add column if not exists created_at timestamptz not null default now()`);
+  await db.query(`alter table orders add column if not exists updated_at timestamptz not null default now()`);
+
+  await db.query(`alter table paytabs_callbacks add column if not exists created_at timestamptz not null default now()`);
+
+  // 3) Indexes last (so columns definitely exist)
+  await db.query(`create index if not exists idx_orders_cart_id on orders(cart_id)`);
+  await db.query(`create index if not exists idx_orders_status on orders(status)`);
+  await db.query(`create index if not exists idx_orders_created_at on orders(created_at desc)`);
+
+  await db.query(`create index if not exists idx_paytabs_callbacks_cart_id on paytabs_callbacks(cart_id)`);
+  await db.query(`create index if not exists idx_paytabs_callbacks_created_at on paytabs_callbacks(created_at desc)`);
 }

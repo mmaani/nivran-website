@@ -1,6 +1,13 @@
+// src/lib/catalog.ts
 import { db } from "@/lib/db";
 
+/**
+ * Ensure catalog tables exist + are migrated safely (idempotent).
+ * - Works even if tables were created previously with missing columns
+ * - Avoids multi-statement queries for maximum driver compatibility
+ */
 export async function ensureCatalogTables() {
+  // 1) Create base tables (only if missing)
   await db.query(`
     create table if not exists products (
       id bigserial primary key,
@@ -11,12 +18,11 @@ export async function ensureCatalogTables() {
       description_ar text,
       price_jod numeric(10,2) not null,
       compare_at_price_jod numeric(10,2),
-      inventory_qty integer not null default 0,
-      is_active boolean not null default true,
-      created_at timestamptz not null default now(),
-      updated_at timestamptz not null default now()
+      inventory_qty integer not null default 0
     );
+  `);
 
+  await db.query(`
     create table if not exists promotions (
       id bigserial primary key,
       code text not null unique,
@@ -26,13 +32,24 @@ export async function ensureCatalogTables() {
       discount_value numeric(10,2) not null,
       starts_at timestamptz,
       ends_at timestamptz,
-      usage_limit integer,
-      is_active boolean not null default true,
-      created_at timestamptz not null default now(),
-      updated_at timestamptz not null default now()
+      usage_limit integer
     );
-
-    create index if not exists idx_products_active on products(is_active);
-    create index if not exists idx_promotions_active on promotions(is_active);
   `);
+
+  // 2) Migrate: add missing columns for older DBs
+  await db.query(`alter table products add column if not exists is_active boolean not null default true;`);
+  await db.query(`alter table products add column if not exists created_at timestamptz not null default now();`);
+  await db.query(`alter table products add column if not exists updated_at timestamptz not null default now();`);
+
+  await db.query(`alter table promotions add column if not exists is_active boolean not null default true;`);
+  await db.query(`alter table promotions add column if not exists created_at timestamptz not null default now();`);
+  await db.query(`alter table promotions add column if not exists updated_at timestamptz not null default now();`);
+
+  // 3) Indexes last (depends on columns existing)
+  await db.query(`create index if not exists idx_products_active on products(is_active);`);
+  await db.query(`create index if not exists idx_promotions_active on promotions(is_active);`);
+
+  // (Optional but useful for admin pages)
+  await db.query(`create index if not exists idx_products_created_at on products(created_at desc);`);
+  await db.query(`create index if not exists idx_promotions_created_at on promotions(created_at desc);`);
 }
