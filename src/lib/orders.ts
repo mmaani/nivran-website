@@ -35,6 +35,11 @@ export async function ensureOrdersTables() {
     create index if not exists idx_paytabs_callbacks_created_at on paytabs_callbacks(created_at desc);
   `);
 
+  await db.query(`alter table orders add column if not exists locale text not null default 'en'`);
+  await db.query(`alter table orders add column if not exists customer jsonb`);
+  await db.query(`alter table orders add column if not exists shipping jsonb`);
+  await db.query(`alter table orders add column if not exists customer_name text`);
+  await db.query(`alter table orders add column if not exists customer_email text`);
   await db.query(`alter table orders add column if not exists payment_method text not null default 'PAYTABS'`);
   await db.query(`alter table orders add column if not exists customer_id bigint`);
   await db.query(`alter table orders add column if not exists paytabs_tran_ref text`);
