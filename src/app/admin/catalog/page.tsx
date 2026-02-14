@@ -1,3 +1,4 @@
+// src/app/admin/catalog/page.tsx
 import { db } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
 
@@ -20,7 +21,7 @@ type PromoRow = {
   code: string;
   title_en: string;
   title_ar: string;
-  discount_type: "PERCENT" | "FIXED";
+  discount_type: "PERCENT" | "FIXED" | string;
   discount_value: string;
   is_active: boolean;
 };
@@ -29,13 +30,44 @@ export default async function AdminCatalogPage() {
   await ensureCatalogTables();
 
   const [productsRes, promosRes] = await Promise.all([
-    db.query<ProductRow>(`select id, slug, name_en, name_ar, price_jod::text, compare_at_price_jod::text, inventory_qty, is_active from products order by created_at desc limit 200`),
-    db.query<PromoRow>(`select id, code, title_en, title_ar, discount_type, discount_value::text, is_active from promotions order by created_at desc limit 200`),
+    db.query<ProductRow>(`
+      select
+        id,
+        slug,
+        coalesce(name_en,'') as name_en,
+        coalesce(name_ar,'') as name_ar,
+        coalesce(price_jod, 0)::text as price_jod,
+        compare_at_price_jod::text as compare_at_price_jod,
+        inventory_qty,
+        is_active
+      from products
+      order by created_at desc
+      limit 200
+    `),
+    db.query<PromoRow>(`
+      select
+        id,
+        coalesce(code,'') as code,
+        coalesce(title_en,'') as title_en,
+        coalesce(title_ar,'') as title_ar,
+        coalesce(discount_type,'PERCENT') as discount_type,
+        coalesce(discount_value, 0)::text as discount_value,
+        is_active
+      from promotions
+      order by created_at desc
+      limit 200
+    `),
   ]);
 
   return (
     <div style={{ fontFamily: "system-ui", maxWidth: 1200, margin: "20px auto", padding: 16, display: "grid", gap: 16 }}>
-      <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}><h1 style={{ margin: 0 }}>NIVRAN Admin — CRM & Catalog</h1><a href="/admin/orders" style={{ textDecoration:"underline" }}>Orders</a><a href="/admin/inbox" style={{ textDecoration:"underline" }}>Inbox</a><a href="/admin/staff" style={{ textDecoration:"underline" }}>Staff</a></div>
+      <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
+        <h1 style={{ margin: 0 }}>NIVRAN Admin — CRM & Catalog</h1>
+        <a href="/admin/orders" style={{ textDecoration:"underline" }}>Orders</a>
+        <a href="/admin/inbox" style={{ textDecoration:"underline" }}>Inbox</a>
+        <a href="/admin/staff" style={{ textDecoration:"underline" }}>Staff</a>
+      </div>
+
       <p style={{ opacity: 0.75, margin: 0 }}>Manage products, inventory, prices, discounts, and promotions in one place.</p>
 
       <section style={{ border: "1px solid #eee", borderRadius: 14, padding: 14 }}>
@@ -48,7 +80,7 @@ export default async function AdminCatalogPage() {
             <input name="name_en" required placeholder="English name" />
             <input name="name_ar" required placeholder="Arabic name" />
             <input name="compare_at_price_jod" type="number" step="0.01" min="0" placeholder="compare at price (optional)" />
-            <input name="inventory_qty" type="number" min="0" defaultValue="0" required placeholder="inventory qty" />
+            <input name="inventory_qty" type="number" min="0" defaultValue={0} required placeholder="inventory qty" />
             <input name="description_en" placeholder="English description" />
             <input name="description_ar" placeholder="Arabic description" />
           </div>
@@ -61,21 +93,27 @@ export default async function AdminCatalogPage() {
         <h2 style={{ marginTop: 0 }}>Products & Inventory</h2>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead><tr><th>Slug</th><th>Name</th><th>Price</th><th>Inventory</th><th>Status</th><th>Actions</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Slug</th><th>Name</th><th>Price</th><th>Inventory</th><th>Status</th><th>Actions</th>
+              </tr>
+            </thead>
             <tbody>
               {productsRes.rows.map((p) => (
                 <tr key={p.id} style={{ borderTop: "1px solid #eee" }}>
                   <td>{p.slug}</td>
                   <td>{p.name_en}<br />{p.name_ar}</td>
-                  <td>{p.price_jod} JOD {p.compare_at_price_jod ? `(was ${p.compare_at_price_jod})` : ""}</td>
+                  <td>
+                    {p.price_jod} JOD {p.compare_at_price_jod ? `(was ${p.compare_at_price_jod})` : ""}
+                  </td>
                   <td>{p.inventory_qty}</td>
                   <td>{p.is_active ? "Active" : "Hidden"}</td>
                   <td>
                     <form action="/api/admin/catalog/products" method="post" style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                       <input type="hidden" name="action" value="update" />
                       <input type="hidden" name="id" value={p.id} />
-                      <input name="price_jod" type="number" step="0.01" defaultValue={p.price_jod} style={{ width: 90 }} />
-                      <input name="compare_at_price_jod" type="number" step="0.01" defaultValue={p.compare_at_price_jod || ""} placeholder="compare" style={{ width: 90 }} />
+                      <input name="price_jod" type="number" step="0.01" defaultValue={Number(p.price_jod || "0")} style={{ width: 90 }} />
+                      <input name="compare_at_price_jod" type="number" step="0.01" defaultValue={p.compare_at_price_jod ? Number(p.compare_at_price_jod) : ""} placeholder="compare" style={{ width: 90 }} />
                       <input name="inventory_qty" type="number" min="0" defaultValue={p.inventory_qty} style={{ width: 85 }} />
                       <label><input type="checkbox" name="is_active" defaultChecked={p.is_active} /> active</label>
                       <button>Update</button>
@@ -88,6 +126,9 @@ export default async function AdminCatalogPage() {
                   </td>
                 </tr>
               ))}
+              {productsRes.rows.length === 0 ? (
+                <tr><td colSpan={6} style={{ padding: 10, opacity: 0.7 }}>No products yet.</td></tr>
+              ) : null}
             </tbody>
           </table>
         </div>
@@ -99,7 +140,10 @@ export default async function AdminCatalogPage() {
           <input type="hidden" name="action" value="create" />
           <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
             <input name="code" required placeholder="Promo code (e.g. RAMADAN10)" />
-            <select name="discount_type" defaultValue="PERCENT"><option value="PERCENT">Percent %</option><option value="FIXED">Fixed JOD</option></select>
+            <select name="discount_type" defaultValue="PERCENT">
+              <option value="PERCENT">Percent %</option>
+              <option value="FIXED">Fixed JOD</option>
+            </select>
             <input name="discount_value" type="number" min="0" step="0.01" required placeholder="Discount value" />
             <input name="usage_limit" type="number" min="1" placeholder="Usage limit (optional)" />
             <input name="title_en" required placeholder="Title EN" />
@@ -126,6 +170,7 @@ export default async function AdminCatalogPage() {
               </form>
             </li>
           ))}
+          {promosRes.rows.length === 0 ? <li style={{ opacity: 0.7 }}>No promotions yet.</li> : null}
         </ul>
       </section>
     </div>
