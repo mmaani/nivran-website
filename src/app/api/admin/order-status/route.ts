@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { ensureOrdersTables } from "@/lib/orders";
+import { requireAdmin } from "@/lib/guards";
 
 export const runtime = "nodejs";
 
@@ -28,6 +30,9 @@ function isAllowedTransition(paymentMethod: string, current: string, next: strin
 }
 
 export async function POST(req: Request) {
+  const auth = requireAdmin(req);
+  if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: 401 });
+  await ensureOrdersTables();
   const body = await req.json().catch(() => ({} as any));
   const id = Number(body?.id);
   const nextStatus = String(body?.status || "");

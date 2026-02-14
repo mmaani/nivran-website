@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { ensureOrdersTables } from "@/lib/orders";
 import OrdersClient from "./ui";
 
 export const runtime = "nodejs";
@@ -33,6 +34,7 @@ async function hasColumn(columnName: string): Promise<boolean> {
 }
 
 export default async function AdminOrdersPage() {
+  await ensureOrdersTables();
   const [hasPaymentMethod, hasTranRef] = await Promise.all([
     hasColumn("payment_method"),
     hasColumn("paytabs_tran_ref"),

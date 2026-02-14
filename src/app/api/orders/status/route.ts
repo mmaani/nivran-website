@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { ensureOrdersTables } from "@/lib/orders";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
+  await ensureOrdersTables();
   const url = new URL(req.url);
   const cartId = String(url.searchParams.get("cartId") || "");
   if (!cartId) return NextResponse.json({ ok: false, error: "cartId is required" }, { status: 400 });

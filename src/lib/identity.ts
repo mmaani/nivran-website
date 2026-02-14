@@ -27,6 +27,17 @@ export async function ensureIdentityTables() {
       revoked_at timestamptz
     );
 
+
+
+    create table if not exists customer_password_reset_tokens (
+      id bigserial primary key,
+      customer_id bigint not null references customers(id) on delete cascade,
+      token text not null unique,
+      created_at timestamptz not null default now(),
+      expires_at timestamptz not null,
+      used_at timestamptz
+    );
+
     create table if not exists staff_users (
       id bigserial primary key,
       email text not null unique,
@@ -40,6 +51,8 @@ export async function ensureIdentityTables() {
 
     create index if not exists idx_customer_sessions_customer_id on customer_sessions(customer_id);
     create index if not exists idx_customer_sessions_token on customer_sessions(token);
+    create index if not exists idx_customer_reset_tokens_customer_id on customer_password_reset_tokens(customer_id);
+    create index if not exists idx_customer_reset_tokens_token on customer_password_reset_tokens(token);
   `);
 }
 

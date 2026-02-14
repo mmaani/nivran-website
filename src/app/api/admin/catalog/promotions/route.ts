@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
+import { requireAdmin } from "@/lib/guards";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
+  const auth = requireAdmin(req);
+  if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: 401 });
   await ensureCatalogTables();
   const form = await req.formData();
   const action = String(form.get("action") || "create");

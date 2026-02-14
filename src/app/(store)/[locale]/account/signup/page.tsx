@@ -32,7 +32,7 @@ export default function SignupPage() {
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 8 }}>
         <input className="input" name="first_name" placeholder={isAr ? "الاسم الأول" : "First name"} />
         <input className="input" name="last_name" placeholder={isAr ? "اسم العائلة" : "Last name"} />
-        <input className="input" name="email" type="email" required placeholder="Email" />
+        <input className="input" name="email" type="email" required placeholder={isAr ? "البريد الإلكتروني" : "Email"} />
         <input className="input" name="phone" placeholder={isAr ? "رقم الهاتف" : "Phone"} />
         <input className="input" name="password" type="password" required minLength={8} placeholder={isAr ? "كلمة المرور (8 أحرف على الأقل)" : "Password (min 8 chars)"} />
         <button className="btn primary">{isAr ? "تسجيل" : "Sign up"}</button>

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { ensureOrdersTables } from "@/lib/orders";
 import {
   computePaytabsSignature,
   mapPaytabsResponseStatusToOrderStatus,
@@ -37,6 +38,7 @@ function readValue(payload: any, keys: string[]) {
 }
 
 export async function POST(req: Request) {
+  await ensureOrdersTables();
   const serverKey = process.env.PAYTABS_SERVER_KEY || "";
   if (!serverKey) {
     return NextResponse.json({ ok: false, error: "Missing PAYTABS_SERVER_KEY" }, { status: 500 });

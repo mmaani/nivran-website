@@ -41,7 +41,7 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
     <div style={{ maxWidth: 520, margin: "0 auto", padding: 18, fontFamily: "system-ui" }}>
       <h1 style={{ margin: "0 0 8px 0" }}>Admin Login</h1>
       <p style={{ marginTop: 0, opacity: 0.75 }}>
-        Enter the admin token to access the dashboard.
+        Enter the admin token to access the dashboard. Token value is set in Vercel as ADMIN_TOKEN.
       </p>
 
       <form onSubmit={submit} style={{ display: "grid", gap: 10 }}>

@@ -23,11 +23,14 @@ export default function LoginPage() {
     <div style={{ maxWidth: 520, margin: "24px auto" }} className="panel">
       <h1 style={{ marginTop: 0 }}>{isAr ? "تسجيل الدخول" : "Login"}</h1>
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 8 }}>
-        <input className="input" name="email" type="email" required placeholder="Email" />
+        <input className="input" name="email" type="email" required placeholder={isAr ? "البريد الإلكتروني" : "Email"} />
         <input className="input" name="password" type="password" required placeholder={isAr ? "كلمة المرور" : "Password"} />
         <button className="btn primary">{isAr ? "دخول" : "Login"}</button>
       </form>
       {msg && <p style={{ color: "crimson" }}>{msg}</p>}
+      <p className="muted" style={{ marginBottom: 6 }}>
+        <a style={{ textDecoration: "underline" }} href={`/${locale}/account/forgot-password`}>{isAr ? "نسيت كلمة المرور؟" : "Forgot password?"}</a>
+      </p>
       <p className="muted">{isAr ? "ليس لديك حساب؟" : "No account?"} <a style={{ textDecoration: "underline" }} href={`/${locale}/account/signup`}>{isAr ? "إنشاء حساب" : "Sign up"}</a></p>
     </div>
   );

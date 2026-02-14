@@ -26,12 +26,21 @@ export default async function ProductPage({ params }: { params: Promise<{ locale
             <p style={{ marginBottom: 0 }}>{isAr ? "النوتات" : "Notes"}: {product.notes[locale].join(" • ")}</p>
           </article>
           <article className="panel">
-            <h3 style={{ marginTop: 0 }}>{isAr ? "الاستخدام الآمن" : "Safe usage"}</h3>
-            <ul style={{ marginBottom: 0 }}>
-              <li>{isAr ? "للاستخدام الخارجي فقط." : "For external use only."}</li>
-              <li>{isAr ? "يحفظ بعيدًا عن الحرارة واللهب." : "Keep away from heat and flame."}</li>
-              <li>{isAr ? "لا توجد ادعاءات علاجية." : "No therapeutic claims are made."}</li>
+            <h3 style={{ marginTop: 0 }}>{isAr ? "تفاصيل المنتج" : "Product details"}</h3>
+            <p>{product.description[locale]}</p>
+            <p style={{ marginBottom: 4 }}>{isAr ? "النوتات" : "Notes"}: {product.notes[locale].join(" • ")}</p>
+            <p className="muted" style={{ marginTop: 0 }}>{isAr ? "الأحجام" : "Variants"}</p>
+            <ul>
+              {product.variants.map((v) => (
+                <li key={v.id}>{v.sizeLabel} — <strong>{v.priceJod.toFixed(2)} JOD</strong></li>
+              ))}
             </ul>
+            <p className="muted" style={{ marginBottom: 0 }}>
+              {isAr ? "شحن لجميع مناطق الأردن • رسوم ثابتة 3.5 دينار" : "Nationwide Jordan • Flat 3.5 JOD"}
+            </p>
+            <p style={{ marginTop: 6 }}>
+              <a style={{ textDecoration: "underline" }} href={`/${locale}/returns`}>{isAr ? "سياسة الإرجاع" : "Returns policy"}</a>
+            </p>
           </article>
         </div>
         <div className="cta-row" style={{ marginTop: "1rem" }}>

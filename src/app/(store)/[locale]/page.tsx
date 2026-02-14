@@ -1,9 +1,41 @@
-import { benefits, categoryLabels, featuredProduct, mainProductMessage, products, testimonials } from "@/lib/siteContent";
+import * as siteContent from "@/lib/siteContent";
+
+type Locale = "en" | "ar";
+
+const fallbackCategoryLabels: Record<string, Record<Locale, string>> = {
+  perfume: { en: "Perfume", ar: "عطور" },
+  "hand-gel": { en: "Hand Gel", ar: "جل يدين" },
+  cream: { en: "Cream", ar: "كريم" },
+  "air-freshener": { en: "Air Freshener", ar: "معطر جو" },
+  soap: { en: "Soap", ar: "صابون" },
+};
+
+function getSizeLabel(product: any) {
+  if (product?.variants?.length) {
+    return product.variants.find((v: any) => v?.isDefault)?.sizeLabel || product.variants[0]?.sizeLabel || "";
+  }
+  return product?.size || "";
+}
+
+function getPriceLabel(product: any) {
+  if (product?.variants?.length) {
+    const prices = product.variants.map((v: any) => Number(v?.priceJod || 0)).filter((n: number) => Number.isFinite(n));
+    return prices.length ? Math.min(...prices) : Number(product?.priceJod || 0);
+  }
+  return Number(product?.priceJod || 0);
+}
 
 export default async function Home({ params }: { params: Promise<{ locale: string }> }) {
   const { locale: raw } = await params;
-  const locale = raw === "ar" ? "ar" : "en";
+  const locale: Locale = raw === "ar" ? "ar" : "en";
   const isAr = locale === "ar";
+
+  const benefits = (siteContent as any).benefits || { en: [], ar: [] };
+  const featuredProduct = (siteContent as any).featuredProduct || null;
+  const mainProductMessage = (siteContent as any).mainProductMessage || { en: "", ar: "" };
+  const products = (siteContent as any).products || [];
+  const testimonials = (siteContent as any).testimonials || { en: [], ar: [] };
+  const categoryLabels = (siteContent as any).categoryLabels || fallbackCategoryLabels;
 
   const t = {
     en: {
@@ -40,6 +72,8 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
     },
   }[locale];
 
+  if (!featuredProduct) return null;
+
   return (
     <div>
       <section className="hero-shell">
@@ -65,7 +99,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
             <p style={{ marginBottom: ".45rem" }}><strong>{featuredProduct.priceJod.toFixed(2)} JOD</strong> · {featuredProduct.size}</p>
             <p className="muted" style={{ margin: 0 }}>{featuredProduct.description[locale]}</p>
             <div className="badge-row">
-              {featuredProduct.notes[locale].map((n) => <span className="badge" key={n}>{n}</span>)}
+              {(featuredProduct.notes?.[locale] || []).map((n: string) => <span className="badge" key={n}>{n}</span>)}
             </div>
           </aside>
         </div>
@@ -92,7 +126,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
       <section className="section">
         <h2 className="section-title">{t.why}</h2>
         <div className="grid-3">
-          {benefits[locale].map((item) => (
+          {(benefits[locale] || []).map((item: any) => (
             <article key={item.title} className="panel">
               <h3 style={{ marginTop: 0 }}>{item.title}</h3>
               <p style={{ marginBottom: 0 }} className="muted">{item.body}</p>
@@ -104,7 +138,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
       <section className="section grid-2">
         <article className="panel">
           <h2 className="section-title" style={{ marginTop: 0, fontSize: "1.6rem" }}>{t.proof}</h2>
-          {testimonials[locale].map((item) => (
+          {(testimonials[locale] || []).map((item: any) => (
             <div key={item.name} className="review">
               “{item.text}”
               <div className="muted">— {item.name}</div>

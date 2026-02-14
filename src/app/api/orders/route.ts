@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { ensureOrdersTables } from "@/lib/orders";
 import { getCustomerIdFromRequest } from "@/lib/identity";
 
 export const runtime = "nodejs";

@@ -80,6 +80,11 @@ export default async function AdminCatalogPage() {
                       <label><input type="checkbox" name="is_active" defaultChecked={p.is_active} /> active</label>
                       <button>Update</button>
                     </form>
+                    <form action="/api/admin/catalog/products" method="post">
+                      <input type="hidden" name="action" value="delete" />
+                      <input type="hidden" name="id" value={p.id} />
+                      <button style={{ marginTop: 6 }}>Delete</button>
+                    </form>
                   </td>
                 </tr>
               ))}
