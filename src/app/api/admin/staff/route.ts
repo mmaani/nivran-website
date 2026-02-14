@@ -1,4 +1,3 @@
-// src/app/api/admin/staff/route.ts
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/guards";
 import { listStaff, upsertStaff } from "@/lib/identity";
@@ -6,9 +5,19 @@ import { listStaff, upsertStaff } from "@/lib/identity";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function unauthorized(req: Request, status: number, error: string) {
+  const accept = req.headers.get("accept") || "";
+  const isBrowser = accept.includes("text/html");
+  if (isBrowser) {
+    const next = "/admin/staff";
+    return NextResponse.redirect(new URL(`/admin/login?next=${encodeURIComponent(next)}`, req.url));
+  }
+  return NextResponse.json({ ok: false, error }, { status });
+}
+
 export async function GET(req: Request) {
   const auth = requireAdmin(req);
-  if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: 401 });
+  if (!auth.ok) return unauthorized(req, auth.status, auth.error);
 
   const u = new URL(req.url);
   const limit = Math.max(10, Math.min(500, Number(u.searchParams.get("limit") || "200") || 200));
@@ -19,7 +28,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const auth = requireAdmin(req);
-  if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: 401 });
+  if (!auth.ok) return unauthorized(req, auth.status, auth.error);
 
   const form = await req.formData();
   const email = String(form.get("email") || "").trim().toLowerCase();

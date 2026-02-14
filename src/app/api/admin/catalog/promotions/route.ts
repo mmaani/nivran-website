@@ -4,10 +4,23 @@ import { ensureCatalogTables } from "@/lib/catalog";
 import { requireAdmin } from "@/lib/guards";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+function unauthorized(req: Request, status: number, error: string) {
+  // If this came from a browser form submit, redirect to login
+  const accept = req.headers.get("accept") || "";
+  const isBrowser = accept.includes("text/html");
+  if (isBrowser) {
+    const next = "/admin/catalog";
+    return NextResponse.redirect(new URL(`/admin/login?next=${encodeURIComponent(next)}`, req.url));
+  }
+  return NextResponse.json({ ok: false, error }, { status });
+}
 
 export async function POST(req: Request) {
   const auth = requireAdmin(req);
-  if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: 401 });
+  if (!auth.ok) return unauthorized(req, auth.status, auth.error);
+
   await ensureCatalogTables();
   const form = await req.formData();
   const action = String(form.get("action") || "create");
@@ -16,12 +29,15 @@ export async function POST(req: Request) {
     const code = String(form.get("code") || "").trim().toUpperCase();
     const titleEn = String(form.get("title_en") || "").trim();
     const titleAr = String(form.get("title_ar") || "").trim();
-    const discountType = String(form.get("discount_type") || "PERCENT").toUpperCase() === "FIXED" ? "FIXED" : "PERCENT";
+    const discountType =
+      String(form.get("discount_type") || "PERCENT").toUpperCase() === "FIXED" ? "FIXED" : "PERCENT";
     const discountValue = Number(form.get("discount_value") || 0);
     const startsAt = String(form.get("starts_at") || "").trim() || null;
     const endsAt = String(form.get("ends_at") || "").trim() || null;
+
     const usageLimitRaw = String(form.get("usage_limit") || "").trim();
     const usageLimit = usageLimitRaw ? Number(usageLimitRaw) : null;
+
     const isActive = String(form.get("is_active") || "") === "on";
 
     if (!code || !titleEn || !titleAr || !Number.isFinite(discountValue) || discountValue <= 0) {
