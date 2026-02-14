@@ -12,7 +12,7 @@ export default async function ContactPage({ params }: { params: Promise<{ locale
         <section className="panel">
           <h3 style={{ marginTop: 0 }}>{isAr ? "الدعم" : "Support"}</h3>
           <p>{isAr ? "فريقنا يرد خلال يوم عمل واحد." : "Our team responds within one business day."}</p>
-          <p style={{ marginBottom: 0 }}>hello@nivran.com<br />+9627XXXXXXXX</p>
+          <p style={{ marginBottom: 0 }}>hello@nivran.com<br />+962791752686</p>
         </section>
         <section className="panel">
           <ContactForm locale={locale} />
