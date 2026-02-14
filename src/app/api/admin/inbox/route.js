@@ -1,3 +1,4 @@
+// src/app/api/admin/inbox/route.js
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
@@ -5,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function ensureInboxTables() {
-  // --- Contact submissions ---
+  // --- contact_submissions ---
   await db.query(`
     create table if not exists contact_submissions (
       id bigserial primary key,
@@ -18,13 +19,18 @@ async function ensureInboxTables() {
     );
   `);
 
-  // Migrate older schemas safely
   await db.query(`alter table contact_submissions add column if not exists phone text;`);
-  await db.query(`alter table contact_submissions add column if not exists locale text not null default 'en';`);
-  await db.query(`alter table contact_submissions add column if not exists created_at timestamptz not null default now();`);
-  await db.query(`create index if not exists idx_contact_created_at on contact_submissions(created_at desc);`);
+  await db.query(
+    `alter table contact_submissions add column if not exists locale text not null default 'en';`
+  );
+  await db.query(
+    `alter table contact_submissions add column if not exists created_at timestamptz not null default now();`
+  );
+  await db.query(
+    `create index if not exists idx_contact_created_at on contact_submissions(created_at desc);`
+  );
 
-  // --- Newsletter subscribers ---
+  // --- newsletter_subscribers ---
   await db.query(`
     create table if not exists newsletter_subscribers (
       id bigserial primary key,
@@ -34,11 +40,17 @@ async function ensureInboxTables() {
     );
   `);
 
-  await db.query(`alter table newsletter_subscribers add column if not exists locale text not null default 'en';`);
-  await db.query(`alter table newsletter_subscribers add column if not exists created_at timestamptz not null default now();`);
-  await db.query(`create index if not exists idx_newsletter_created_at on newsletter_subscribers(created_at desc);`);
+  await db.query(
+    `alter table newsletter_subscribers add column if not exists locale text not null default 'en';`
+  );
+  await db.query(
+    `alter table newsletter_subscribers add column if not exists created_at timestamptz not null default now();`
+  );
+  await db.query(
+    `create index if not exists idx_newsletter_created_at on newsletter_subscribers(created_at desc);`
+  );
 
-  // --- PayTabs callbacks (optional section) ---
+  // --- paytabs_callbacks (optional, but useful to debug payments) ---
   await db.query(`
     create table if not exists paytabs_callbacks (
       id bigserial primary key,
@@ -52,17 +64,28 @@ async function ensureInboxTables() {
     );
   `);
 
+  await db.query(`alter table paytabs_callbacks add column if not exists cart_id text;`);
+  await db.query(`alter table paytabs_callbacks add column if not exists tran_ref text;`);
   await db.query(`alter table paytabs_callbacks add column if not exists signature_header text;`);
   await db.query(`alter table paytabs_callbacks add column if not exists signature_computed text;`);
-  await db.query(`alter table paytabs_callbacks add column if not exists signature_valid boolean not null default false;`);
+  await db.query(
+    `alter table paytabs_callbacks add column if not exists signature_valid boolean not null default false;`
+  );
   await db.query(`alter table paytabs_callbacks add column if not exists raw_body text;`);
-  await db.query(`alter table paytabs_callbacks add column if not exists created_at timestamptz not null default now();`);
+  await db.query(
+    `alter table paytabs_callbacks add column if not exists created_at timestamptz not null default now();`
+  );
 
-  await db.query(`create index if not exists idx_paytabs_callbacks_created_at on paytabs_callbacks(created_at desc);`);
-  await db.query(`create index if not exists idx_paytabs_callbacks_cart_id on paytabs_callbacks(cart_id);`);
+  await db.query(
+    `create index if not exists idx_paytabs_callbacks_cart_id on paytabs_callbacks(cart_id);`
+  );
+  await db.query(
+    `create index if not exists idx_paytabs_callbacks_created_at on paytabs_callbacks(created_at desc);`
+  );
 }
 
-export async function GET(req: Request) {
+/** @param {Request} req */
+export async function GET(req) {
   const token = req.headers.get("x-admin-token") || "";
 
   if (!process.env.ADMIN_TOKEN || token !== process.env.ADMIN_TOKEN) {
@@ -76,7 +99,7 @@ export async function GET(req: Request) {
   try {
     await ensureInboxTables();
 
-    const [contact, subscribers, callbacks] = await Promise.all([
+    const [contact, subs, callbacks] = await Promise.all([
       db.query(
         `select id, name, email, phone, message, locale, created_at
          from contact_submissions
@@ -101,11 +124,18 @@ export async function GET(req: Request) {
     ]);
 
     return NextResponse.json(
-      { contact: contact.rows, subscribers: subscribers.rows, callbacks: callbacks.rows },
+      {
+        contact: contact.rows || [],
+        subscribers: subs.rows || [],
+        callbacks: callbacks.rows || [],
+      },
       { status: 200 }
     );
-  } catch (e: any) {
+  } catch (e) {
     console.error("admin inbox GET failed", e);
-    return NextResponse.json({ error: "Server error", detail: e?.message || String(e) }, { status: 500 });
+    return NextResponse.json(
+      { error: "Server error", detail: e?.message || String(e) },
+      { status: 500 }
+    );
   }
 }
