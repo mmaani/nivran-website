@@ -1,7 +1,6 @@
 "use client";
 
-import React from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 type CartItem = {
   slug: string;
@@ -33,6 +32,8 @@ function readCart(): CartItem[] {
 
 function writeCart(items: CartItem[]) {
   localStorage.setItem(KEY, JSON.stringify(items));
+  // ✅ update header/cart count in same tab
+  window.dispatchEvent(new Event("nivran_cart_updated"));
 }
 
 export default function AddToCartButton({
@@ -41,38 +42,140 @@ export default function AddToCartButton({
   name,
   priceJod,
   label,
+  addedLabel,
+  updatedLabel,
   className = "btn btn-outline",
+  minQty = 1,
+  maxQty = 99,
+  disabled = false,
 }: {
   locale: string;
   slug: string;
   name: string;
   priceJod: number;
   label: string;
+  addedLabel?: string;
+  updatedLabel?: string;
   className?: string;
+  minQty?: number;
+  maxQty?: number;
+  disabled?: boolean;
 }) {
-  const router = useRouter();
+  const isAr = locale === "ar";
+  const [qty, setQty] = useState<number>(1);
+  const [status, setStatus] = useState<"" | "added" | "updated">("");
+  const timerRef = useRef<any>(null);
 
-  const href = `/${locale}/cart`;
+  const safeMin = Math.max(1, Number(minQty || 1));
+  const safeMax = Math.max(safeMin, Number(maxQty || 99));
 
-  function onClick(e: React.MouseEvent<HTMLAnchorElement>) {
-    e.preventDefault();
+  const addedText = addedLabel || (isAr ? "تمت الإضافة ✓" : "Added ✓");
+  const updatedText = updatedLabel || (isAr ? "تم التحديث ✓" : "Updated ✓");
+
+  useEffect(() => {
+    try {
+      const items = readCart();
+      const found = items.find((i) => i.slug === slug);
+      if (found?.qty) setQty(Math.min(safeMax, Math.max(safeMin, found.qty)));
+      else setQty(safeMin);
+    } catch {
+      setQty(safeMin);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const displayLabel = useMemo(() => {
+    if (status === "added") return addedText;
+    if (status === "updated") return updatedText;
+    return label;
+  }, [status, label, addedText, updatedText]);
+
+  function clamp(n: number) {
+    if (!Number.isFinite(n)) return safeMin;
+    return Math.min(safeMax, Math.max(safeMin, Math.floor(n)));
+  }
+
+  function setQtySafe(n: number) {
+    setQty(clamp(n));
+  }
+
+  function flash(next: "added" | "updated") {
+    setStatus(next);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setStatus(""), 1200);
+  }
+
+  function onSetCart() {
+    if (disabled) return;
 
     const items = readCart();
     const idx = items.findIndex((i) => i.slug === slug);
 
-    if (idx >= 0) {
-      items[idx] = { ...items[idx], qty: items[idx].qty + 1 };
-    } else {
-      items.push({ slug, name, priceJod, qty: 1 });
-    }
+    const nextItem: CartItem = { slug, name, priceJod, qty: clamp(qty) };
 
-    writeCart(items);
-    router.push(`/${locale}/cart?added=1`);
+    if (idx >= 0) {
+      items[idx] = nextItem; // set/replace qty
+      writeCart(items);
+      flash("updated");
+    } else {
+      items.push(nextItem);
+      writeCart(items);
+      flash("added");
+    }
   }
 
   return (
-    <a href={href} className={className} onClick={onClick}>
-      {label}
-    </a>
+    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <button
+          type="button"
+          className="btn btn-outline"
+          onClick={() => setQtySafe(qty - 1)}
+          disabled={disabled || qty <= safeMin}
+          aria-label={isAr ? "إنقاص الكمية" : "Decrease quantity"}
+        >
+          −
+        </button>
+
+        <input
+          value={String(qty)}
+          onChange={(e) => setQtySafe(Number(e.target.value))}
+          inputMode="numeric"
+          type="number"
+          min={safeMin}
+          max={safeMax}
+          disabled={disabled}
+          aria-label={isAr ? "الكمية" : "Quantity"}
+          style={{
+            width: 64,
+            height: 40,
+            borderRadius: 10,
+            border: "1px solid #e5e7eb",
+            padding: "0 10px",
+            outline: "none",
+          }}
+        />
+
+        <button
+          type="button"
+          className="btn btn-outline"
+          onClick={() => setQtySafe(qty + 1)}
+          disabled={disabled || qty >= safeMax}
+          aria-label={isAr ? "زيادة الكمية" : "Increase quantity"}
+        >
+          +
+        </button>
+      </div>
+
+      <button type="button" className={className} onClick={onSetCart} disabled={disabled} aria-live="polite">
+        {displayLabel}
+      </button>
+    </div>
   );
 }

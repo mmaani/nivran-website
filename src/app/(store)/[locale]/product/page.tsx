@@ -118,6 +118,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
           const name = isAr ? p.name_ar : p.name_en;
           const desc = isAr ? p.description_ar : p.description_en;
           const price = Number(p.price_jod || 0);
+          const outOfStock = Number(p.inventory_qty || 0) <= 0;
 
           const apiSrc = p.image_id ? `/api/catalog/product-image/${p.image_id}` : "";
           const fallbackSrc = fallbackFromSlug(p.slug);
@@ -127,7 +128,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
             <article key={p.slug} className="panel">
               <p className="muted" style={{ marginTop: 0 }}>
                 {catLabel(p.category_key)}
-                {p.inventory_qty <= 0 ? (isAr ? " · غير متوفر" : " · Out of stock") : ""}
+                {outOfStock ? (isAr ? " · غير متوفر" : " · Out of stock") : ""}
               </p>
 
               <div
@@ -167,8 +168,13 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
                   slug={p.slug}
                   name={name}
                   priceJod={price}
-                  label={isAr ? "أضف إلى السلة" : "Add to cart"}
-                  className="btn btn-outline"
+                  label={outOfStock ? (isAr ? "غير متوفر" : "Out of stock") : (isAr ? "أضف إلى السلة" : "Add to cart")}
+                  addedLabel={isAr ? "تمت الإضافة ✓" : "Added ✓"}
+                  updatedLabel={isAr ? "تم التحديث ✓" : "Updated ✓"}
+                  className={"btn btn-outline" + (outOfStock ? " btn-disabled" : "")}
+                  disabled={outOfStock}
+                  minQty={1}
+                  maxQty={99}
                 />
               </div>
             </article>

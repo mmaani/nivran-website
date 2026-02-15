@@ -1,4 +1,5 @@
 import ProductImageGallery from "./ProductImageGallery";
+import AddToCartButton from "@/components/AddToCartButton";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
@@ -117,10 +118,25 @@ export default async function ProductDetailPage({
 
           {desc ? <p className="muted">{desc}</p> : null}
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14, alignItems: "center" }}>
+            <AddToCartButton
+              locale={locale}
+              slug={product.slug}
+              name={name}
+              priceJod={price}
+              label={outOfStock ? (isAr ? "غير متوفر" : "Out of stock") : (isAr ? "أضف إلى السلة" : "Add to cart")}
+              addedLabel={isAr ? "تمت الإضافة ✓" : "Added ✓"}
+              updatedLabel={isAr ? "تم التحديث ✓" : "Updated ✓"}
+              className={"btn btn-outline" + (outOfStock ? " btn-disabled" : "")}
+              disabled={outOfStock}
+              minQty={1}
+              maxQty={99}
+            />
+
             <a className={"btn" + (outOfStock ? " btn-disabled" : "")} href={`/${locale}/checkout?slug=${product.slug}`}>
               {isAr ? "شراء الآن" : "Buy now"}
             </a>
+
             <a className="btn btn-outline" href={`/${locale}/product`}>
               {isAr ? "العودة للمتجر" : "Back to shop"}
             </a>
