@@ -1,4 +1,5 @@
 import SafeImg from "@/components/SafeImg";
+import AddToCartButton from "@/components/AddToCartButton";
 import { db } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
 
@@ -151,12 +152,25 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
 
               <h3 style={{ margin: "0 0 .35rem" }}>{name}</h3>
               {desc ? <p className="muted">{desc}</p> : null}
+
               <p>
                 <strong>{price.toFixed(2)} JOD</strong>
               </p>
-              <a className="btn" href={`/${locale}/product/${p.slug}`}>
-                {isAr ? "عرض المنتج" : "View product"}
-              </a>
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+                <a className="btn" href={`/${locale}/product/${p.slug}`}>
+                  {isAr ? "عرض المنتج" : "View product"}
+                </a>
+
+                <AddToCartButton
+                  locale={locale}
+                  slug={p.slug}
+                  name={name}
+                  priceJod={price}
+                  label={isAr ? "أضف إلى السلة" : "Add to cart"}
+                  className="btn btn-outline"
+                />
+              </div>
             </article>
           );
         })}
