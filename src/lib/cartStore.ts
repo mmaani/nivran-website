@@ -1,5 +1,7 @@
 import { db } from "@/lib/db";
 
+export const CART_LOCAL_KEY = "nivran_cart_v1";
+
 export type CartItem = {
   slug: string;
   name: string;
@@ -7,102 +9,74 @@ export type CartItem = {
   qty: number;
 };
 
-const MAX_QTY = 99;
-
-function clampQty(n: any) {
-  const x = Math.floor(Number(n || 1));
-  if (!Number.isFinite(x)) return 1;
-  return Math.max(1, Math.min(MAX_QTY, x));
-}
-
-export function normalizeCartItems(items: any): CartItem[] {
-  if (!Array.isArray(items)) return [];
-  const out: CartItem[] = [];
-  for (const it of items) {
-    const slug = String(it?.slug || "").trim();
-    if (!slug) continue;
-    const name = String(it?.name || slug).trim();
-    const priceJod = Number(it?.priceJod || it?.price_jod || 0);
-    out.push({ slug, name, priceJod: Number.isFinite(priceJod) ? priceJod : 0, qty: clampQty(it?.qty) });
-  }
-  // de-dupe by slug (keep last)
-  const map = new Map<string, CartItem>();
-  for (const i of out) map.set(i.slug, i);
-  return Array.from(map.values());
+export async function ensureCartTables() {
+  await db.query(`
+    create table if not exists customer_carts (
+      customer_id bigint primary key references customers(id) on delete cascade,
+      updated_at timestamptz not null default now()
+    );
+  `);
+  await db.query(`
+    create table if not exists customer_cart_items (
+      customer_id bigint not null references customers(id) on delete cascade,
+      slug text not null,
+      name text not null,
+      price_jod numeric(10,2) not null default 0,
+      qty int not null default 1,
+      updated_at timestamptz not null default now(),
+      primary key (customer_id, slug)
+    );
+  `);
 }
 
 export async function getCart(customerId: number): Promise<CartItem[]> {
-  const r = await db.query(
+  await ensureCartTables();
+  const r = await db.query<{ slug: string; name: string; price_jod: string; qty: number }>(
     `select slug, name, price_jod::text as price_jod, qty
        from customer_cart_items
       where customer_id=$1
-      order by updated_at desc, slug asc`,
+      order by updated_at desc`,
     [customerId]
   );
-
-  return r.rows.map((x: any) => ({
-    slug: String(x.slug),
-    name: String(x.name),
+  return r.rows.map((x) => ({
+    slug: x.slug,
+    name: x.name,
     priceJod: Number(x.price_jod || 0),
-    qty: clampQty(x.qty),
+    qty: Number(x.qty || 0),
   }));
 }
 
-export async function replaceCart(customerId: number, items: CartItem[]): Promise<void> {
-  const slugs = items.map((i) => i.slug);
-  const names = items.map((i) => i.name);
-  const prices = items.map((i) => String(Number(i.priceJod || 0)));
-  const qtys = items.map((i) => clampQty(i.qty));
+export async function upsertCart(customerId: number, items: CartItem[]): Promise<CartItem[]> {
+  await ensureCartTables();
 
-  await db.query("begin");
-  try {
+  // Clear
+  await db.query(`delete from customer_cart_items where customer_id=$1`, [customerId]);
+
+  // Upsert new items
+  const safe = (Array.isArray(items) ? items : [])
+    .map((i) => ({
+      slug: String(i.slug || "").trim(),
+      name: String(i.name || "").trim(),
+      priceJod: Number(i.priceJod || 0),
+      qty: Math.max(1, Number(i.qty || 1)),
+    }))
+    .filter((i) => i.slug && i.name);
+
+  for (const it of safe) {
     await db.query(
-      `insert into customer_carts(customer_id, updated_at)
-       values ($1, now())
-       on conflict (customer_id) do update set updated_at=excluded.updated_at`,
-      [customerId]
+      `insert into customer_cart_items (customer_id, slug, name, price_jod, qty, updated_at)
+       values ($1,$2,$3,$4,$5, now())`,
+      [customerId, it.slug, it.name, it.priceJod, it.qty]
     );
-
-    await db.query(`delete from customer_cart_items where customer_id=$1`, [customerId]);
-
-    if (items.length) {
-      await db.query(
-        `with data as (
-           select
-             unnest($2::text[]) as slug,
-             unnest($3::text[]) as name,
-             unnest($4::numeric[]) as price_jod,
-             unnest($5::int[]) as qty
-         )
-         insert into customer_cart_items(customer_id, slug, name, price_jod, qty, updated_at)
-         select $1, slug, name, price_jod, qty, now()
-         from data`,
-        [customerId, slugs, names, prices, qtys]
-      );
-    }
-
-    await db.query("commit");
-  } catch (e) {
-    await db.query("rollback");
-    throw e;
-  }
-}
-
-export async function mergeCartSum(customerId: number, incoming: CartItem[]): Promise<CartItem[]> {
-  const existing = await getCart(customerId);
-  const map = new Map<string, CartItem>();
-
-  for (const e of existing) map.set(e.slug, { ...e });
-
-  for (const inc of incoming) {
-    const prev = map.get(inc.slug);
-    if (!prev) {
-      map.set(inc.slug, { ...inc, qty: clampQty(inc.qty) });
-    } else {
-      const nextQty = clampQty((prev.qty || 0) + (inc.qty || 0));
-      map.set(inc.slug, { ...prev, name: inc.name || prev.name, priceJod: inc.priceJod ?? prev.priceJod, qty: nextQty });
-    }
   }
 
-  return Array.from(map.values());
+  // Touch cart
+  await db.query(
+    `insert into customer_carts (customer_id, updated_at)
+     values ($1, now())
+     on conflict (customer_id) do update set updated_at=excluded.updated_at`,
+    [customerId]
+  );
+
+  return safe;
 }

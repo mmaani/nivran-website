@@ -1,49 +1,52 @@
-// src/app/api/auth/signup/route.ts
 import { NextResponse } from "next/server";
-import { createCustomer, createSessionToken, CUSTOMER_SESSION_COOKIE } from "@/lib/identity";
+import { createCustomer, createCustomerSession, createSessionToken, getCustomerByEmail } from "@/lib/identity";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-function cookieOpts() {
-  return {
+export async function POST(req: Request) {
+  const body = await req.json().catch(() => ({}));
+
+  const fullName = String(body?.fullName || "").trim();
+  const email = String(body?.email || "").trim().toLowerCase();
+  const phone = String(body?.phone || "").trim();
+  const addressLine1 = String(body?.addressLine1 || "").trim();
+  const city = String(body?.city || "").trim();
+  const country = String(body?.country || "").trim() || "Jordan";
+  const password = String(body?.password || "").trim();
+
+  if (!fullName || !email || !phone || !addressLine1 || !password) {
+    return NextResponse.json(
+      { ok: false, error: "Missing required fields (name, email, phone, address, password)." },
+      { status: 400 }
+    );
+  }
+
+  const exists = await getCustomerByEmail(email);
+  if (exists) return NextResponse.json({ ok: false, error: "Email already registered." }, { status: 409 });
+
+  const created = await createCustomer({
+    email,
+    fullName,
+    password,
+    phone,
+    addressLine1,
+    city,
+    country,
+  });
+
+  const token = createSessionToken();
+  await createCustomerSession(created.id, token);
+
+  const res = NextResponse.json({ ok: true });
+
+  res.cookies.set("nivran_customer_session", token, {
     httpOnly: true,
+    sameSite: "lax",
     secure: true,
-    sameSite: "lax" as const,
     path: "/",
-    maxAge: 60 * 60 * 24 * 30, // 30 days
-  };
-}
+    maxAge: 60 * 60 * 24 * 30,
+  });
 
-export async function POST(req: Request): Promise<Response> {
-  const ct = req.headers.get("content-type") || "";
-  const isForm = ct.includes("application/x-www-form-urlencoded") || ct.includes("multipart/form-data");
-  const body = isForm ? Object.fromEntries((await req.formData()).entries()) : await req.json().catch(() => ({}));
-
-  const email = String((body as any)?.email || "").trim().toLowerCase();
-  const password = String((body as any)?.password || "").trim();
-  const fullName = String((body as any)?.full_name || (body as any)?.fullName || "").trim() || null;
-  const locale = String((body as any)?.locale || "en") === "ar" ? "ar" : "en";
-
-  if (!email || !email.includes("@") || password.length < 6) {
-    const payload = { ok: false, error: "Invalid email or password" };
-    if (isForm) return NextResponse.redirect(new URL(`/${locale}?signup=0`, req.url));
-    return NextResponse.json(payload, { status: 400 });
-  }
-
-  const id = await createCustomer({ email, fullName, password });
-  if (!id) {
-    const payload = { ok: false, error: "Email already registered" };
-    if (isForm) return NextResponse.redirect(new URL(`/${locale}?signup=exists`, req.url));
-    return NextResponse.json(payload, { status: 409 });
-  }
-
-  // ✅ FIX: createSessionToken requires customerId
-  const token = await createSessionToken(id);
-
-  const res = isForm
-    ? NextResponse.redirect(new URL(`/${locale}?signup=1`, req.url))
-    : NextResponse.json({ ok: true });
-
-  res.cookies.set(CUSTOMER_SESSION_COOKIE, token, cookieOpts());
   return res;
 }

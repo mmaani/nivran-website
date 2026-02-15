@@ -1,37 +1,99 @@
 "use client";
+import { useEffect, useMemo, useState } from "react";
+import { CART_LOCAL_KEY } from "@/lib/cartStore";
 
-import { useParams } from "next/navigation";
-import { useState } from "react";
+type Locale = "en" | "ar";
+function t(locale: Locale, en: string, ar: string) {
+  return locale === "ar" ? ar : en;
+}
 
-export default function LoginPage() {
-  const p = useParams<{ locale?: string }>();
-  const locale = p?.locale === "ar" ? "ar" : "en";
+function readLocalCart() {
+  try {
+    const raw = localStorage.getItem(CART_LOCAL_KEY);
+    const items = raw ? JSON.parse(raw) : [];
+    return Array.isArray(items) ? items : [];
+  } catch {
+    return [];
+  }
+}
+
+export default function LoginPage({ params }: { params: Promise<{ locale: string }> }) {
+  const [locale, setLocale] = useState<Locale>("en");
   const isAr = locale === "ar";
-  const [msg, setMsg] = useState("");
 
-  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    params.then((p) => setLocale(p.locale === "ar" ? "ar" : "en"));
+  }, [params]);
+
+  const can = useMemo(() => !!email.trim() && !!password.trim(), [email, password]);
+
+  async function syncCartIfAny() {
+    const items = readLocalCart();
+    await fetch("/api/cart/sync", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ items }),
+    }).catch(() => {});
+  }
+
+  async function submit(e: any) {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    const payload = { email: String(fd.get("email") || ""), password: String(fd.get("password") || "") };
-    const res = await fetch("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
-    const data = await res.json();
-    if (data?.ok) window.location.href = `/${locale}/account`;
-    else setMsg(data?.error || "Error");
+    if (!can || busy) return;
+    setBusy(true);
+    setError(null);
+
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.ok) {
+      setBusy(false);
+      setError(data?.error || t(locale, "Login failed.", "فشل تسجيل الدخول."));
+      return;
+    }
+
+    // Merge local cart into account cart
+    await syncCartIfAny();
+
+    // Optional ?next=
+    const qs = new URLSearchParams(window.location.search);
+    const next = qs.get("next");
+    window.location.href = next || `/${locale}/account`;
   }
 
   return (
-    <div style={{ maxWidth: 520, margin: "24px auto" }} className="panel">
-      <h1 style={{ marginTop: 0 }}>{isAr ? "تسجيل الدخول" : "Login"}</h1>
-      <form onSubmit={onSubmit} style={{ display: "grid", gap: 8 }}>
-        <input className="input" name="email" type="email" required placeholder={isAr ? "البريد الإلكتروني" : "Email"} />
-        <input className="input" name="password" type="password" required placeholder={isAr ? "كلمة المرور" : "Password"} />
-        <button className="btn primary">{isAr ? "دخول" : "Login"}</button>
+    <div style={{ padding: "1.2rem 0", maxWidth: 520 }}>
+      <h1 className="title">{t(locale, "Login", "تسجيل الدخول")}</h1>
+      <form className="panel" onSubmit={submit}>
+        <label>
+          <span className="muted">{t(locale, "Email", "البريد الإلكتروني")}</span>
+          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required />
+        </label>
+
+        <label style={{ marginTop: 10 }}>
+          <span className="muted">{t(locale, "Password", "كلمة المرور")}</span>
+          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required />
+        </label>
+
+        {error ? <p style={{ color: "crimson", marginTop: 10 }}>{error}</p> : null}
+
+        <button className={"btn" + (!can || busy ? " btn-disabled" : "")} disabled={!can || busy} style={{ marginTop: 12 }}>
+          {busy ? t(locale, "Please wait…", "يرجى الانتظار…") : t(locale, "Login", "تسجيل الدخول")}
+        </button>
+
+        <p className="muted" style={{ marginTop: 12 }}>
+          {t(locale, "No account?", "لا تملك حساباً؟")}{" "}
+          <a href={`/${locale}/account/signup`}>{t(locale, "Create one", "إنشاء حساب")}</a>
+        </p>
       </form>
-      {msg && <p style={{ color: "crimson" }}>{msg}</p>}
-      <p className="muted" style={{ marginBottom: 6 }}>
-        <a style={{ textDecoration: "underline" }} href={`/${locale}/account/forgot-password`}>{isAr ? "نسيت كلمة المرور؟" : "Forgot password?"}</a>
-      </p>
-      <p className="muted">{isAr ? "ليس لديك حساب؟" : "No account?"} <a style={{ textDecoration: "underline" }} href={`/${locale}/account/signup`}>{isAr ? "إنشاء حساب" : "Sign up"}</a></p>
     </div>
   );
 }
