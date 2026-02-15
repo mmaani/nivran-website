@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
+import styles from "./page.module.css";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,7 +77,7 @@ export default async function ProductDetailPage({
         {catLabel}
       </p>
 
-      <div className="grid-2" style={{ alignItems: "start" }}>
+      <div className={styles.grid2} style={{ alignItems: "start" }}>
         <div>
           {imgs.rows.length ? (
             <div style={{ display: "grid", gap: 10 }}>
@@ -159,23 +160,6 @@ export default async function ProductDetailPage({
           </div>
         </div>
       </div>
-
-      <style jsx global>{`
-        .grid-2 {
-          display: grid;
-          grid-template-columns: 1.1fr 0.9fr;
-          gap: 16px;
-        }
-        @media (max-width: 900px) {
-          .grid-2 {
-            grid-template-columns: 1fr;
-          }
-        }
-        .btn-disabled {
-          pointer-events: none;
-          opacity: 0.6;
-        }
-      `}</style>
-    </div>
+</div>
   );
 }

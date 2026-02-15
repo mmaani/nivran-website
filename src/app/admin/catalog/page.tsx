@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
 import { getAdminLang } from "@/lib/admin-lang";
+import styles from "./page.module.css";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -184,24 +185,24 @@ export default async function AdminCatalogPage() {
   for (const c of categoriesRes.rows) byKey.set(c.key, c);
 
   return (
-    <main className={"admin-page " + (lang === "ar" ? "rtl" : "")}>
-      <header className="admin-header">
+    <main className={`${styles.adminPage} ${lang === "ar" ? styles.rtl : ""}`}>
+      <header className={styles.adminHeader}>
         <div>
           <h1 style={{ margin: 0 }}>{L.title}</h1>
           <p style={{ margin: "6px 0 0", opacity: 0.8 }}>{L.sub}</p>
         </div>
       </header>
 
-      <section className="admin-card">
+      <section className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{L.categories}</h2>
 
-        <form action="/api/admin/catalog/categories" method="post" className="admin-grid">
+        <form action="/api/admin/catalog/categories" method="post" className={styles.adminGrid}>
           <input type="hidden" name="action" value="create" />
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(4,minmax(0,1fr))" }}>
-            <input name="key" required placeholder={L.catKey} className="admin-input ltr" />
-            <input name="name_en" required placeholder={L.catNameEn} className="admin-input" />
-            <input name="name_ar" required placeholder={L.catNameAr} className="admin-input" />
-            <input name="sort_order" type="number" placeholder={L.catSort} className="admin-input ltr" />
+            <input name="key" required placeholder={L.catKey} className={`${styles.adminInput} ${styles.ltr}`} />
+            <input name="name_en" required placeholder={L.catNameEn} className={styles.adminInput} />
+            <input name="name_ar" required placeholder={L.catNameAr} className={styles.adminInput} />
+            <input name="sort_order" type="number" placeholder={L.catSort} className={`${styles.adminInput} ${styles.ltr}`} />
           </div>
 
           <div style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
@@ -213,19 +214,19 @@ export default async function AdminCatalogPage() {
             </label>
           </div>
 
-          <button className="admin-btn admin-btn-primary" style={{ width: "fit-content" }}>
+          <button className={`${styles.adminBtn} ${styles.adminBtnPrimary}`} style={{ width: "fit-content" }}>
             {L.saveCategory}
           </button>
         </form>
 
-        <div className="admin-table-wrap" style={{ marginTop: 14 }}>
-          <table className="admin-table">
+        <div className={styles.adminTableWrap} style={{ marginTop: 14 }}>
+          <table className={styles.adminTable}>
             <thead>
               <tr>
-                <th className="ltr">{L.catKey}</th>
+                <th className={styles.ltr}>{L.catKey}</th>
                 <th>{L.catNameEn}</th>
                 <th>{L.catNameAr}</th>
-                <th className="ltr">{L.catSort}</th>
+                <th className={styles.ltr}>{L.catSort}</th>
                 <th>{L.catActive}</th>
                 <th>{L.catPromoted}</th>
                 <th>{L.actions}</th>
@@ -234,10 +235,10 @@ export default async function AdminCatalogPage() {
             <tbody>
               {categoriesRes.rows.map((c) => (
                 <tr key={c.key}>
-                  <td className="ltr">{c.key}</td>
+                  <td className={styles.ltr}>{c.key}</td>
                   <td>{c.name_en}</td>
                   <td>{c.name_ar}</td>
-                  <td className="ltr">{c.sort_order}</td>
+                  <td className={styles.ltr}>{c.sort_order}</td>
                   <td>{c.is_active ? "✓" : "—"}</td>
                   <td>{c.is_promoted ? "✓" : "—"}</td>
                   <td>
@@ -249,13 +250,13 @@ export default async function AdminCatalogPage() {
                       <input type="hidden" name="action" value="update" />
                       <input type="hidden" name="key" value={c.key} />
 
-                      <input name="name_en" defaultValue={c.name_en} className="admin-input" style={{ width: 180 }} />
-                      <input name="name_ar" defaultValue={c.name_ar} className="admin-input" style={{ width: 180 }} />
+                      <input name="name_en" defaultValue={c.name_en} className={styles.adminInput} style={{ width: 180 }} />
+                      <input name="name_ar" defaultValue={c.name_ar} className={styles.adminInput} style={{ width: 180 }} />
                       <input
                         name="sort_order"
                         type="number"
                         defaultValue={c.sort_order}
-                        className="admin-input ltr"
+                        className={`${styles.adminInput} ${styles.ltr}`}
                         style={{ width: 110 }}
                       />
 
@@ -266,7 +267,7 @@ export default async function AdminCatalogPage() {
                         <input type="checkbox" name="is_promoted" defaultChecked={c.is_promoted} /> {L.catPromoted}
                       </label>
 
-                      <button className="admin-btn" type="submit">
+                      <button className={styles.adminBtn} type="submit">
                         {L.update}
                       </button>
                     </form>
@@ -274,7 +275,7 @@ export default async function AdminCatalogPage() {
                     <form action="/api/admin/catalog/categories" method="post" style={{ marginTop: 8 }}>
                       <input type="hidden" name="action" value="delete" />
                       <input type="hidden" name="key" value={c.key} />
-                      <button className="admin-btn" type="submit">
+                      <button className={styles.adminBtn} type="submit">
                         {L.del}
                       </button>
                     </form>
@@ -293,15 +294,15 @@ export default async function AdminCatalogPage() {
         </div>
       </section>
 
-      <section className="admin-card">
+      <section className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{L.addProduct}</h2>
 
-        <form action="/api/admin/catalog/products" method="post" className="admin-grid">
+        <form action="/api/admin/catalog/products" method="post" className={styles.adminGrid}>
           <input type="hidden" name="action" value="create" />
 
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
-            <input name="slug" required placeholder={L.ph_slug} className="admin-input ltr" />
-            <select name="category_key" defaultValue="perfume" className="admin-select">
+            <input name="slug" required placeholder={L.ph_slug} className={`${styles.adminInput} ${styles.ltr}`} />
+            <select name="category_key" defaultValue="perfume" className={styles.adminSelect}>
               {categoriesRes.rows.map((c) => (
                 <option key={c.key} value={c.key}>
                   {labelCategory(lang, c)} ({c.key})
@@ -309,38 +310,38 @@ export default async function AdminCatalogPage() {
               ))}
             </select>
 
-            <input name="name_en" required placeholder={L.ph_name_en} className="admin-input" />
-            <input name="name_ar" required placeholder={L.ph_name_ar} className="admin-input" />
+            <input name="name_en" required placeholder={L.ph_name_en} className={styles.adminInput} />
+            <input name="name_ar" required placeholder={L.ph_name_ar} className={styles.adminInput} />
 
-            <input name="price_jod" type="number" min="0" step="0.01" required placeholder={L.price} className="admin-input ltr" />
+            <input name="price_jod" type="number" min="0" step="0.01" required placeholder={L.price} className={`${styles.adminInput} ${styles.ltr}`} />
             <input
               name="compare_at_price_jod"
               type="number"
               step="0.01"
               placeholder={L.ph_compare}
-              className="admin-input ltr"
+              className={`${styles.adminInput} ${styles.ltr}`}
             />
 
-            <input name="inventory_qty" type="number" min="0" defaultValue={0} placeholder={L.inv} className="admin-input ltr" />
+            <input name="inventory_qty" type="number" min="0" defaultValue={0} placeholder={L.inv} className={`${styles.adminInput} ${styles.ltr}`} />
             <span />
-            <textarea name="description_en" placeholder={L.ph_desc_en} className="admin-textarea" rows={3} />
-            <textarea name="description_ar" placeholder={L.ph_desc_ar} className="admin-textarea" rows={3} />
+            <textarea name="description_en" placeholder={L.ph_desc_en} className={styles.adminTextarea} rows={3} />
+            <textarea name="description_ar" placeholder={L.ph_desc_ar} className={styles.adminTextarea} rows={3} />
           </div>
 
           <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <input type="checkbox" name="is_active" defaultChecked /> {L.active}
           </label>
 
-          <button className="admin-btn admin-btn-primary" style={{ width: "fit-content" }}>
+          <button className={`${styles.adminBtn} ${styles.adminBtnPrimary}`} style={{ width: "fit-content" }}>
             {L.saveProduct}
           </button>
         </form>
       </section>
 
-      <section className="admin-card">
+      <section className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{L.products}</h2>
-        <div className="admin-table-wrap">
-          <table className="admin-table">
+        <div className={styles.adminTableWrap}>
+          <table className={styles.adminTable}>
             <thead>
               <tr>
                 <th>{L.slug}</th>
@@ -356,7 +357,7 @@ export default async function AdminCatalogPage() {
             <tbody>
               {productsRes.rows.map((p) => (
                 <tr key={p.id}>
-                  <td className="ltr">{p.slug}</td>
+                  <td className={styles.ltr}>{p.slug}</td>
                   <td>
                     {p.name_en}
                     <br />
@@ -365,12 +366,12 @@ export default async function AdminCatalogPage() {
                   <td>
                     {byKey.get(p.category_key) ? labelCategory(lang, byKey.get(p.category_key)!) : p.category_key}
                   </td>
-                  <td className="ltr">
+                  <td className={styles.ltr}>
                     {p.price_jod} JOD{" "}
                     {p.compare_at_price_jod ? `(${L.was} ${p.compare_at_price_jod})` : ""}
                   </td>
-                  <td className="ltr">{p.inventory_qty}</td>
-                  <td className="ltr">
+                  <td className={styles.ltr}>{p.inventory_qty}</td>
+                  <td className={styles.ltr}>
                     {p.image_count}/5
                     <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85 }}>{L.imageHelp}</div>
                     <form
@@ -380,8 +381,8 @@ export default async function AdminCatalogPage() {
                       style={{ display: "grid", gap: 8, marginTop: 10 }}
                     >
                       <input type="hidden" name="product_id" value={p.id} />
-                      <input name="images" type="file" multiple accept="image/*" className="admin-input" />
-                      <button className="admin-btn" type="submit" style={{ width: "fit-content" }}>
+                      <input name="images" type="file" multiple accept="image/*" className={styles.adminInput} />
+                      <button className={styles.adminBtn} type="submit" style={{ width: "fit-content" }}>
                         {L.uploadImages}
                       </button>
                     </form>
@@ -396,7 +397,7 @@ export default async function AdminCatalogPage() {
                       <input type="hidden" name="action" value="update" />
                       <input type="hidden" name="id" value={p.id} />
 
-                      <select name="category_key" defaultValue={p.category_key} className="admin-select">
+                      <select name="category_key" defaultValue={p.category_key} className={styles.adminSelect}>
                         {categoriesRes.rows.map((c) => (
                           <option key={c.key} value={c.key}>
                             {labelCategory(lang, c)} ({c.key})
@@ -409,7 +410,7 @@ export default async function AdminCatalogPage() {
                         type="number"
                         step="0.01"
                         defaultValue={Number(p.price_jod || "0")}
-                        className="admin-input ltr"
+                        className={`${styles.adminInput} ${styles.ltr}`}
                         style={{ width: 120 }}
                       />
 
@@ -419,7 +420,7 @@ export default async function AdminCatalogPage() {
                         step="0.01"
                         defaultValue={p.compare_at_price_jod ? Number(p.compare_at_price_jod) : ""}
                         placeholder={L.ph_compare}
-                        className="admin-input ltr"
+                        className={`${styles.adminInput} ${styles.ltr}`}
                         style={{ width: 160 }}
                       />
 
@@ -428,7 +429,7 @@ export default async function AdminCatalogPage() {
                         type="number"
                         min="0"
                         defaultValue={p.inventory_qty}
-                        className="admin-input ltr"
+                        className={`${styles.adminInput} ${styles.ltr}`}
                         style={{ width: 120 }}
                       />
 
@@ -436,7 +437,7 @@ export default async function AdminCatalogPage() {
                         <input type="checkbox" name="is_active" defaultChecked={p.is_active} /> {L.active}
                       </label>
 
-                      <button className="admin-btn" type="submit">
+                      <button className={styles.adminBtn} type="submit">
                         {L.update}
                       </button>
                     </form>
@@ -444,7 +445,7 @@ export default async function AdminCatalogPage() {
                     <form action="/api/admin/catalog/products" method="post" style={{ marginTop: 8 }}>
                       <input type="hidden" name="action" value="delete" />
                       <input type="hidden" name="id" value={p.id} />
-                      <button className="admin-btn" type="submit">
+                      <button className={styles.adminBtn} type="submit">
                         {L.del}
                       </button>
                     </form>
@@ -464,14 +465,14 @@ export default async function AdminCatalogPage() {
         </div>
       </section>
 
-      <section className="admin-card">
+      <section className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{L.addPromo}</h2>
-        <form action="/api/admin/catalog/promotions" method="post" className="admin-grid">
+        <form action="/api/admin/catalog/promotions" method="post" className={styles.adminGrid}>
           <input type="hidden" name="action" value="create" />
 
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
-            <input name="code" required placeholder={L.ph_code} className="admin-input ltr" />
-            <select name="discount_type" defaultValue="PERCENT" className="admin-select">
+            <input name="code" required placeholder={L.ph_code} className={`${styles.adminInput} ${styles.ltr}`} />
+            <select name="discount_type" defaultValue="PERCENT" className={styles.adminSelect}>
               <option value="PERCENT">{L.percent}</option>
               <option value="FIXED">{L.fixed}</option>
             </select>
@@ -483,15 +484,15 @@ export default async function AdminCatalogPage() {
               step="0.01"
               required
               placeholder={L.ph_disc}
-              className="admin-input ltr"
+              className={`${styles.adminInput} ${styles.ltr}`}
             />
-            <input name="usage_limit" type="number" min="1" placeholder={L.ph_limit} className="admin-input ltr" />
+            <input name="usage_limit" type="number" min="1" placeholder={L.ph_limit} className={`${styles.adminInput} ${styles.ltr}`} />
 
-            <input name="title_en" required placeholder={L.ph_title_en} className="admin-input" />
-            <input name="title_ar" required placeholder={L.ph_title_ar} className="admin-input" />
+            <input name="title_en" required placeholder={L.ph_title_en} className={styles.adminInput} />
+            <input name="title_ar" required placeholder={L.ph_title_ar} className={styles.adminInput} />
 
-            <input name="starts_at" type="datetime-local" className="admin-input ltr" />
-            <input name="ends_at" type="datetime-local" className="admin-input ltr" />
+            <input name="starts_at" type="datetime-local" className={`${styles.adminInput} ${styles.ltr}`} />
+            <input name="ends_at" type="datetime-local" className={`${styles.adminInput} ${styles.ltr}`} />
           </div>
 
           <div style={{ display: "grid", gap: 8 }}>
@@ -514,19 +515,19 @@ export default async function AdminCatalogPage() {
             <input type="checkbox" name="is_active" defaultChecked /> {L.active}
           </label>
 
-          <button className="admin-btn admin-btn-primary" style={{ width: "fit-content" }}>
+          <button className={`${styles.adminBtn} ${styles.adminBtnPrimary}`} style={{ width: "fit-content" }}>
             {L.savePromo}
           </button>
         </form>
       </section>
 
-      <section className="admin-card">
+      <section className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{L.promos}</h2>
         <ul style={{ margin: 0, paddingInlineStart: 18 }}>
           {promosRes.rows.map((r) => (
             <li key={r.id} style={{ marginBottom: 10 }}>
-              <strong className="ltr">{r.code}</strong> —{" "}
-              <span className="ltr">
+              <strong className={styles.ltr}>{r.code}</strong> —{" "}
+              <span className={styles.ltr}>
                 {r.discount_type === "PERCENT" ? `${r.discount_value}%` : `${r.discount_value} JOD`}
               </span>{" "}
               — {lang === "ar" ? r.title_ar : r.title_en}
@@ -543,7 +544,7 @@ export default async function AdminCatalogPage() {
                 <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <input type="checkbox" name="is_active" defaultChecked={r.is_active} /> {L.active}
                 </label>
-                <button className="admin-btn" type="submit" style={{ marginTop: 8 }}>
+                <button className={styles.adminBtn} type="submit" style={{ marginTop: 8 }}>
                   {L.update}
                 </button>
               </form>
@@ -554,88 +555,6 @@ export default async function AdminCatalogPage() {
           ) : null}
         </ul>
       </section>
-
-      <style jsx global>{`
-        .admin-page {
-          max-width: 1100px;
-          margin: 0 auto;
-          padding: 20px 14px 60px;
-        }
-        .admin-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          gap: 14px;
-          margin-bottom: 16px;
-        }
-        .admin-card {
-          background: #fff;
-          border: 1px solid #eee;
-          border-radius: 14px;
-          padding: 14px;
-          margin-bottom: 14px;
-          box-shadow: 0 1px 0 rgba(0, 0, 0, 0.02);
-        }
-        .admin-grid {
-          display: grid;
-          gap: 10px;
-        }
-        .admin-input,
-        .admin-select,
-        .admin-textarea {
-          width: 100%;
-          border: 1px solid #e6e6e6;
-          border-radius: 12px;
-          padding: 10px 12px;
-          font: inherit;
-          background: #fff;
-        }
-        .admin-textarea {
-          resize: vertical;
-        }
-        .admin-btn {
-          border: 1px solid #e6e6e6;
-          border-radius: 12px;
-          padding: 10px 12px;
-          background: #fff;
-          font: inherit;
-          cursor: pointer;
-        }
-        .admin-btn-primary {
-          background: #111;
-          border-color: #111;
-          color: #fff;
-        }
-        .admin-table-wrap {
-          overflow: auto;
-          border-radius: 12px;
-          border: 1px solid #eee;
-        }
-        .admin-table {
-          width: 100%;
-          border-collapse: collapse;
-          min-width: 980px;
-          background: #fff;
-        }
-        .admin-table th,
-        .admin-table td {
-          border-bottom: 1px solid #eee;
-          padding: 10px 10px;
-          vertical-align: top;
-          text-align: start;
-        }
-        .admin-table th {
-          font-weight: 600;
-          background: #fafafa;
-        }
-        .ltr {
-          direction: ltr;
-          unicode-bidi: plaintext;
-        }
-        .rtl {
-          direction: rtl;
-        }
-      `}</style>
-    </main>
+</main>
   );
 }

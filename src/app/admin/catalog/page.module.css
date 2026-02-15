@@ -1,0 +1,92 @@
+.adminPage {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 20px 14px 60px;
+}
+
+.adminHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.adminCard {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 14px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.02);
+}
+
+.adminGrid {
+  display: grid;
+  gap: 10px;
+}
+
+.adminInput,
+.adminSelect,
+.adminTextarea {
+  width: 100%;
+  border: 1px solid #e6e6e6;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+  background: #fff;
+}
+
+.adminTextarea {
+  resize: vertical;
+}
+
+.adminBtn {
+  border: 1px solid #e6e6e6;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.adminBtnPrimary {
+  background: #111;
+  border-color: #111;
+  color: #fff;
+}
+
+.adminTableWrap {
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid #eee;
+}
+
+.adminTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 980px;
+  background: #fff;
+}
+
+.adminTable th,
+.adminTable td {
+  border-bottom: 1px solid #eee;
+  padding: 10px 10px;
+  vertical-align: top;
+  text-align: start;
+}
+
+.adminTable th {
+  font-weight: 600;
+  background: #fafafa;
+}
+
+.ltr {
+  direction: ltr;
+  unicode-bidi: plaintext;
+}
+
+.rtl {
+  direction: rtl;
+}
