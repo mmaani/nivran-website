@@ -1,143 +1,195 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { ensureOrdersTables } from "@/lib/orders";
 import { ensureCatalogTables } from "@/lib/catalog";
-import { ensureIdentityTables, getCustomerByEmail, createCustomer, createCustomerSession, createSessionToken, getCustomerIdFromRequest } from "@/lib/identity";
-import { upsertCart } from "@/lib/cartStore";
+import { getCustomerIdFromRequest } from "@/lib/identity";
+
+type PaymentMethod = "PAYTABS" | "COD";
+
+type IncomingItem = {
+  slug?: string;
+  qty?: number;
+  // client may send name/price but server will re-price from DB
+  name?: string;
+  priceJod?: number;
+};
+
+type OrderLine = {
+  slug: string;
+  name_en: string;
+  name_ar: string;
+  qty: number;
+  unit_price_jod: number;
+  line_total_jod: number;
+  category_key: string | null;
+};
+
+async function fetchProductsBySlugs(slugs: string[]) {
+  await ensureCatalogTables();
+  const r = await db.query(
+    `select slug, name_en, name_ar, price_jod, category_key, is_active
+       from products
+      where slug = any($1::text[])`,
+    [slugs]
+  );
+  return r.rows || [];
+}
+
+function normalizeItems(items: any): { slug: string; qty: number }[] {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((x: IncomingItem) => ({
+      slug: String(x?.slug || "").trim(),
+      qty: Math.max(1, Math.min(99, Number(x?.qty || 1))),
+    }))
+    .filter((x) => !!x.slug);
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function makeCartId() {
-  return `NIVRAN-${Date.now()}`;
-}
+export async function POST(req: NextRequest) {
+  await ensureOrdersTables();
 
-export async function POST(req: Request) {
-  await ensureCatalogTables();
-  await ensureIdentityTables();
+  const customerId = await getCustomerIdFromRequest(req).catch(() => null);
 
-  const body = await req.json().catch(() => ({}));
+  const body = await req.json().catch(() => null as any);
+  if (!body) return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
 
-  const rawItems = Array.isArray(body?.items) ? body.items : [];
-  const items = rawItems
-    .map((i: any) => ({
-      slug: String(i?.slug || "").trim(),
-      qty: Math.max(1, Number(i?.qty || 1)),
-    }))
-    .filter((i: any) => i.slug);
+  const locale = body.locale === "ar" ? "ar" : "en";
 
-  if (!items.length) {
-    return NextResponse.json({ ok: false, error: "Cart is empty." }, { status: 400 });
-  }
+  const paymentMethod: PaymentMethod =
+    String(body.paymentMethod || body.mode || "").toUpperCase() === "COD" ? "COD" : "PAYTABS";
 
-  const customer = body?.customer || {};
-  const shipping = body?.shipping || {};
-  const createAccount = !!body?.createAccount;
-  const paymentMethod = String(body?.paymentMethod || "PAYTABS"); // PAYTABS | COD
+  const customer = body.customer || {};
+  const shipping = body.shipping || {};
 
-  const fullName = String(customer?.fullName || "").trim();
-  const email = String(customer?.email || "").trim().toLowerCase();
-  const phone = String(customer?.phone || "").trim();
+  const name = String(customer.name || "").trim();
+  const phone = String(customer.phone || "").trim();
+  const email = String(customer.email || "").trim();
+  const city = String(shipping.city || "").trim();
+  const address = String(shipping.address || "").trim();
+  const notes = String(shipping.notes || "").trim();
+  const country = String(shipping.country || "Jordan").trim() || "Jordan";
 
-  const addressLine1 = String(shipping?.addressLine1 || "").trim();
-  const city = String(shipping?.city || "").trim();
-  const country = String(shipping?.country || "").trim() || "Jordan";
-
-  if (!fullName || !email || !phone || !addressLine1) {
+  if (!name || !phone || !address || !email.includes("@")) {
     return NextResponse.json(
-      { ok: false, error: "Missing required fields (name, email, phone, address)." },
+      { ok: false, error: locale === "ar" ? "الاسم والهاتف والعنوان والبريد الإلكتروني مطلوبة" : "Missing required fields" },
       { status: 400 }
     );
   }
 
-  // Compute prices from DB (don’t trust client)
-  const slugs = Array.from(new Set(items.map((i: any) => i.slug)));
-  const pr = await db.query<{ slug: string; name_en: string; name_ar: string; price_jod: string }>(
-    `select slug, name_en, name_ar, price_jod::text as price_jod
-       from products
-      where slug = any($1::text[]) and is_active=true`,
-    [slugs]
-  );
+  // Accept:
+  // - multi-item: body.items[]
+  // - legacy: body.productSlug + body.qty
+  let items = normalizeItems(body.items);
 
-  const bySlug = new Map(pr.rows.map((p) => [p.slug, p]));
-  const normalized = items.map((i: any) => {
-    const p = bySlug.get(i.slug);
-    if (!p) throw new Error(`Unknown product slug: ${i.slug}`);
-    const price = Number(p.price_jod || 0);
-    return {
-      slug: i.slug,
-      name: p.name_en || i.slug,
-      priceJod: price,
-      qty: i.qty,
-      lineTotal: price * i.qty,
-    };
-  });
+  const legacySlug = String(body.productSlug || body.slug || "").trim();
+  const legacyQty = Math.max(1, Math.min(99, Number(body.qty || 1)));
 
-  const subtotal = normalized.reduce((s: number, x: any) => s + x.lineTotal, 0);
-  const shippingJod = 3.5;
-  const amountJod = subtotal + shippingJod;
-
-  // Try to get existing logged-in customer id
-  let customerId = await getCustomerIdFromRequest(req);
-
-  // If not logged in and consent is checked, ONLY auto-create if email is not registered
-  // (Never auto-login an existing email—security)
-  let createdSessionToken: string | null = null;
-
-  if (!customerId && createAccount) {
-    const existing = await getCustomerByEmail(email);
-    if (!existing) {
-      const randomPassword = createSessionToken(); // strong random, user can reset later
-      const created = await createCustomer({
-        email,
-        fullName,
-        password: randomPassword,
-        phone,
-        addressLine1,
-        city,
-        country,
-      });
-      customerId = created.id;
-
-      createdSessionToken = createSessionToken();
-      await createCustomerSession(customerId, createdSessionToken);
-
-      // persist cart server-side
-      await upsertCart(customerId, normalized.map((x: any) => ({
-        slug: x.slug, name: x.name, priceJod: x.priceJod, qty: x.qty
-      })));
-    }
+  if (!items.length && legacySlug) {
+    items = [{ slug: legacySlug, qty: legacyQty }];
   }
 
-  const cartId = makeCartId();
+  if (!items.length) {
+    return NextResponse.json({ ok: false, error: locale === "ar" ? "لا توجد عناصر في السلة." : "No items" }, { status: 400 });
+  }
 
-  // Insert order (your DB likely already has items jsonb; keep this insert consistent with your existing handler)
-  await db.query(
-    `insert into orders
-      (cart_id, status, amount_jod, currency, customer, shipping, payment_method, paytabs_ref, paytabs_status, customer_id)
-     values
-      ($1, $2, $3, 'JOD', $4::jsonb, $5::jsonb, $6, null, null, $7)`,
-    [
-      cartId,
-      paymentMethod === "COD" ? "PENDING" : "PENDING_PAYMENT",
-      amountJod,
-      JSON.stringify({ fullName, email, phone }),
-      JSON.stringify({ addressLine1, city, country, shippingJod }),
-      paymentMethod,
-      customerId,
-    ]
-  );
+  const slugs = Array.from(new Set(items.map((i) => i.slug)));
+  const products = await fetchProductsBySlugs(slugs);
 
-  const res = NextResponse.json({ ok: true, cartId, amountJod });
+  const map = new Map<string, any>();
+  for (const p of products) map.set(String(p.slug), p);
 
-  if (createdSessionToken) {
-    res.cookies.set("nivran_customer_session", createdSessionToken, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: true,
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30,
+  // Build order lines with server pricing
+  const lines: OrderLine[] = [];
+  for (const it of items) {
+    const p = map.get(it.slug);
+    if (!p || !p.is_active) {
+      return NextResponse.json({ ok: false, error: `Unknown or inactive product: ${it.slug}` }, { status: 400 });
+    }
+    const unit = Number(p.price_jod || 0);
+    const qty = it.qty;
+    lines.push({
+      slug: it.slug,
+      name_en: String(p.name_en || it.slug),
+      name_ar: String(p.name_ar || p.name_en || it.slug),
+      qty,
+      unit_price_jod: unit,
+      line_total_jod: Number((unit * qty).toFixed(2)),
+      category_key: p.category_key ? String(p.category_key) : null,
     });
   }
 
-  return res;
+  const subtotalBeforeDiscount = Number(lines.reduce((sum, l) => sum + l.line_total_jod, 0).toFixed(2));
+
+  // (Promo support can be added later; keep it simple now)
+  const discount = 0;
+  const subtotalAfterDiscount = subtotalBeforeDiscount;
+  const shippingJod = lines.length ? 3.5 : 0;
+  const totalJod = Number((subtotalAfterDiscount + shippingJod).toFixed(2));
+
+  const status =
+    paymentMethod === "PAYTABS" ? "PENDING_PAYMENT" : "PENDING_COD_CONFIRM";
+
+  const itemsJson = lines.map((l) => ({
+    slug: l.slug,
+    name_en: l.name_en,
+    name_ar: l.name_ar,
+    qty: l.qty,
+    unit_price_jod: l.unit_price_jod,
+    line_total_jod: l.line_total_jod,
+  }));
+
+  const r = await db.query<{ cart_id: string }>(
+    `
+    insert into orders (
+      locale,
+      status,
+      payment_method,
+      customer_id,
+      customer_name,
+      customer_phone,
+      customer_email,
+      shipping_city,
+      shipping_address,
+      shipping_country,
+      notes,
+      items,
+      subtotal_before_discount_jod,
+      discount_jod,
+      subtotal_after_discount_jod,
+      shipping_jod,
+      total_jod
+    )
+    values (
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
+      $12::jsonb,
+      $13,$14,$15,$16,$17
+    )
+    returning cart_id
+  `,
+    [
+      locale,
+      status,
+      paymentMethod,
+      customerId ? Number(customerId) : null,
+      name,
+      phone,
+      email,
+      city || null,
+      address,
+      country,
+      notes || null,
+      JSON.stringify(itemsJson),
+      subtotalBeforeDiscount,
+      discount,
+      subtotalAfterDiscount,
+      shippingJod,
+      totalJod,
+    ]
+  );
+
+  const cartId = r.rows?.[0]?.cart_id;
+  return NextResponse.json({ ok: true, cartId, status }, { status: 200 });
 }

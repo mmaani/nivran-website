@@ -15,10 +15,6 @@ type CartItem = {
 const CART_KEY = "nivran_cart_v1";
 const SHIPPING_JOD = 3.5;
 
-function waLink(phoneE164: string, msg: string) {
-  return `https://wa.me/${phoneE164}?text=${encodeURIComponent(msg)}`;
-}
-
 function readCart(): CartItem[] {
   try {
     const raw = localStorage.getItem(CART_KEY);
@@ -30,7 +26,7 @@ function readCart(): CartItem[] {
         slug: String(x?.slug || "").trim(),
         name: String(x?.name || "").trim(),
         priceJod: Number(x?.priceJod || 0),
-        qty: Math.max(1, Number(x?.qty || 1)),
+        qty: Math.max(1, Math.min(99, Number(x?.qty || 1))),
       }))
       .filter((x: CartItem) => !!x.slug);
   } catch {
@@ -38,7 +34,14 @@ function readCart(): CartItem[] {
   }
 }
 
-export default function CheckoutPage() {
+function clearCart() {
+  try {
+    localStorage.removeItem(CART_KEY);
+    window.dispatchEvent(new Event("nivran_cart_updated"));
+  } catch {}
+}
+
+export default function CheckoutClient() {
   const p = useParams<{ locale?: string }>();
   const locale: Locale = p?.locale === "ar" ? "ar" : "en";
   const isAr = locale === "ar";
@@ -92,10 +95,7 @@ export default function CheckoutPage() {
   }, [buyNowSlug, locale]);
 
   const totals = useMemo(() => {
-    const subtotal = items.reduce(
-      (sum, i) => sum + Number(i.priceJod || 0) * Number(i.qty || 1),
-      0
-    );
+    const subtotal = items.reduce((sum, i) => sum + Number(i.priceJod || 0) * Number(i.qty || 1), 0);
     const shipping = items.length ? SHIPPING_JOD : 0;
     const total = Number((subtotal + shipping).toFixed(2));
     const qty = items.reduce((sum, i) => sum + Number(i.qty || 1), 0);
@@ -112,9 +112,7 @@ export default function CheckoutPage() {
       required: isAr ? "الاسم والهاتف والعنوان والبريد الإلكتروني مطلوبة" : "Name, phone, address, and email are required",
       payCard: isAr ? "الدفع بالبطاقة" : "Pay by card",
       cod: isAr ? "الدفع عند الاستلام" : "Cash on delivery",
-      confirmWa: isAr ? "تأكيد عبر واتساب" : "Confirm on WhatsApp",
       orderSummary: isAr ? "ملخص الطلب" : "Order summary",
-      product: isAr ? "المنتجات" : "Items",
       subtotal: isAr ? "المجموع الفرعي" : "Subtotal",
       shipping: isAr ? "الشحن" : "Shipping",
       total: isAr ? "الإجمالي" : "Total",
@@ -124,6 +122,7 @@ export default function CheckoutPage() {
       city: isAr ? "المدينة" : "City",
       address: isAr ? "العنوان" : "Address",
       notes: isAr ? "ملاحظات" : "Notes",
+      placed: isAr ? "تم إنشاء الطلب." : "Order created.",
     }),
     [isAr]
   );
@@ -140,16 +139,13 @@ export default function CheckoutPage() {
     return true;
   }
 
-  async function createOrder(mode: "PAYTABS" | "COD") {
+  async function createOrder(paymentMethod: "PAYTABS" | "COD") {
     const payload = {
-      mode,
       locale,
-      // keep qty for backward compatibility with older /api/orders handlers
-      qty: totals.qty,
-      items,
-      totals: { subtotalJod: totals.subtotal, shippingJod: totals.shipping, totalJod: totals.total },
+      paymentMethod,
+      items: items.map((i) => ({ slug: i.slug, qty: i.qty })), // server will re-price
       customer: { name, phone, email },
-      shipping: { city, address, notes },
+      shipping: { city, address, country: "Jordan", notes },
     };
 
     const res = await fetch("/api/orders", {
@@ -191,6 +187,8 @@ export default function CheckoutPage() {
       });
       const data = await res.json();
       if (!res.ok || !data?.ok) throw new Error(data?.error || "PayTabs initiate failed");
+      // Clear cart only once user is leaving to payment (so they don’t pay twice)
+      clearCart();
       window.location.href = data.redirectUrl || data.redirect_url;
     } catch (e: any) {
       setErr(e?.message || "Error");
@@ -206,25 +204,14 @@ export default function CheckoutPage() {
 
     try {
       await createOrder("COD");
+      clearCart();
+      setErr(COPY.placed);
     } catch (e: any) {
       setErr(e?.message || "Error");
     } finally {
       setLoading(false);
     }
   }
-
-  const waNum = (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "").trim();
-  const waLines = items
-    .map((i) => `- ${i.qty}× ${i.name} (${i.slug})`)
-    .join("\n");
-  const waMsg =
-    cartId && items.length
-      ? `NIVRAN COD Confirmation\nCart: ${cartId}\nName: ${name}\nPhone: ${phone}\nAddress: ${address}\nItems:\n${waLines}\nTotal: ${totals.total.toFixed(
-          2
-        )} JOD`
-      : "";
-
-  const showWhatsAppConfirm = status === "PENDING_COD_CONFIRM" && !!waNum && !!cartId;
 
   return (
     <div style={{ padding: "1.2rem 0" }}>
@@ -248,45 +235,14 @@ export default function CheckoutPage() {
       ) : (
         <div className="grid-2">
           <section className="panel" style={{ display: "grid", gap: ".55rem" }}>
-            <input
-              className="input"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={COPY.fullName}
-            />
-            <input
-              className="input"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder={COPY.phone}
-            />
-            <input
-              className="input"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder={COPY.email}
-            />
-            <input
-              className="input"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              placeholder={COPY.city}
-            />
-            <input
-              className="input"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder={COPY.address}
-            />
-            <textarea
-              className="textarea"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={4}
-              placeholder={COPY.notes}
-            />
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={COPY.fullName} />
+            <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={COPY.phone} />
+            <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={COPY.email} />
+            <input className="input" value={city} onChange={(e) => setCity(e.target.value)} placeholder={COPY.city} />
+            <input className="input" value={address} onChange={(e) => setAddress(e.target.value)} placeholder={COPY.address} />
+            <textarea className="textarea" value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} placeholder={COPY.notes} />
 
-            {err && <p style={{ color: "crimson", margin: 0 }}>{err}</p>}
+            {err && <p style={{ color: err === COPY.placed ? "seagreen" : "crimson", margin: 0 }}>{err}</p>}
 
             <div className="cta-row">
               <button className="btn primary" onClick={payByCard} disabled={loading}>
@@ -348,18 +304,6 @@ export default function CheckoutPage() {
               <p style={{ marginBottom: 0, fontFamily: "monospace", marginTop: 12 }}>
                 cart_id: {cartId} {status ? `(${status})` : null}
               </p>
-            ) : null}
-
-            {showWhatsAppConfirm ? (
-              <a
-                className="btn"
-                style={{ marginTop: 12 }}
-                href={waLink(waNum, waMsg)}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {COPY.confirmWa}
-              </a>
             ) : null}
           </aside>
         </div>
