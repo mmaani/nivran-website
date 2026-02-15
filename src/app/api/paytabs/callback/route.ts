@@ -3,95 +3,110 @@ import { db } from "@/lib/db";
 import { ensureOrdersTables } from "@/lib/orders";
 import {
   computePaytabsSignature,
+  getPaytabsEnv,
   mapPaytabsResponseStatusToOrderStatus,
   paymentStatusTransitionAllowedFrom,
   safeEqualHex,
 } from "@/lib/paytabs";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-function parseCallbackBody(raw: string, contentType: string | null) {
-  const type = String(contentType || "").toLowerCase();
+// PayTabs signature header (common patterns vary by integration)
+const SIG_HEADER = "x-paytabs-signature";
 
-  if (type.includes("application/x-www-form-urlencoded")) {
-    const form = new URLSearchParams(raw);
-    return Object.fromEntries(form.entries());
-  }
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    const form = new URLSearchParams(raw);
-    const data = Object.fromEntries(form.entries());
-    return Object.keys(data).length ? data : {};
-  }
-}
-
-function readValue(payload: any, keys: string[]) {
-  for (const key of keys) {
-    const value = payload?.[key];
-    if (value !== undefined && value !== null && String(value).trim() !== "") {
-      return String(value).trim();
-    }
-  }
-  return "";
+async function hasPayloadColumn(): Promise<boolean> {
+  const r = await db.query(
+    "select 1 from information_schema.columns where table_name='paytabs_callbacks' and column_name='payload' limit 1"
+  );
+  return (r.rowCount ?? 0) > 0;
 }
 
 export async function POST(req: Request) {
   await ensureOrdersTables();
-  const serverKey = process.env.PAYTABS_SERVER_KEY || "";
-  if (!serverKey) {
-    return NextResponse.json({ ok: false, error: "Missing PAYTABS_SERVER_KEY" }, { status: 500 });
-  }
+  const { serverKey } = getPaytabsEnv();
 
   const rawBody = await req.text();
-  const signatureHeader =
-    req.headers.get("signature") ||
-    req.headers.get("Signature") ||
-    req.headers.get("SIGNATURE") ||
-    "";
+  const sigHeader = req.headers.get(SIG_HEADER) || "";
 
-  const signatureComputed = computePaytabsSignature(rawBody, serverKey);
-  const signatureValid = safeEqualHex(signatureComputed, signatureHeader);
+  const computed = computePaytabsSignature(rawBody, serverKey);
+  const sigValid = !!sigHeader && safeEqualHex(sigHeader, computed);
 
-  const payload = parseCallbackBody(rawBody, req.headers.get("content-type"));
-  const cartId = readValue(payload, ["cart_id", "cartId", "cart"]);
-  const tranRef = readValue(payload, ["tran_ref", "tranRef", "transaction_reference"]);
-  const responseStatus =
-    readValue(payload?.payment_result || {}, ["response_status", "responseStatus"]) ||
-    readValue(payload, ["response_status", "respStatus", "resp_status"]);
+  let payload: any = null;
+  try {
+    payload = rawBody ? JSON.parse(rawBody) : null;
+  } catch {
+    payload = null;
+  }
+
+  const cartId = String(payload?.cart_id || payload?.cartId || "").trim() || null;
+  const tranRef = String(payload?.tran_ref || "").trim() || null;
+  const respStatus = String(payload?.payment_result?.response_status || "").trim();
+  const respMessage =
+    String(payload?.payment_result?.response_message || payload?.message || "").trim() || null;
+
+  // Always record callback (even invalid signature) for auditability
+  try {
+    const _hasPayload = await hasPayloadColumn();
+    if (_hasPayload) {
+      await db.query(
+        `insert into paytabs_callbacks
+          (cart_id, tran_ref, signature_header, signature_computed, signature_valid, raw_body, payload)
+         values
+          ($1,$2,$3,$4,$5,$6,$7)`,
+        [cartId, tranRef, sigHeader || null, computed, sigValid, rawBody, payload ? JSON.stringify(payload) : null]
+      );
+    } else {
+      await db.query(
+        `insert into paytabs_callbacks
+          (cart_id, tran_ref, signature_header, signature_computed, signature_valid, raw_body)
+         values
+          ($1,$2,$3,$4,$5,$6)`,
+        [cartId, tranRef, sigHeader || null, computed, sigValid, rawBody]
+      );
+    }
+  } catch {
+    // ignore logging errors (should not block callback)
+  }
+
+  if (!sigValid) {
+    return NextResponse.json({ ok: false, error: "Invalid signature" }, { status: 400 });
+  }
+
+  if (!cartId) {
+    return NextResponse.json({ ok: false, error: "Missing cart_id" }, { status: 400 });
+  }
+
+  // Determine next order status
+  const nextStatus = mapPaytabsResponseStatusToOrderStatus(respStatus);
+
+  // Update orders table safely:
+  // - keep tran_ref
+  // - store payload + signature
+  // - update status only if allowed (prevents downgrades after fulfillment)
+  const allowedFrom = paymentStatusTransitionAllowedFrom(nextStatus);
 
   await db.query(
-    `insert into paytabs_callbacks (
-      cart_id, tran_ref, signature_header, signature_computed, signature_valid, raw_body
-    ) values ($1,$2,$3,$4,$5,$6)`,
-    [cartId || null, tranRef || null, signatureHeader, signatureComputed, signatureValid, rawBody]
+    `update orders
+        set paytabs_tran_ref = coalesce(nullif($2,''), paytabs_tran_ref),
+            paytabs_last_payload = $3,
+            paytabs_last_signature = $4,
+            paytabs_response_status = $5,
+            paytabs_response_message = $6,
+            status = case when status = any($7) then $8 else status end,
+            updated_at = now()
+      where cart_id = $1`,
+    [
+      cartId,
+      tranRef || "",
+      rawBody,
+      sigHeader || "",
+      respStatus,
+      respMessage,
+      allowedFrom,
+      nextStatus,
+    ]
   );
 
-  if (!signatureValid) {
-    return NextResponse.json({ ok: false, error: "Invalid signature" }, { status: 401 });
-  }
-
-  let transitioned = false;
-
-  if (cartId) {
-    const nextStatus = mapPaytabsResponseStatusToOrderStatus(responseStatus);
-    const allowedFrom = paymentStatusTransitionAllowedFrom(nextStatus);
-
-    const result = await db.query(
-      `update orders
-          set status=case when status = any($6::text[]) then $2 else status end,
-              paytabs_tran_ref=coalesce(nullif($3,''), paytabs_tran_ref),
-              paytabs_last_payload=$4,
-              paytabs_last_signature=$5,
-              updated_at=now()
-        where cart_id=$1
-        returning status`,
-      [cartId, nextStatus, tranRef, rawBody, signatureHeader, allowedFrom]
-    );
-
-    transitioned = result.rows.length > 0 && result.rows[0].status === nextStatus;
-  }
-
-  return NextResponse.json({ ok: true, signatureValid, cartId, tranRef, transitioned });
+  return NextResponse.json({ ok: true });
 }

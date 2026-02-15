@@ -1,40 +1,152 @@
-import { categoryLabels, products } from "@/lib/siteContent";
+import { db } from "@/lib/db";
+import { ensureCatalogTables } from "@/lib/catalog";
+
+type CategoryRow = {
+  key: string;
+  name_en: string;
+  name_ar: string;
+  is_active: boolean;
+  is_promoted: boolean;
+  sort_order: number;
+};
+
+type ProductRow = {
+  id: number;
+  slug: string;
+  name_en: string;
+  name_ar: string;
+  description_en: string | null;
+  description_ar: string | null;
+  price_jod: string;
+  category_key: string;
+  inventory_qty: number;
+  image_id: number | null;
+};
+
+const FALLBACK_CATS: Record<string, { en: string; ar: string }> = {
+  perfume: { en: "Perfume", ar: "عطر" },
+  "hand-gel": { en: "Hand Gel", ar: "معقم يدين" },
+  cream: { en: "Cream", ar: "كريم" },
+  "air-freshener": { en: "Air Freshener", ar: "معطر جو" },
+  soap: { en: "Soap", ar: "صابون" },
+};
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export default async function ProductCatalogPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale: rawLocale } = await params;
   const locale = rawLocale === "ar" ? "ar" : "en";
   const isAr = locale === "ar";
 
+  await ensureCatalogTables();
+
+  const categoriesRes = await db.query<CategoryRow>(
+    `select key, name_en, name_ar, is_active, is_promoted, sort_order
+       from categories
+      where is_active=true
+      order by sort_order asc, key asc`
+  );
+
+  const productsRes = await db.query<ProductRow>(
+    `select p.id,
+            p.slug,
+            p.name_en,
+            p.name_ar,
+            p.description_en,
+            p.description_ar,
+            p.price_jod::text as price_jod,
+            p.category_key,
+            p.inventory_qty,
+            (
+              select pi.id
+              from product_images pi
+              where pi.product_id=p.id
+              order by pi."position" asc, pi.id asc
+              limit 1
+            ) as image_id
+       from products p
+      where p.is_active=true
+      order by p.created_at desc
+      limit 500`
+  );
+
+  const cats = categoriesRes.rows.length
+    ? categoriesRes.rows.map((c) => ({
+        key: c.key,
+        label: locale === "ar" ? c.name_ar : c.name_en,
+      }))
+    : Object.entries(FALLBACK_CATS).map(([key, v], i) => ({
+        key,
+        label: v[locale],
+        sort: i,
+      }));
+
+  const catLabel = (key: string) => {
+    const found = categoriesRes.rows.find((c) => c.key === key);
+    if (found) return locale === "ar" ? found.name_ar : found.name_en;
+    return (FALLBACK_CATS[key] || { en: key, ar: key })[locale];
+  };
+
   return (
     <div style={{ padding: "1.2rem 0" }}>
       <h1 className="title">{isAr ? "المتجر" : "Shop"}</h1>
       <p className="lead" style={{ marginTop: 0 }}>
         {isAr
-          ? "التركيز الأساسي لنيفـران هو العطور، مع التوسع التدريجي لفئات إضافية."
-          : "NIVRAN is perfume-first, with gradual expansion into additional personal and home care categories."}
+          ? "تصفح منتجات نيفـران عبر فئات متعددة — العطور أولاً ثم التوسع لفئات العناية الشخصية والمنزلية."
+          : "Browse NIVRAN products across multiple categories — perfume-first, with expansion into personal & home care."}
       </p>
 
       <div className="badge-row" style={{ marginBottom: ".8rem" }}>
-        {Object.entries(categoryLabels).map(([key, label]) => (
-          <span key={key} className="badge">{label[locale]}</span>
+        {cats.map((c: any) => (
+          <span key={c.key} className="badge">
+            {c.label}
+          </span>
         ))}
       </div>
 
       <div className="grid-3">
-        {products.map((product) => (
-          <article key={product.slug} className="panel">
-            <p className="muted" style={{ marginTop: 0 }}>
-              {categoryLabels[product.category][locale]} · {product.size}
-            </p>
-            <h3 style={{ margin: "0 0 .35rem" }}>{product.name[locale]}</h3>
-            <p className="muted">{product.subtitle[locale]}</p>
-            <p><strong>{product.priceJod.toFixed(2)} JOD</strong></p>
-            <a className="btn" href={`/${locale}/product/${product.slug}`}>
-              {isAr ? "عرض المنتج" : "View product"}
-            </a>
-          </article>
-        ))}
+        {productsRes.rows.map((p) => {
+          const name = isAr ? p.name_ar : p.name_en;
+          const desc = isAr ? p.description_ar : p.description_en;
+          const price = Number(p.price_jod || 0);
+
+          return (
+            <article key={p.slug} className="panel">
+              <p className="muted" style={{ marginTop: 0 }}>
+                {catLabel(p.category_key)}
+                {p.inventory_qty <= 0 ? (isAr ? " · غير متوفر" : " · Out of stock") : ""}
+              </p>
+
+              {p.image_id ? (
+                <div style={{ width: "100%", aspectRatio: "4 / 3", overflow: "hidden", borderRadius: 14, marginBottom: 10 }}>
+                  <img
+                    src={`/api/catalog/product-image/${p.image_id}`}
+                    alt={name}
+                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                    loading="lazy"
+                  />
+                </div>
+              ) : null}
+
+              <h3 style={{ margin: "0 0 .35rem" }}>{name}</h3>
+              {desc ? <p className="muted">{desc}</p> : null}
+              <p>
+                <strong>{price.toFixed(2)} JOD</strong>
+              </p>
+              <a className="btn" href={`/${locale}/product/${p.slug}`}>
+                {isAr ? "عرض المنتج" : "View product"}
+              </a>
+            </article>
+          );
+        })}
       </div>
+
+      {productsRes.rows.length === 0 ? (
+        <p className="muted" style={{ marginTop: 16 }}>
+          {isAr ? "لا توجد منتجات بعد. أضف المنتجات من لوحة الإدارة." : "No products yet. Add products from Admin."}
+        </p>
+      ) : null}
     </div>
   );
 }

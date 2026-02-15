@@ -1,68 +1,181 @@
 import { notFound } from "next/navigation";
-import { categoryLabels, products } from "@/lib/siteContent";
+import { db } from "@/lib/db";
+import { ensureCatalogTables } from "@/lib/catalog";
 
-export default async function ProductPage({ params }: { params: Promise<{ locale: string; slug: string }> }) {
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+type ProductRow = {
+  id: number;
+  slug: string;
+  name_en: string;
+  name_ar: string;
+  description_en: string | null;
+  description_ar: string | null;
+  price_jod: string;
+  compare_at_price_jod: string | null;
+  inventory_qty: number;
+  category_key: string;
+  is_active: boolean;
+};
+
+type CategoryRow = { key: string; name_en: string; name_ar: string };
+
+export default async function ProductDetailPage({
+  params,
+}: {
+  params: Promise<{ locale: string; slug: string }>;
+}) {
   const { locale: rawLocale, slug } = await params;
   const locale = rawLocale === "ar" ? "ar" : "en";
   const isAr = locale === "ar";
 
-  const product = products.find((item) => item.slug === slug);
-  if (!product) notFound();
+  await ensureCatalogTables();
 
-  const related = products.filter((item) => item.slug !== product.slug && item.category === product.category).slice(0, 2);
+  const pr = await db.query<ProductRow>(
+    `select id, slug, name_en, name_ar, description_en, description_ar,
+            price_jod::text as price_jod,
+            compare_at_price_jod::text as compare_at_price_jod,
+            inventory_qty, category_key, is_active
+       from products
+      where slug=$1
+      limit 1`,
+    [slug]
+  );
+  const product = pr.rows[0];
+  if (!product || !product.is_active) return notFound();
+
+  const cr = await db.query<CategoryRow>(
+    `select key, name_en, name_ar
+       from categories
+      where key=$1
+      limit 1`,
+    [product.category_key]
+  );
+  const cat = cr.rows[0];
+
+  const imgs = await db.query<{ id: number }>(
+    `select id
+       from product_images
+      where product_id=$1
+      order by "position" asc, id asc`,
+    [product.id]
+  );
+
+  const name = isAr ? product.name_ar : product.name_en;
+  const desc = isAr ? product.description_ar : product.description_en;
+  const catLabel = cat ? (isAr ? cat.name_ar : cat.name_en) : product.category_key;
+
+  const price = Number(product.price_jod || 0);
+  const compareAt = product.compare_at_price_jod ? Number(product.compare_at_price_jod) : null;
+  const outOfStock = Number(product.inventory_qty || 0) <= 0;
 
   return (
     <div style={{ padding: "1.2rem 0" }}>
-      <a href={`/${locale}/product`}>{isAr ? "← رجوع للمتجر" : "← Back to shop"}</a>
-      <section className="panel" style={{ marginTop: ".7rem" }}>
-        <p className="muted" style={{ marginTop: 0 }}>{categoryLabels[product.category][locale]} · {product.size}</p>
-        <h1 className="title" style={{ marginTop: 0 }}>{product.name[locale]}</h1>
-        <p>{product.subtitle[locale]}</p>
-        <div className="grid-2">
-          <article className="panel">
-            <h3 style={{ marginTop: 0 }}>{isAr ? "تفاصيل المنتج" : "Product details"}</h3>
-            <p>{product.description[locale]}</p>
-            <p><strong>{product.priceJod.toFixed(2)} JOD</strong> · {product.size}</p>
-            <p style={{ marginBottom: 0 }}>{isAr ? "النوتات" : "Notes"}: {product.notes[locale].join(" • ")}</p>
-          </article>
-          <article className="panel">
-            <h3 style={{ marginTop: 0 }}>{isAr ? "تفاصيل المنتج" : "Product details"}</h3>
-            <p>{product.description[locale]}</p>
-            <p style={{ marginBottom: 4 }}>{isAr ? "النوتات" : "Notes"}: {product.notes[locale].join(" • ")}</p>
-            <p className="muted" style={{ marginTop: 0 }}>{isAr ? "الأحجام" : "Variants"}</p>
-            <ul>
-              {(product.variants || [{ id: `${product.slug}-base`, sizeLabel: product.size, priceJod: product.priceJod }]).map((v) => (
-                <li key={v.id}>{v.sizeLabel} — <strong>{v.priceJod.toFixed(2)} JOD</strong></li>
-              ))}
-            </ul>
-            <p className="muted" style={{ marginBottom: 0 }}>
-              {isAr ? "شحن لجميع مناطق الأردن • رسوم ثابتة 3.5 دينار" : "Nationwide Jordan • Flat 3.5 JOD"}
-            </p>
-            <p style={{ marginTop: 6 }}>
-              <a style={{ textDecoration: "underline" }} href={`/${locale}/returns`}>{isAr ? "سياسة الإرجاع" : "Returns policy"}</a>
-            </p>
-          </article>
-        </div>
-        <div className="cta-row" style={{ marginTop: "1rem" }}>
-          <a className="btn primary" href={`/${locale}/checkout`}>{isAr ? "اشترِ الآن" : "Buy now"}</a>
-          <a className="btn" href={`/${locale}/faq`}>{isAr ? "الأسئلة الشائعة" : "FAQ"}</a>
-        </div>
-      </section>
+      <p className="muted" style={{ marginTop: 0 }}>
+        {catLabel}
+      </p>
 
-      {related.length > 0 && (
-        <section className="section">
-          <h2 className="section-title">{isAr ? "منتجات مشابهة" : "Related products"}</h2>
-          <div className="grid-2">
-            {related.map((item) => (
-              <article key={item.slug} className="panel">
-                <h3 style={{ marginTop: 0 }}>{item.name[locale]}</h3>
-                <p className="muted">{item.subtitle[locale]}</p>
-                <a className="btn" href={`/${locale}/product/${item.slug}`}>{isAr ? "عرض المنتج" : "View product"}</a>
-              </article>
-            ))}
+      <div className="grid-2" style={{ alignItems: "start" }}>
+        <div>
+          {imgs.rows.length ? (
+            <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ width: "100%", aspectRatio: "4 / 3", overflow: "hidden", borderRadius: 16 }}>
+                <img
+                  src={`/api/catalog/product-image/${imgs.rows[0].id}`}
+                  alt={name}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                />
+              </div>
+
+              {imgs.rows.length > 1 ? (
+                <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
+                  {imgs.rows.slice(1, 5).map((img) => (
+                    <a
+                      key={img.id}
+                      href={`/api/catalog/product-image/${img.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ flex: "0 0 auto" }}
+                    >
+                      <img
+                        src={`/api/catalog/product-image/${img.id}`}
+                        alt={name}
+                        style={{
+                          width: 120,
+                          height: 90,
+                          objectFit: "cover",
+                          borderRadius: 12,
+                          border: "1px solid #eee",
+                          display: "block",
+                        }}
+                        loading="lazy"
+                      />
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="panel" style={{ borderRadius: 16 }}>
+              <p className="muted" style={{ margin: 0 }}>
+                {isAr ? "لا توجد صور بعد." : "No images yet."}
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <h1 className="title" style={{ marginTop: 0 }}>
+            {name}
+          </h1>
+
+          <p style={{ marginTop: 0 }}>
+            {compareAt && compareAt > price ? (
+              <>
+                <span style={{ textDecoration: "line-through", opacity: 0.7, marginInlineEnd: 10 }}>
+                  {compareAt.toFixed(2)} JOD
+                </span>
+                <strong>{price.toFixed(2)} JOD</strong>
+              </>
+            ) : (
+              <strong>{price.toFixed(2)} JOD</strong>
+            )}
+          </p>
+
+          {outOfStock ? (
+            <p className="muted">{isAr ? "غير متوفر حالياً." : "Currently out of stock."}</p>
+          ) : null}
+
+          {desc ? <p className="muted">{desc}</p> : null}
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
+            <a className={"btn" + (outOfStock ? " btn-disabled" : "")} href={`/${locale}/checkout?slug=${product.slug}`}>
+              {isAr ? "شراء الآن" : "Buy now"}
+            </a>
+            <a className="btn btn-outline" href={`/${locale}/product`}>
+              {isAr ? "العودة للمتجر" : "Back to shop"}
+            </a>
           </div>
-        </section>
-      )}
+        </div>
+      </div>
+
+      <style jsx global>{`
+        .grid-2 {
+          display: grid;
+          grid-template-columns: 1.1fr 0.9fr;
+          gap: 16px;
+        }
+        @media (max-width: 900px) {
+          .grid-2 {
+            grid-template-columns: 1fr;
+          }
+        }
+        .btn-disabled {
+          pointer-events: none;
+          opacity: 0.6;
+        }
+      `}</style>
     </div>
   );
 }

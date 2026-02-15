@@ -28,6 +28,7 @@ export async function ensureOrdersTables() {
   await db.query(`alter table orders add column if not exists locale text not null default 'en'`);
   await db.query(`alter table orders add column if not exists customer jsonb`);
   await db.query(`alter table orders add column if not exists shipping jsonb`);
+  await db.query(`alter table orders add column if not exists items jsonb`); // MVP line items (single-SKU orders supported)
   await db.query(`alter table orders add column if not exists customer_name text`);
   await db.query(`alter table orders add column if not exists customer_email text`);
   await db.query(`alter table orders add column if not exists payment_method text not null default 'PAYTABS'`);
@@ -38,10 +39,11 @@ export async function ensureOrdersTables() {
   await db.query(`alter table orders add column if not exists paytabs_response_status text`);
   await db.query(`alter table orders add column if not exists paytabs_response_message text`);
 
-  // ✅ missing in your current migration:
+  // timestamps
   await db.query(`alter table orders add column if not exists created_at timestamptz not null default now()`);
   await db.query(`alter table orders add column if not exists updated_at timestamptz not null default now()`);
 
+  await db.query(`alter table paytabs_callbacks add column if not exists payload jsonb`);
   await db.query(`alter table paytabs_callbacks add column if not exists created_at timestamptz not null default now()`);
 
   // 3) Indexes last (so columns definitely exist)

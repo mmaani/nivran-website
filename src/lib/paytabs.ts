@@ -21,20 +21,36 @@ export function safeEqualHex(a: string, b: string): boolean {
   return crypto.timingSafeEqual(aa, bb);
 }
 
+/**
+ * PayTabs callback/query usually exposes a `payment_result.response_status` code.
+ * - "A" is the typical success/authorized code.
+ * For MVP we map:
+ *   A => PAID
+ *   C => CANCELED
+ *   else => FAILED
+ *
+ * Keep the status set aligned with the Admin dashboard counters/options:
+ * PENDING_PAYMENT / PAID / SHIPPED / DELIVERED / CANCELED / FAILED
+ */
 export function mapPaytabsResponseStatusToOrderStatus(respStatus: string): string {
   const s = String(respStatus || "").trim().toUpperCase();
   if (s === "A") return "PAID";
   if (s === "C") return "CANCELED";
-  return "PAYMENT_FAILED";
+  return "FAILED";
 }
 
+/**
+ * Prevent accidental downgrades after fulfillment starts.
+ * (We only allow PayTabs to move an order within the payment phase.)
+ */
 export function paymentStatusTransitionAllowedFrom(nextStatus: string): string[] {
   const next = String(nextStatus || "").toUpperCase();
+
   if (next === "PAID") {
-    return ["PENDING_PAYMENT", "PAYMENT_FAILED", "CANCELED", "PAID"];
+    return ["PENDING_PAYMENT", "FAILED", "CANCELED", "PAID"];
   }
 
-  if (next === "PAYMENT_FAILED" || next === "CANCELED") {
+  if (next === "FAILED" || next === "CANCELED") {
     // Never downgrade once PAID / fulfillment has started.
     return ["PENDING_PAYMENT", next];
   }

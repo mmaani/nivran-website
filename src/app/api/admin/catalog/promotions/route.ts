@@ -17,6 +17,14 @@ function unauthorized(req: Request, status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
 }
 
+function readCategoryKeys(form: FormData): string[] | null {
+  const raw = form.getAll("category_keys").map((v) => String(v || "").trim()).filter(Boolean);
+  // "__ALL__" means apply promo to all categories (store null)
+  if (!raw.length || raw.includes("__ALL__")) return null;
+  // De-dupe
+  return Array.from(new Set(raw));
+}
+
 export async function POST(req: Request) {
   const auth = requireAdmin(req);
   if (!auth.ok) return unauthorized(req, auth.status, auth.error);
@@ -39,14 +47,15 @@ export async function POST(req: Request) {
     const usageLimit = usageLimitRaw ? Number(usageLimitRaw) : null;
 
     const isActive = String(form.get("is_active") || "") === "on";
+    const categoryKeys = readCategoryKeys(form);
 
     if (!code || !titleEn || !titleAr || !Number.isFinite(discountValue) || discountValue <= 0) {
       return NextResponse.redirect(new URL("/admin/catalog?error=invalid-promo", req.url));
     }
 
     await db.query(
-      `insert into promotions (code, title_en, title_ar, discount_type, discount_value, starts_at, ends_at, usage_limit, is_active)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      `insert into promotions (code, title_en, title_ar, discount_type, discount_value, starts_at, ends_at, usage_limit, is_active, category_keys)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        on conflict (code) do update
          set title_en=excluded.title_en,
              title_ar=excluded.title_ar,
@@ -56,8 +65,9 @@ export async function POST(req: Request) {
              ends_at=excluded.ends_at,
              usage_limit=excluded.usage_limit,
              is_active=excluded.is_active,
+             category_keys=excluded.category_keys,
              updated_at=now()`,
-      [code, titleEn, titleAr, discountType, discountValue, startsAt, endsAt, usageLimit, isActive]
+      [code, titleEn, titleAr, discountType, discountValue, startsAt, endsAt, usageLimit, isActive, categoryKeys]
     );
   }
 
