@@ -22,7 +22,7 @@ function readCart(): CartItem[] {
         slug: String(x?.slug || ""),
         name: String(x?.name || ""),
         priceJod: Number(x?.priceJod || 0),
-        qty: Math.max(1, Number(x?.qty || 1)),
+        qty: Math.max(1, Math.min(99, Number(x?.qty || 1))),
       }))
       .filter((x: CartItem) => !!x.slug);
   } catch {
@@ -32,8 +32,24 @@ function readCart(): CartItem[] {
 
 function writeCart(items: CartItem[]) {
   localStorage.setItem(KEY, JSON.stringify(items));
-  // ✅ update header/cart count in same tab
   window.dispatchEvent(new Event("nivran_cart_updated"));
+}
+
+async function trySyncToAccount(items: CartItem[]) {
+  // If not logged in, endpoint returns 401 — we ignore.
+  const r = await fetch("/api/cart/sync", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ items }),
+    cache: "no-store",
+  }).catch(() => null);
+
+  if (!r || !r.ok) return;
+
+  const j = await r.json().catch(() => null);
+  if (j?.ok && Array.isArray(j.items)) {
+    writeCart(j.items);
+  }
 }
 
 export default function AddToCartButton({
@@ -111,7 +127,7 @@ export default function AddToCartButton({
     timerRef.current = setTimeout(() => setStatus(""), 1200);
   }
 
-  function onSetCart() {
+  async function onSetCart() {
     if (disabled) return;
 
     const items = readCart();
@@ -120,7 +136,7 @@ export default function AddToCartButton({
     const nextItem: CartItem = { slug, name, priceJod, qty: clamp(qty) };
 
     if (idx >= 0) {
-      items[idx] = nextItem; // set/replace qty
+      items[idx] = nextItem;
       writeCart(items);
       flash("updated");
     } else {
@@ -128,6 +144,9 @@ export default function AddToCartButton({
       writeCart(items);
       flash("added");
     }
+
+    // ✅ Persist to account if logged in
+    void trySyncToAccount(items);
   }
 
   return (
