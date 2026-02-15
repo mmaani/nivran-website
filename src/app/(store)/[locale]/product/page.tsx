@@ -31,6 +31,12 @@ const FALLBACK_CATS: Record<string, { en: string; ar: string }> = {
   soap: { en: "Soap", ar: "صابون" },
 };
 
+function fallbackFromSlug(slug: string) {
+  const s = String(slug || "").toLowerCase();
+  const family = s.includes("noir") ? "noir" : s.includes("bloom") ? "bloom" : "calm";
+  return `/products/${family}-1.svg`;
+}
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -111,6 +117,10 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
           const desc = isAr ? p.description_ar : p.description_en;
           const price = Number(p.price_jod || 0);
 
+          const imgSrc = p.image_id
+            ? `/api/catalog/product-image/${p.image_id}`
+            : fallbackFromSlug(p.slug);
+
           return (
             <article key={p.slug} className="panel">
               <p className="muted" style={{ marginTop: 0 }}>
@@ -118,16 +128,30 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
                 {p.inventory_qty <= 0 ? (isAr ? " · غير متوفر" : " · Out of stock") : ""}
               </p>
 
-              {p.image_id ? (
-                <div style={{ width: "100%", aspectRatio: "4 / 3", overflow: "hidden", borderRadius: 14, marginBottom: 10 }}>
-                  <img
-                    src={`/api/catalog/product-image/${p.image_id}`}
-                    alt={name}
-                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                    loading="lazy"
-                  />
-                </div>
-              ) : null}
+              <div
+                style={{
+                  width: "100%",
+                  aspectRatio: "4 / 3",
+                  overflow: "hidden",
+                  borderRadius: 14,
+                  marginBottom: 10,
+                  background: "#f7f7f8",
+                  border: "1px solid #eee",
+                }}
+              >
+                <img
+                  src={imgSrc}
+                  alt={name}
+                  style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+                  loading="lazy"
+                  onError={(e) => {
+                    const el = e.currentTarget as HTMLImageElement;
+                    if (el.dataset.fallbackApplied === "1") return;
+                    el.dataset.fallbackApplied = "1";
+                    el.src = fallbackFromSlug(p.slug);
+                  }}
+                />
+              </div>
 
               <h3 style={{ margin: "0 0 .35rem" }}>{name}</h3>
               {desc ? <p className="muted">{desc}</p> : null}

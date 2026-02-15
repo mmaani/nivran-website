@@ -14,3 +14,79 @@
   pointer-events: none;
   opacity: 0.6;
 }
+
+/* === Gallery (carousel) === */
+.gallery {
+  display: grid;
+  gap: 10px;
+}
+
+.mainFrame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #f7f7f8;
+  border: 1px solid #eee;
+}
+
+.mainImg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain; /* ✅ fit inside frame */
+  object-position: center;
+}
+
+.navBtn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  background: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+}
+
+.navBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.navBtnLeft { left: 10px; }
+.navBtnRight { right: 10px; }
+
+.thumbs {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.thumbBtn {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.thumbBtnActive {
+  outline: 2px solid #111827;
+  outline-offset: 2px;
+}
+
+.thumbImg {
+  width: 120px;
+  height: 90px;
+  display: block;
+  object-fit: cover;
+}

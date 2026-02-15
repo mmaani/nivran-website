@@ -1,3 +1,4 @@
+import ProductImageGallery from "./ProductImageGallery";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
@@ -5,6 +6,12 @@ import styles from "./page.module.css";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function fallbackFromSlug(slug: string) {
+  const s = String(slug || "").toLowerCase();
+  const family = s.includes("noir") ? "noir" : s.includes("bloom") ? "bloom" : "calm";
+  return `/products/${family}-1.svg`;
+}
 
 type ProductRow = {
   id: number;
@@ -43,6 +50,7 @@ export default async function ProductDetailPage({
       limit 1`,
     [slug]
   );
+
   const product = pr.rows[0];
   if (!product || !product.is_active) return notFound();
 
@@ -71,6 +79,9 @@ export default async function ProductDetailPage({
   const compareAt = product.compare_at_price_jod ? Number(product.compare_at_price_jod) : null;
   const outOfStock = Number(product.inventory_qty || 0) <= 0;
 
+  const imageUrls = imgs.rows.map((img) => `/api/catalog/product-image/${img.id}`);
+  const fallbackSrc = fallbackFromSlug(product.slug);
+
   return (
     <div style={{ padding: "1.2rem 0" }}>
       <p className="muted" style={{ marginTop: 0 }}>
@@ -79,51 +90,7 @@ export default async function ProductDetailPage({
 
       <div className={styles.grid2} style={{ alignItems: "start" }}>
         <div>
-          {imgs.rows.length ? (
-            <div style={{ display: "grid", gap: 10 }}>
-              <div style={{ width: "100%", aspectRatio: "4 / 3", overflow: "hidden", borderRadius: 16 }}>
-                <img
-                  src={`/api/catalog/product-image/${imgs.rows[0].id}`}
-                  alt={name}
-                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                />
-              </div>
-
-              {imgs.rows.length > 1 ? (
-                <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
-                  {imgs.rows.slice(1, 5).map((img) => (
-                    <a
-                      key={img.id}
-                      href={`/api/catalog/product-image/${img.id}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ flex: "0 0 auto" }}
-                    >
-                      <img
-                        src={`/api/catalog/product-image/${img.id}`}
-                        alt={name}
-                        style={{
-                          width: 120,
-                          height: 90,
-                          objectFit: "cover",
-                          borderRadius: 12,
-                          border: "1px solid #eee",
-                          display: "block",
-                        }}
-                        loading="lazy"
-                      />
-                    </a>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="panel" style={{ borderRadius: 16 }}>
-              <p className="muted" style={{ margin: 0 }}>
-                {isAr ? "لا توجد صور بعد." : "No images yet."}
-              </p>
-            </div>
-          )}
+          <ProductImageGallery name={name} images={imageUrls} fallbackSrc={fallbackSrc} />
         </div>
 
         <div>
@@ -160,6 +127,6 @@ export default async function ProductDetailPage({
           </div>
         </div>
       </div>
-</div>
+    </div>
   );
 }

@@ -6,41 +6,42 @@ import { requireAdmin } from "@/lib/guards";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function unauthorized(req: Request, status: number, error: string) {
+function redirect303(req: Request, path: string) {
+  return NextResponse.redirect(new URL(path, req.url), 303);
+}
+
+function unauthorized(req: Request) {
   const accept = req.headers.get("accept") || "";
   const isBrowser = accept.includes("text/html");
   if (isBrowser) {
     const next = "/admin/catalog";
-    return NextResponse.redirect(new URL(`/admin/login?next=${encodeURIComponent(next)}`, req.url));
+    return redirect303(req, `/admin/login?next=${encodeURIComponent(next)}`);
   }
-  return NextResponse.json({ ok: false, error }, { status });
+  return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
 }
 
 export async function POST(req: Request) {
   const auth = requireAdmin(req);
-  if (!auth.ok) return unauthorized(req, auth.status, auth.error);
+  if (!auth.ok) return unauthorized(req);
 
   await ensureCatalogTables();
 
   const form = await req.formData();
   const productId = Number(form.get("product_id") || 0);
-  if (!productId) {
-    return NextResponse.redirect(new URL("/admin/catalog?error=missing-product", req.url));
-  }
+  if (!productId) return redirect303(req, "/admin/catalog?error=missing-product");
 
-  // Files come as `File` objects.
-  const files = form.getAll("images").filter(Boolean) as unknown as File[];
-  const selected = files.slice(0, 5); // enforce max 5
+  const files = (form.getAll("images") || []).filter(Boolean) as unknown as File[];
+  const selected = files.slice(0, 5);
 
-  // Replace behavior (simple + predictable)
+  // Replace images
   await db.query(`delete from product_images where product_id=$1`, [productId]);
 
   for (let i = 0; i < selected.length; i++) {
-    const f = selected[i];
-    const contentType = String((f as any)?.type || "application/octet-stream");
-    const filename = String((f as any)?.name || `image-${i + 1}`);
+    const f: any = selected[i];
+    const contentType = String(f?.type || "application/octet-stream");
+    const filename = String(f?.name || `image-${i + 1}`);
 
-    const ab = await (f as any).arrayBuffer();
+    const ab = await f.arrayBuffer();
     const buf = Buffer.from(ab);
 
     await db.query(
@@ -50,5 +51,6 @@ export async function POST(req: Request) {
     );
   }
 
-  return NextResponse.redirect(new URL("/admin/catalog?uploaded=1", req.url));
+  // ✅ 303 ensures browser follows with GET, not POST (prevents "Server action not found")
+  return redirect303(req, "/admin/catalog?uploaded=1");
 }
