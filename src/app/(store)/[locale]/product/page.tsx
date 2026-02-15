@@ -1,3 +1,4 @@
+import SafeImg from "@/components/SafeImg";
 import { db } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
 
@@ -17,7 +18,7 @@ type ProductRow = {
   name_ar: string;
   description_en: string | null;
   description_ar: string | null;
-  price_jod: string | null;
+  price_jod: string;
   category_key: string;
   inventory_qty: number;
   image_id: number | null;
@@ -40,7 +41,13 @@ function fallbackFromSlug(slug: string) {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function loadCatalog() {
+export default async function ProductCatalogPage({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale: rawLocale } = await params;
+  const locale = rawLocale === "ar" ? "ar" : "en";
+  const isAr = locale === "ar";
+
+  await ensureCatalogTables();
+
   const categoriesRes = await db.query<CategoryRow>(
     `select key, name_en, name_ar, is_active, is_promoted, sort_order
        from categories
@@ -71,62 +78,22 @@ async function loadCatalog() {
       limit 500`
   );
 
-  return { categoriesRes, productsRes };
-}
-
-export default async function ProductCatalogPage({ params }: { params: Promise<{ locale: string }> }) {
-  const { locale: rawLocale } = await params;
-  const locale = rawLocale === "ar" ? "ar" : "en";
-  const isAr = locale === "ar";
-
-  let categoriesRes: any;
-  let productsRes: any;
-
-  try {
-    ({ categoriesRes, productsRes } = await loadCatalog());
-  } catch (e1: any) {
-    console.error("[/en/product] loadCatalog failed (first try):", e1);
-
-    // Retry once after ensuring tables (avoids DDL on every request)
-    try {
-      await ensureCatalogTables();
-      ({ categoriesRes, productsRes } = await loadCatalog());
-    } catch (e2: any) {
-      console.error("[/en/product] loadCatalog failed (after ensureCatalogTables):", e2);
-
-      // Do not crash the whole site — show a safe fallback
-      return (
-        <div style={{ padding: "1.2rem 0" }}>
-          <h1 className="title">{isAr ? "المتجر" : "Shop"}</h1>
-          <p className="muted" style={{ marginTop: 0 }}>
-            {isAr
-              ? "حدث خطأ مؤقت أثناء تحميل المنتجات. تحقق من سجلات الخادم في Vercel."
-              : "A temporary server error occurred while loading products. Check Vercel server logs."}
-          </p>
-        </div>
-      );
-    }
-  }
-
-  const cats =
-    categoriesRes?.rows?.length
-      ? categoriesRes.rows.map((c: any) => ({
-          key: c.key,
-          label: locale === "ar" ? c.name_ar : c.name_en,
-        }))
-      : Object.entries(FALLBACK_CATS).map(([key, v], i) => ({
-          key,
-          label: (v as any)[locale],
-          sort: i,
-        }));
+  const cats = categoriesRes.rows.length
+    ? categoriesRes.rows.map((c) => ({
+        key: c.key,
+        label: locale === "ar" ? c.name_ar : c.name_en,
+      }))
+    : Object.entries(FALLBACK_CATS).map(([key, v], i) => ({
+        key,
+        label: (v as any)[locale],
+        sort: i,
+      }));
 
   const catLabel = (key: string) => {
-    const found = (categoriesRes?.rows || []).find((c: any) => c.key === key);
+    const found = categoriesRes.rows.find((c) => c.key === key);
     if (found) return locale === "ar" ? found.name_ar : found.name_en;
     return (FALLBACK_CATS[key] || { en: key, ar: key })[locale];
   };
-
-  const rows: ProductRow[] = (productsRes?.rows || []) as any;
 
   return (
     <div style={{ padding: "1.2rem 0" }}>
@@ -146,12 +113,14 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
       </div>
 
       <div className="grid-3">
-        {rows.map((p) => {
+        {productsRes.rows.map((p) => {
           const name = isAr ? p.name_ar : p.name_en;
           const desc = isAr ? p.description_ar : p.description_en;
-          const price = Number((p.price_jod as any) || 0);
+          const price = Number(p.price_jod || 0);
 
-          const imgSrc = p.image_id ? `/api/catalog/product-image/${p.image_id}` : fallbackFromSlug(p.slug);
+          const apiSrc = p.image_id ? `/api/catalog/product-image/${p.image_id}` : "";
+          const fallbackSrc = fallbackFromSlug(p.slug);
+          const imgSrc = apiSrc || fallbackSrc;
 
           return (
             <article key={p.slug} className="panel">
@@ -171,17 +140,12 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
                   border: "1px solid #eee",
                 }}
               >
-                <img
+                <SafeImg
                   src={imgSrc}
+                  fallbackSrc={fallbackSrc}
                   alt={name}
                   style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
                   loading="lazy"
-                  onError={(e) => {
-                    const el = e.currentTarget as HTMLImageElement;
-                    if (el.dataset.fallbackApplied === "1") return;
-                    el.dataset.fallbackApplied = "1";
-                    el.src = fallbackFromSlug(p.slug);
-                  }}
                 />
               </div>
 
@@ -198,7 +162,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
         })}
       </div>
 
-      {rows.length === 0 ? (
+      {productsRes.rows.length === 0 ? (
         <p className="muted" style={{ marginTop: 16 }}>
           {isAr ? "لا توجد منتجات بعد. أضف المنتجات من لوحة الإدارة." : "No products yet. Add products from Admin."}
         </p>
