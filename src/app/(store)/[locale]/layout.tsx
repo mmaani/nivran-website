@@ -15,7 +15,7 @@ export default async function StoreLocaleLayout({ children, params }: { children
 
   return (
     <div lang={locale} dir={isAr ? "rtl" : "ltr"}>
-      <header className="site-header" style={ position: "relative" }>
+      <header className="site-header" style={{ position: "relative" }}>
         <div className="shell topbar">
           <a className="brand" href={href("")} style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
             <Image src="/brand/logo.svg" alt="NIVRAN" width={44} height={44} style={{ borderRadius: "50%", border: "1px solid rgba(200,163,100,.6)" }} />
