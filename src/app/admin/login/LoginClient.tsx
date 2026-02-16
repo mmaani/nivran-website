@@ -3,14 +3,9 @@
 import React, { useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { readErrorMessage } from "@/lib/http-client";
+import { adminFetch, getStoredAdminToken, persistAdminToken, readAdminLangCookie } from "@/app/admin/_components/adminClient";
 
 type Lang = "en" | "ar";
-
-function getCookie(name: string) {
-  if (typeof document === "undefined") return "";
-  const m = document.cookie.match(new RegExp(`(?:^|; )${name.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&")}=([^;]*)`));
-  return m ? decodeURIComponent(m[1]) : "";
-}
 
 function useAdminLang(): [Lang, (next: Lang) => Promise<void>] {
   const [lang, setLang] = useState<Lang>("en");
@@ -18,8 +13,7 @@ function useAdminLang(): [Lang, (next: Lang) => Promise<void>] {
   const router = useRouter();
 
   React.useEffect(() => {
-    const v = getCookie("admin_lang");
-    setLang(v === "ar" ? "ar" : "en");
+    setLang(readAdminLangCookie());
   }, []);
 
   async function updateLang(next: Lang) {
@@ -53,7 +47,7 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
           hide: "إخفاء",
           signingIn: "جارٍ تسجيل الدخول…",
           signIn: "دخول",
-          help: "تأكد من مطابقة ADMIN_TOKEN في البيئة وعدم وجود مسافات إضافية.",
+          help: "تأكد من مطابقة ADMIN_TOKEN في البيئة وعدم وجود مسافات إضافية. ستبقى الجلسة فعالة بين صفحات الإدارة في هذا المتصفح.",
           errorPrefix: "خطأ: ",
           redirecting: "سيتم توجيهك إلى:",
           switchLang: "التبديل إلى الإنجليزية",
@@ -69,7 +63,7 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
           hide: "Hide",
           signingIn: "Signing in…",
           signIn: "Sign in",
-          help: "Make sure ADMIN_TOKEN matches your environment value with no extra spaces.",
+          help: "Make sure ADMIN_TOKEN matches your environment value with no extra spaces. Your session stays active across admin sections on this browser.",
           errorPrefix: "Error: ",
           redirecting: "You'll be redirected to:",
           switchLang: "Switch to Arabic",
@@ -79,6 +73,11 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
   const [reveal, setReveal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+
+  React.useEffect(() => {
+    const saved = getStoredAdminToken();
+    if (saved) setToken(saved);
+  }, []);
 
   const safeNext = useMemo(() => {
     if (!nextPath || typeof nextPath !== "string") return "/admin";
@@ -92,7 +91,7 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
     setErr("");
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/login", {
+      const res = await adminFetch("/api/admin/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ token }),
@@ -107,6 +106,7 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
         throw new Error(lang === "ar" ? "فشل تسجيل الدخول" : "Login failed");
       }
 
+      persistAdminToken(token);
       router.replace(safeNext);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e || "");

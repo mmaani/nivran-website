@@ -1,22 +1,12 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { adminFetch, readAdminLangCookie, type AdminLang } from "@/app/admin/_components/adminClient";
 
-type Lang = "en" | "ar";
-
-function getCookie(name: string) {
-  if (typeof document === "undefined") return "";
-  const m = document.cookie.match(
-    new RegExp(`(?:^|; )${name.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&")}=([^;]*)`)
-  );
-  return m ? decodeURIComponent(m[1]) : "";
-}
-
-function useAdminLang(): Lang {
-  const [lang, setLang] = useState<Lang>("en");
+function useAdminLang(): AdminLang {
+  const [lang, setLang] = useState<AdminLang>("en");
   React.useEffect(() => {
-    const v = getCookie("admin_lang");
-    setLang(v === "ar" ? "ar" : "en");
+    setLang(readAdminLangCookie());
   }, []);
   return lang;
 }
@@ -165,7 +155,7 @@ export default function InboxClient() {
     setErr(null);
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/inbox?limit=${encodeURIComponent(String(limit))}`, {
+      const res = await adminFetch(`/api/admin/inbox?limit=${encodeURIComponent(String(limit))}`, {
         method: "GET",
         cache: "no-store",
         credentials: "include",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { adminFetch } from "@/app/admin/_components/adminClient";
 
 type JsonRecord = Record<string, unknown>;
 function isRecord(v: unknown): v is JsonRecord {
@@ -112,7 +113,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
     setBusyId(id);
 
     try {
-      const res = await fetch("/api/admin/order-status", {
+      const res = await adminFetch("/api/admin/order-status", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id, status: nextStatus }),
