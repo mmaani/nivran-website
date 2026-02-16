@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { hasColumn } from "@/lib/dbSchema";
 import { ensureIdentityTables } from "@/lib/identity";
+import { getAdminLang } from "@/lib/admin-lang";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ type Row = {
 
 export default async function AdminCustomersPage() {
   await ensureIdentityTables();
+  const lang = await getAdminLang();
   const hasTotalJod = await hasColumn("orders", "total_jod");
   const hasFullName = await hasColumn("customers", "full_name");
   const hasAddressLine1 = await hasColumn("customers", "address_line1");
@@ -57,39 +59,70 @@ export default async function AdminCustomersPage() {
     `
   );
 
-  return (
-    <div>
-      <h1 className="admin-title">Customers</h1>
-      <p className="muted">Shows customer contact/location + purchase history summary.</p>
+  const L =
+    lang === "ar"
+      ? {
+          title: "العملاء",
+          sub: "عرض بيانات العملاء وملخص المشتريات.",
+          thId: "المعرّف",
+          thEmail: "البريد",
+          thName: "الاسم",
+          thPhone: "الهاتف",
+          thAddress: "العنوان",
+          thOrders: "الطلبات",
+          thTotal: "إجمالي الإنفاق",
+          thLast: "آخر طلب",
+          thCreated: "تاريخ الإنشاء",
+          na: "—",
+        }
+      : {
+          title: "Customers",
+          sub: "Shows customer contact/location + purchase history summary.",
+          thId: "ID",
+          thEmail: "Email",
+          thName: "Name",
+          thPhone: "Phone",
+          thAddress: "Address",
+          thOrders: "Orders",
+          thTotal: "Total Spent",
+          thLast: "Last Order",
+          thCreated: "Created",
+          na: "—",
+        };
 
-      <div style={{ overflowX: "auto" }}>
+  return (
+    <div className="admin-grid">
+      <div>
+        <h1 className="admin-h1">{L.title}</h1>
+        <p className="admin-muted">{L.sub}</p>
+      </div>
+
+      <div className="admin-table-wrap">
         <table className="admin-table">
           <thead>
             <tr>
-              <th>ID</th>
-              <th>Email</th>
-              <th>Name</th>
-              <th>Phone</th>
-              <th>Address</th>
-              <th>Orders</th>
-              <th>Total Spent</th>
-              <th>Last Order</th>
-              <th>Created</th>
+              <th>{L.thId}</th>
+              <th>{L.thEmail}</th>
+              <th>{L.thName}</th>
+              <th>{L.thPhone}</th>
+              <th>{L.thAddress}</th>
+              <th>{L.thOrders}</th>
+              <th>{L.thTotal}</th>
+              <th>{L.thLast}</th>
+              <th>{L.thCreated}</th>
             </tr>
           </thead>
           <tbody>
             {r.rows.map((x) => (
               <tr key={x.id}>
-                <td>{x.id}</td>
-                <td>{x.email}</td>
-                <td>{x.full_name || "—"}</td>
-                <td>{x.phone || "—"}</td>
-                <td>
-                  {[x.address_line1, x.city, x.country].filter(Boolean).join(", ") || "—"}
-                </td>
-                <td>{x.orders_count}</td>
-                <td>{Number(x.total_spent || 0).toFixed(2)} JOD</td>
-                <td>{x.last_order_at ? new Date(x.last_order_at).toLocaleString() : "—"}</td>
+                <td className="ltr">{x.id}</td>
+                <td className="ltr">{x.email}</td>
+                <td>{x.full_name || L.na}</td>
+                <td className="ltr">{x.phone || L.na}</td>
+                <td>{[x.address_line1, x.city, x.country].filter(Boolean).join(", ") || L.na}</td>
+                <td className="ltr">{x.orders_count}</td>
+                <td className="ltr">{Number(x.total_spent || 0).toFixed(2)} JOD</td>
+                <td>{x.last_order_at ? new Date(x.last_order_at).toLocaleString() : L.na}</td>
                 <td>{new Date(x.created_at).toLocaleDateString()}</td>
               </tr>
             ))}
