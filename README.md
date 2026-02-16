@@ -116,3 +116,47 @@ select received_at, cart_id, tran_ref, signature_valid
 from paytabs_callbacks
 where cart_id = '<cart-id>'
 order by received_at desc;
+```
+
+## Full updated package (what to check in Diff)
+
+If you want to validate the end-to-end work quickly, these are the key areas/files usually touched:
+
+- **Storefront checkout & account**: `src/app/(store)/[locale]/checkout/*`, `src/app/(store)/[locale]/account/*`
+- **PayTabs APIs**: `src/app/api/paytabs/initiate/route.ts`, `src/app/api/paytabs/callback/route.ts`, `src/app/api/paytabs/query/route.ts`
+- **Orders and status rules**: `src/app/api/orders/route.ts`, `src/lib/paytabs.ts`, `src/lib/orders.ts`
+- **Admin order visibility**: `src/app/admin/orders/*`, `src/app/api/admin/orders/route.ts`, `src/app/api/admin/order-status/route.ts`
+- **Admin auth/session**: `src/app/api/admin/login/route.ts`, `src/app/api/admin/logout/route.ts`, `src/lib/guards.ts`, `src/middleware.ts`
+
+## Payment UAT pass (real sandbox journey)
+
+Use this script to run one full pass and produce a concrete `cartId` for auditing:
+
+```bash
+BASE_URL=https://<preview-domain> \
+LOCALE=en \
+ADMIN_TOKEN=<admin-token> \
+./scripts/paytabs-uat.sh
+```
+
+What the script covers:
+1. Create order with `mode=PAYTABS`.
+2. Initiate payment and return the hosted `redirectUrl`.
+3. Continue after callback stage (manual real callback, or automated simulation).
+4. Reconcile via `GET /api/paytabs/query`.
+5. Confirm order status from admin API (`/api/admin/orders`) when `ADMIN_TOKEN` is supplied.
+
+### Optional callback simulation (for controlled verification)
+
+When PayTabs callback delivery is delayed, you can still verify server transition logic end-to-end by posting a correctly signed callback:
+
+```bash
+BASE_URL=http://127.0.0.1:3000 \
+ADMIN_TOKEN=$ADMIN_TOKEN \
+PAYTABS_SERVER_KEY=$PAYTABS_SERVER_KEY \
+SIMULATE_CALLBACK=1 \
+./scripts/paytabs-uat.sh
+```
+
+This uses HMAC SHA-256 with header `x-paytabs-signature`, exactly like the server callback validator.
+
