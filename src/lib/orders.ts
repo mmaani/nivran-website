@@ -71,11 +71,16 @@ export async function ensureOrdersTables() {
   await db.query(`alter table paytabs_callbacks add column if not exists payload jsonb`);
   await db.query(`alter table paytabs_callbacks add column if not exists created_at timestamptz not null default now()`);
 
+  await db.query(`alter table paytabs_callbacks add column if not exists received_at timestamptz not null default now()`);
+
   // 3) Indexes last (so columns definitely exist)
   await db.query(`create index if not exists idx_orders_cart_id on orders(cart_id)`);
   await db.query(`create index if not exists idx_orders_status on orders(status)`);
   await db.query(`create index if not exists idx_orders_created_at on orders(created_at desc)`);
+  await db.query(`create index if not exists idx_orders_paytabs_tran_ref on orders(paytabs_tran_ref)`);
 
   await db.query(`create index if not exists idx_paytabs_callbacks_cart_id on paytabs_callbacks(cart_id)`);
+  await db.query(`create index if not exists idx_paytabs_callbacks_tran_ref on paytabs_callbacks(tran_ref)`);
   await db.query(`create index if not exists idx_paytabs_callbacks_created_at on paytabs_callbacks(created_at desc)`);
+  await db.query(`create index if not exists idx_paytabs_callbacks_received_at on paytabs_callbacks(received_at desc)`);
 }

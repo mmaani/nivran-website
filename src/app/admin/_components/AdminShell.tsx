@@ -1,10 +1,8 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-
-const STORAGE_KEY = "nivran_admin_lang";
+import { usePathname, useRouter } from "next/navigation";
 
 function T({ en, ar }: { en: string; ar: string }) {
   return (
@@ -17,22 +15,17 @@ function T({ en, ar }: { en: string; ar: string }) {
 
 export default function AdminShell({
   authed,
+  initialLang,
   children,
 }: {
   authed: boolean;
+  initialLang: "en" | "ar";
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const [lang, setLang] = useState<"en" | "ar">("en");
-
-  useEffect(() => {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (saved === "ar") setLang("ar");
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, lang);
-  }, [lang]);
+  const router = useRouter();
+  const [lang, setLang] = useState<"en" | "ar">(initialLang);
+  const [savingLang, setSavingLang] = useState(false);
 
   const nav = useMemo(
     () => [
@@ -46,7 +39,24 @@ export default function AdminShell({
     []
   );
 
-  const toggleLang = () => setLang((v) => (v === "en" ? "ar" : "en"));
+  async function toggleLang() {
+    if (savingLang) return;
+    const next = lang === "en" ? "ar" : "en";
+    setLang(next);
+    setSavingLang(true);
+
+    try {
+      await fetch("/api/admin/lang", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ lang: next, next: pathname }),
+      });
+      router.refresh();
+    } finally {
+      setSavingLang(false);
+    }
+  }
 
   return (
     <div className="admin-shell" data-lang={lang} dir={lang === "ar" ? "rtl" : "ltr"} lang={lang}>
@@ -87,6 +97,7 @@ export default function AdminShell({
               className="btn"
               onClick={toggleLang}
               title={lang === "en" ? "Switch to Arabic" : "التبديل إلى الإنجليزية"}
+              disabled={savingLang}
             >
               {lang === "en" ? "AR" : "EN"}
             </button>
@@ -110,9 +121,15 @@ export default function AdminShell({
         <div className="admin-footer-inner">
           <div className="admin-footer-brand">NIVRAN Admin</div>
           <div className="admin-footer-links">
-            <Link href="/admin">Dashboard</Link>
-            <Link href="/admin/orders">Orders</Link>
-            <Link href="/admin/inbox">Inbox</Link>
+            <Link href="/admin">
+              <T en="Dashboard" ar="لوحة المعلومات" />
+            </Link>
+            <Link href="/admin/orders">
+              <T en="Orders" ar="الطلبات" />
+            </Link>
+            <Link href="/admin/inbox">
+              <T en="Inbox" ar="الوارد" />
+            </Link>
           </div>
         </div>
       </footer>

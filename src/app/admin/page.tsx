@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { ensureOrdersTables } from "@/lib/orders";
+import { ensureInboxTables } from "@/lib/inbox";
+import { getAdminLang } from "@/lib/admin-lang";
 import RequireAdmin from "./_components/RequireAdmin";
 
 type CountRow = { count: string };
@@ -23,47 +25,21 @@ function toNum(v: string | null | undefined): number {
 }
 
 async function getStats(): Promise<DashboardStats> {
-  await ensureOrdersTables();
+  await Promise.all([ensureOrdersTables(), ensureInboxTables()]);
 
-  await db.query(`
-    create table if not exists contact_submissions (
-      id bigserial primary key,
-      name text not null,
-      email text not null,
-      phone text,
-      message text not null,
-      locale text not null default 'en',
-      created_at timestamptz not null default now()
-    );
-    create table if not exists newsletter_subscribers (
-      id bigserial primary key,
-      email text not null unique,
-      locale text not null default 'en',
-      created_at timestamptz not null default now()
-    );
-  `);
-
-  const [
-    totalOrders,
-    paidOrders,
-    pendingPayment,
-    failedOrCanceled,
-    subscribers,
-    messages,
-    callbacks,
-    revenue,
-  ] = await Promise.all([
-    db.query<CountRow>(`select count(*)::text as count from orders`),
-    db.query<CountRow>(`select count(*)::text as count from orders where status='PAID'`),
-    db.query<CountRow>(`select count(*)::text as count from orders where status='PENDING_PAYMENT'`),
-    db.query<CountRow>(`select count(*)::text as count from orders where status in ('FAILED','CANCELED')`),
-    db.query<CountRow>(`select count(*)::text as count from newsletter_subscribers`),
-    db.query<CountRow>(`select count(*)::text as count from contact_submissions`),
-    db.query<CountRow>(`select count(*)::text as count from paytabs_callbacks`),
-    db.query<RevenueRow>(
-      `select coalesce(sum(coalesce(total_jod, amount::numeric)),0)::text as total from orders where status in ('PAID','PAID_COD')`
-    ),
-  ]);
+  const [totalOrders, paidOrders, pendingPayment, failedOrCanceled, subscribers, messages, callbacks, revenue] =
+    await Promise.all([
+      db.query<CountRow>(`select count(*)::text as count from orders`),
+      db.query<CountRow>(`select count(*)::text as count from orders where status='PAID'`),
+      db.query<CountRow>(`select count(*)::text as count from orders where status='PENDING_PAYMENT'`),
+      db.query<CountRow>(`select count(*)::text as count from orders where status in ('FAILED','CANCELED')`),
+      db.query<CountRow>(`select count(*)::text as count from newsletter_subscribers`),
+      db.query<CountRow>(`select count(*)::text as count from contact_submissions`),
+      db.query<CountRow>(`select count(*)::text as count from paytabs_callbacks`),
+      db.query<RevenueRow>(
+        `select coalesce(sum(coalesce(total_jod, amount::numeric)),0)::text as total from orders where status in ('PAID','PAID_COD')`
+      ),
+    ]);
 
   return {
     totalOrders: toNum(totalOrders.rows[0]?.count),
@@ -78,17 +54,18 @@ async function getStats(): Promise<DashboardStats> {
 }
 
 export default async function AdminDashboardPage() {
-  const s = await getStats();
+  const [s, lang] = await Promise.all([getStats(), getAdminLang()]);
+  const ar = lang === "ar";
 
   const cards = [
-    { label: "Total orders", value: s.totalOrders, hint: "All-time", tone: "indigo" },
-    { label: "Revenue", value: `${s.revenueJod.toFixed(2)} JOD`, hint: "Paid + COD paid", tone: "gold" },
-    { label: "Paid orders", value: s.paidOrders, hint: "Confirmed payments", tone: "green" },
-    { label: "Pending payment", value: s.pendingPayment, hint: "Need callback/reconcile", tone: "amber" },
-    { label: "Failed / canceled", value: s.failedOrCanceled, hint: "Needs follow-up", tone: "rose" },
-    { label: "Subscribers", value: s.subscribers, hint: "Newsletter list", tone: "indigo" },
-    { label: "Messages", value: s.messages, hint: "Contact submissions", tone: "green" },
-    { label: "PayTabs callbacks", value: s.callbacks, hint: "Gateway events", tone: "amber" },
+    { label: ar ? "إجمالي الطلبات" : "Total orders", value: s.totalOrders, hint: ar ? "منذ البداية" : "All-time", tone: "indigo" },
+    { label: ar ? "الإيراد" : "Revenue", value: `${s.revenueJod.toFixed(2)} JOD`, hint: ar ? "مدفوع + COD" : "Paid + COD paid", tone: "gold" },
+    { label: ar ? "طلبات مدفوعة" : "Paid orders", value: s.paidOrders, hint: ar ? "مدفوعات مؤكدة" : "Confirmed payments", tone: "green" },
+    { label: ar ? "بانتظار الدفع" : "Pending payment", value: s.pendingPayment, hint: ar ? "تحتاج متابعة" : "Need callback/reconcile", tone: "amber" },
+    { label: ar ? "فشل / إلغاء" : "Failed / canceled", value: s.failedOrCanceled, hint: ar ? "تحتاج متابعة" : "Needs follow-up", tone: "rose" },
+    { label: ar ? "المشتركون" : "Subscribers", value: s.subscribers, hint: ar ? "قائمة النشرة" : "Newsletter list", tone: "indigo" },
+    { label: ar ? "الرسائل" : "Messages", value: s.messages, hint: ar ? "رسائل التواصل" : "Contact submissions", tone: "green" },
+    { label: ar ? "إشعارات PayTabs" : "PayTabs callbacks", value: s.callbacks, hint: ar ? "أحداث البوابة" : "Gateway events", tone: "amber" },
   ] as const;
 
   return (
@@ -96,21 +73,23 @@ export default async function AdminDashboardPage() {
       <section className="admin-page">
         <div className="admin-dashboard-hero admin-card">
           <div>
-            <p className="admin-kicker">NIVRAN OPERATIONS</p>
-            <h1 className="admin-h1">Admin Dashboard</h1>
+            <p className="admin-kicker">{ar ? "تشغيل NIVRAN" : "NIVRAN OPERATIONS"}</p>
+            <h1 className="admin-h1">{ar ? "لوحة الإدارة" : "Admin Dashboard"}</h1>
             <p className="admin-muted">
-              Central command for orders, payments, subscribers, and support inbox. Monitor live metrics and take quick actions.
+              {ar
+                ? "مركز موحد للطلبات، المدفوعات، المشتركين، ورسائل الدعم مع إجراءات سريعة."
+                : "Central command for orders, payments, subscribers, and support inbox with quick actions."}
             </p>
           </div>
           <div className="admin-quick-actions">
             <Link className="btn btn-primary" href="/admin/orders">
-              Review Orders
+              {ar ? "مراجعة الطلبات" : "Review Orders"}
             </Link>
             <Link className="btn" href="/admin/inbox">
-              Open Inbox
+              {ar ? "فتح الوارد" : "Open Inbox"}
             </Link>
             <Link className="btn" href="/admin/catalog">
-              Manage Catalog
+              {ar ? "إدارة الكتالوج" : "Manage Catalog"}
             </Link>
           </div>
         </div>

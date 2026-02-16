@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { readErrorMessage } from "@/lib/http-client";
 
 type Lang = "en" | "ar";
 
@@ -11,18 +12,33 @@ function getCookie(name: string) {
   return m ? decodeURIComponent(m[1]) : "";
 }
 
-function useAdminLang(): Lang {
+function useAdminLang(): [Lang, (next: Lang) => Promise<void>] {
   const [lang, setLang] = useState<Lang>("en");
+  const pathname = usePathname();
+  const router = useRouter();
+
   React.useEffect(() => {
     const v = getCookie("admin_lang");
     setLang(v === "ar" ? "ar" : "en");
   }, []);
-  return lang;
+
+  async function updateLang(next: Lang) {
+    setLang(next);
+    await fetch("/api/admin/lang", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ lang: next, next: pathname }),
+    });
+    router.refresh();
+  }
+
+  return [lang, updateLang];
 }
 
 export default function LoginClient({ nextPath }: { nextPath: string }) {
   const router = useRouter();
-  const lang = useAdminLang();
+  const [lang, setLang] = useAdminLang();
 
   const t =
     lang === "ar"
@@ -39,6 +55,8 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
           signIn: "دخول",
           help: "تأكد من مطابقة ADMIN_TOKEN في البيئة وعدم وجود مسافات إضافية.",
           errorPrefix: "خطأ: ",
+          redirecting: "سيتم توجيهك إلى:",
+          switchLang: "التبديل إلى الإنجليزية",
         }
       : {
           title: "Admin Login",
@@ -53,6 +71,8 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
           signIn: "Sign in",
           help: "Make sure ADMIN_TOKEN matches your environment value with no extra spaces.",
           errorPrefix: "Error: ",
+          redirecting: "You'll be redirected to:",
+          switchLang: "Switch to Arabic",
         };
 
   const [token, setToken] = useState("");
@@ -77,12 +97,20 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ token }),
       });
-      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-      if (!res.ok || !data?.ok) throw new Error(data?.error || "Login failed");
+
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res, lang === "ar" ? "فشل تسجيل الدخول" : "Login failed"));
+      }
+
+      const data: unknown = await res.json().catch(() => null);
+      if (!data || typeof data !== "object" || !("ok" in data) || data.ok !== true) {
+        throw new Error(lang === "ar" ? "فشل تسجيل الدخول" : "Login failed");
+      }
+
       router.replace(safeNext);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e || "");
-      setErr(msg || "Login failed");
+      setErr(msg || (lang === "ar" ? "فشل تسجيل الدخول" : "Login failed"));
     } finally {
       setLoading(false);
     }
@@ -92,61 +120,72 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
     <div className="admin-card admin-login-card">
       <div className="admin-login-layout">
         <aside className="admin-login-side">
-              <p className="admin-muted" style={{ textTransform: "uppercase", letterSpacing: ".12em", fontWeight: 700 }}>
-                {t.sideTitle}
-              </p>
-              <h1 className="admin-h1" style={{ marginTop: 12 }}>
-                {t.title}
-              </h1>
-              <p className="admin-muted">{t.desc}</p>
-              <ul>
-                {t.points.map((point) => (
-                  <li key={point}>{point}</li>
-                ))}
-              </ul>
-            </aside>
+          <p className="admin-muted" style={{ textTransform: "uppercase", letterSpacing: ".12em", fontWeight: 700 }}>
+            {t.sideTitle}
+          </p>
+          <h1 className="admin-h1" style={{ marginTop: 12 }}>
+            {t.title}
+          </h1>
+          <p className="admin-muted">{t.desc}</p>
+          <ul>
+            {t.points.map((point) => (
+              <li key={point}>{point}</li>
+            ))}
+          </ul>
+        </aside>
 
-            <form onSubmit={submit} className="admin-login-form">
-              <div>
-                <div className="admin-label" style={{ marginBottom: 6 }}>
-                  {t.tokenLabel}
-                </div>
+        <form onSubmit={submit} className="admin-login-form" aria-busy={loading}>
+          <div className="admin-row" style={{ justifyContent: "space-between" }}>
+            <p className="admin-login-note" style={{ margin: 0 }}>
+              {t.redirecting} <span className="mono">{safeNext}</span>
+            </p>
+            <button type="button" className="btn" onClick={() => setLang(lang === "en" ? "ar" : "en")} title={t.switchLang}>
+              {lang === "en" ? "AR" : "EN"}
+            </button>
+          </div>
 
-                <div style={{ position: "relative" }}>
-                  <input
-                    className="admin-input"
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    placeholder={t.tokenPlaceholder}
-                    autoComplete="off"
-                    spellCheck={false}
-                    type={reveal ? "text" : "password"}
-                    style={{ width: "100%", paddingInlineEnd: 80, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}
-                  />
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => setReveal((v) => !v)}
-                    style={{ position: "absolute", top: 6, insetInlineEnd: 6, padding: ".35rem .65rem" }}
-                  >
-                    {reveal ? t.hide : t.show}
-                  </button>
-                </div>
-              </div>
+          <div>
+            <label htmlFor="admin-token-input" className="admin-label" style={{ marginBottom: 6, display: "block" }}>
+              {t.tokenLabel}
+            </label>
 
-              <button className="btn btn-primary" type="submit" disabled={loading || !token.trim()}>
-                {loading ? t.signingIn : t.signIn}
+            <div style={{ position: "relative" }}>
+              <input
+                id="admin-token-input"
+                className="admin-input"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                placeholder={t.tokenPlaceholder}
+                autoComplete="off"
+                spellCheck={false}
+                type={reveal ? "text" : "password"}
+                aria-invalid={!!err}
+                style={{ width: "100%", paddingInlineEnd: 80, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}
+              />
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setReveal((v) => !v)}
+                style={{ position: "absolute", top: 6, insetInlineEnd: 6, padding: ".35rem .65rem" }}
+              >
+                {reveal ? t.hide : t.show}
               </button>
+            </div>
+          </div>
 
-              <p className="admin-login-note">{t.help}</p>
+          <button className="btn btn-primary" type="submit" disabled={loading || !token.trim()}>
+            {loading ? t.signingIn : t.signIn}
+          </button>
 
-              {err ? (
-                <div style={{ color: "#ff8f8f" }}>
-                  {t.errorPrefix}
-                  {err}
-                </div>
-              ) : null}
-            </form>
+          <p className="admin-login-note">{t.help}</p>
+
+          {err ? (
+            <div style={{ color: "#b42318" }} role="alert">
+              {t.errorPrefix}
+              {err}
+            </div>
+          ) : null}
+        </form>
       </div>
     </div>
   );

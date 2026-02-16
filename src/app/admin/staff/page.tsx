@@ -124,7 +124,7 @@ export default async function AdminStaffPage() {
           </label>
 
           <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", gridColumn: "1 / -1" }}>
-            <button className="admin-btn admin-btn-primary" style={{ width: "fit-content" }} type="submit">
+            <button className="btn btn-primary" style={{ width: "fit-content" }} type="submit">
               {L.saveStaff}
             </button>
             <span style={{ fontSize: 13, opacity: 0.75 }}>{L.helper}</span>
