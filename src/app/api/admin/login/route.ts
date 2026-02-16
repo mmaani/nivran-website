@@ -25,5 +25,6 @@ export async function POST(req: Request) {
   };
   res.cookies.set("admin_token", token, opts);
   res.cookies.set("nivran_admin_token", token, opts);
+  res.cookies.set("admin_token_client", token, { ...opts, httpOnly: false });
   return res;
 }

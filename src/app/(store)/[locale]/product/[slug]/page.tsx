@@ -131,11 +131,8 @@ export default async function ProductDetailPage({
               disabled={outOfStock}
               minQty={1}
               maxQty={99}
+              buyNowLabel={isAr ? "شراء الآن" : "Buy now"}
             />
-
-            <a className={"btn" + (outOfStock ? " btn-disabled" : "")} href={`/${locale}/checkout?slug=${product.slug}`}>
-              {isAr ? "شراء الآن" : "Buy now"}
-            </a>
 
             <a className="btn btn-outline" href={`/${locale}/product`}>
               {isAr ? "العودة للمتجر" : "Back to shop"}

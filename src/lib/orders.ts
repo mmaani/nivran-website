@@ -42,6 +42,8 @@ export async function ensureOrdersTables() {
   await db.query(`alter table orders add column if not exists subtotal_after_discount_jod numeric(10,2)`);
   await db.query(`alter table orders add column if not exists shipping_jod numeric(10,2)`);
   await db.query(`alter table orders add column if not exists total_jod numeric(10,2)`);
+  await db.query(`alter table orders add column if not exists promo_code text`);
+  await db.query(`alter table orders add column if not exists promotion_id bigint`);
   await db.query(`alter table orders add column if not exists payment_method text not null default 'PAYTABS'`);
   await db.query(`alter table orders add column if not exists customer_id bigint`);
   await db.query(`alter table orders add column if not exists paytabs_tran_ref text`);
@@ -78,6 +80,7 @@ export async function ensureOrdersTables() {
   await db.query(`create index if not exists idx_orders_status on orders(status)`);
   await db.query(`create index if not exists idx_orders_created_at on orders(created_at desc)`);
   await db.query(`create index if not exists idx_orders_paytabs_tran_ref on orders(paytabs_tran_ref)`);
+  await db.query(`create index if not exists idx_orders_promo_code on orders(promo_code)`);
 
   await db.query(`create index if not exists idx_paytabs_callbacks_cart_id on paytabs_callbacks(cart_id)`);
   await db.query(`create index if not exists idx_paytabs_callbacks_tran_ref on paytabs_callbacks(tran_ref)`);

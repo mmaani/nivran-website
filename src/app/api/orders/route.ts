@@ -5,13 +5,13 @@ import { hasAllColumns, hasColumn } from "@/lib/dbSchema";
 import { ensureOrdersTables } from "@/lib/orders";
 import { ensureCatalogTables } from "@/lib/catalog";
 import { getCustomerIdFromRequest } from "@/lib/identity";
+import { consumePromotionUsage, evaluatePromoCodeForLines } from "@/lib/promotions";
 
 type PaymentMethod = "PAYTABS" | "COD";
 
 type IncomingItem = {
   slug?: string;
   qty?: number;
-  // client may send name/price but server will re-price from DB
   name?: string;
   priceJod?: number;
 };
@@ -71,6 +71,7 @@ export async function POST(req: NextRequest) {
   if (!body) return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
 
   const locale = body.locale === "ar" ? "ar" : "en";
+  const promoCode = String(body.promoCode || "").trim().toUpperCase();
 
   const paymentMethod: PaymentMethod =
     String(body.paymentMethod || body.mode || "").toUpperCase() === "COD" ? "COD" : "PAYTABS";
@@ -93,9 +94,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Accept:
-  // - multi-item: body.items[]
-  // - legacy: body.productSlug + body.qty
   let items = normalizeItems(body.items);
 
   const legacySlug = String(body.productSlug || body.slug || "").trim();
@@ -115,7 +113,6 @@ export async function POST(req: NextRequest) {
   const map = new Map<string, ProductRow>();
   for (const p of products) map.set(String(p.slug), p);
 
-  // Build order lines with server pricing
   const lines: OrderLine[] = [];
   for (const it of items) {
     const p = map.get(it.slug);
@@ -137,14 +134,33 @@ export async function POST(req: NextRequest) {
 
   const subtotalBeforeDiscount = Number(lines.reduce((sum, l) => sum + l.line_total_jod, 0).toFixed(2));
 
-  // (Promo support can be added later; keep it simple now)
-  const discount = 0;
-  const subtotalAfterDiscount = subtotalBeforeDiscount;
+  let discount = 0;
+  let subtotalAfterDiscount = subtotalBeforeDiscount;
+  let promotionId: number | null = null;
+  let promotionError = "";
+
+  if (promoCode) {
+    const promoEval = await evaluatePromoCodeForLines(db, promoCode, lines, subtotalBeforeDiscount);
+    if (!promoEval.ok) {
+      promotionError =
+        locale === "ar"
+          ? "كود الخصم غير صالح أو غير متاح لهذا الطلب"
+          : "Promo code is invalid or not eligible for this order";
+    } else {
+      discount = promoEval.discountJod;
+      subtotalAfterDiscount = promoEval.subtotalAfterDiscountJod;
+      promotionId = promoEval.promotionId;
+    }
+  }
+
+  if (promotionError) {
+    return NextResponse.json({ ok: false, error: promotionError }, { status: 400 });
+  }
+
   const shippingJod = lines.length ? 3.5 : 0;
   const totalJod = Number((subtotalAfterDiscount + shippingJod).toFixed(2));
 
-  const status =
-    paymentMethod === "PAYTABS" ? "PENDING_PAYMENT" : "PENDING_COD_CONFIRM";
+  const status = paymentMethod === "PAYTABS" ? "PENDING_PAYMENT" : "PENDING_COD_CONFIRM";
 
   const itemsJson = lines.map((l) => ({
     slug: l.slug,
@@ -153,6 +169,7 @@ export async function POST(req: NextRequest) {
     qty: l.qty,
     unit_price_jod: l.unit_price_jod,
     line_total_jod: l.line_total_jod,
+    category_key: l.category_key,
   }));
 
   const generatedCartId = `NIV-${Date.now()}-${randomUUID().slice(0, 8)}`;
@@ -169,103 +186,145 @@ export async function POST(req: NextRequest) {
     "subtotal_after_discount_jod",
     "shipping_jod",
     "total_jod",
+    "promo_code",
+    "promotion_id",
   ]);
   const hasCustomerId = await hasColumn("orders", "customer_id");
 
-  const r = hasExtendedOrderColumns
-    ? await db.query<{ cart_id: string }>(
-        `
-        insert into orders (
-          cart_id,
-          locale,
-          status,
-          amount,
-          currency,
-          payment_method,
-          ${hasCustomerId ? "customer_id," : ""}
-          customer_name,
-          customer_phone,
-          customer_email,
-          shipping_city,
-          shipping_address,
-          shipping_country,
-          notes,
-          items,
-          subtotal_before_discount_jod,
-          discount_jod,
-          subtotal_after_discount_jod,
-          shipping_jod,
-          total_jod
-        )
-        values (
-          $1,$2,$3,$4,$5,$6,
-          ${hasCustomerId ? "$7," : ""}
-          $8,$9,$10,$11,$12,$13,$14,
-          $15::jsonb,
-          $16,$17,$18,$19,$20
-        )
-        returning cart_id
-      `,
-        [
-          generatedCartId,
-          locale,
-          status,
-          totalJod,
-          "JOD",
-          paymentMethod,
-          ...(hasCustomerId ? [customerId ? Number(customerId) : null] : []),
-          name,
-          phone,
-          email,
-          city || null,
-          address,
-          country,
-          notes || null,
-          JSON.stringify(itemsJson),
-          subtotalBeforeDiscount,
-          discount,
-          subtotalAfterDiscount,
-          shippingJod,
-          totalJod,
-        ]
-      )
-    : await db.query<{ cart_id: string }>(
-        `
-        insert into orders (
-          cart_id,
-          locale,
-          status,
-          amount,
-          currency,
-          payment_method,
-          ${hasCustomerId ? "customer_id," : ""}
-          customer_name,
-          customer_email,
-          customer,
-          shipping
-        )
-        values (
-          $1,$2,$3,$4,$5,$6,
-          ${hasCustomerId ? "$7," : ""}
-          $8,$9,$10::jsonb,$11::jsonb
-        )
-        returning cart_id
-      `,
-        [
-          generatedCartId,
-          locale,
-          status,
-          totalJod,
-          "JOD",
-          paymentMethod,
-          ...(hasCustomerId ? [customerId ? Number(customerId) : null] : []),
-          name,
-          email,
-          JSON.stringify({ name, phone, email }),
-          JSON.stringify({ city, address, country, notes, items: itemsJson }),
-        ]
-      );
+  const insertedCartId = await db.withTransaction(async (trx) => {
+    if (promotionId) {
+      const consumed = await consumePromotionUsage(trx, promotionId);
+      if (!consumed) {
+        throw new Error(locale === "ar" ? "كود الخصم تجاوز حد الاستخدام" : "Promo code usage limit reached");
+      }
+    }
 
-  const cartId = r.rows?.[0]?.cart_id;
-  return NextResponse.json({ ok: true, cartId, status }, { status: 200 });
+    const r = hasExtendedOrderColumns
+      ? await trx.query<{ cart_id: string }>(
+          `
+          insert into orders (
+            cart_id,
+            locale,
+            status,
+            amount,
+            currency,
+            payment_method,
+            ${hasCustomerId ? "customer_id," : ""}
+            customer_name,
+            customer_phone,
+            customer_email,
+            shipping_city,
+            shipping_address,
+            shipping_country,
+            notes,
+            items,
+            subtotal_before_discount_jod,
+            discount_jod,
+            subtotal_after_discount_jod,
+            shipping_jod,
+            total_jod,
+            promo_code,
+            promotion_id
+          )
+          values (
+            $1,$2,$3,$4,$5,$6,
+            ${hasCustomerId ? "$7," : ""}
+            $8,$9,$10,$11,$12,$13,$14,
+            $15::jsonb,
+            $16,$17,$18,$19,$20,$21,$22
+          )
+          returning cart_id
+        `,
+          [
+            generatedCartId,
+            locale,
+            status,
+            totalJod,
+            "JOD",
+            paymentMethod,
+            ...(hasCustomerId ? [customerId ? Number(customerId) : null] : []),
+            name,
+            phone,
+            email,
+            city || null,
+            address,
+            country,
+            notes || null,
+            JSON.stringify(itemsJson),
+            subtotalBeforeDiscount,
+            discount,
+            subtotalAfterDiscount,
+            shippingJod,
+            totalJod,
+            promoCode || null,
+            promotionId,
+          ]
+        )
+      : await trx.query<{ cart_id: string }>(
+          `
+          insert into orders (
+            cart_id,
+            locale,
+            status,
+            amount,
+            currency,
+            payment_method,
+            ${hasCustomerId ? "customer_id," : ""}
+            customer_name,
+            customer_email,
+            customer,
+            shipping
+          )
+          values (
+            $1,$2,$3,$4,$5,$6,
+            ${hasCustomerId ? "$7," : ""}
+            $8,$9,$10::jsonb,$11::jsonb
+          )
+          returning cart_id
+        `,
+          [
+            generatedCartId,
+            locale,
+            status,
+            totalJod,
+            "JOD",
+            paymentMethod,
+            ...(hasCustomerId ? [customerId ? Number(customerId) : null] : []),
+            name,
+            email,
+            JSON.stringify({ name, phone, email, promoCode: promoCode || null }),
+            JSON.stringify({ city, address, country, notes, items: itemsJson }),
+          ]
+        );
+
+    return r.rows?.[0]?.cart_id || generatedCartId;
+  }).catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : "Order create failed";
+    return NextResponse.json({ ok: false, error: message }, { status: 400 });
+  });
+
+  if (insertedCartId instanceof NextResponse) return insertedCartId;
+
+  return NextResponse.json(
+    {
+      ok: true,
+      cartId: insertedCartId,
+      status,
+      totals: {
+        subtotalBeforeDiscount,
+        discountJod: discount,
+        subtotalAfterDiscount,
+        shippingJod,
+        totalJod,
+      },
+      promo: promoCode
+        ? {
+            code: promoCode,
+            applied: discount > 0,
+            discountJod: discount,
+          }
+        : null,
+    },
+    { status: 200 }
+  );
 }

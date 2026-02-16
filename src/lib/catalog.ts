@@ -125,6 +125,8 @@ export async function ensureCatalogTables() {
   await db.query(`alter table promotions add column if not exists starts_at timestamptz;`);
   await db.query(`alter table promotions add column if not exists ends_at timestamptz;`);
   await db.query(`alter table promotions add column if not exists usage_limit integer;`);
+  await db.query(`alter table promotions add column if not exists min_order_jod numeric(10,2);`);
+  await db.query(`alter table promotions add column if not exists used_count integer not null default 0;`);
   await db.query(`alter table promotions add column if not exists is_active boolean not null default true;`);
   await db.query(`alter table promotions add column if not exists created_at timestamptz not null default now();`);
   await db.query(`alter table promotions add column if not exists updated_at timestamptz not null default now();`);
@@ -173,6 +175,7 @@ export async function ensureCatalogTables() {
   await db.query(`create unique index if not exists idx_promotions_code_unique on promotions(code);`);
   await db.query(`create index if not exists idx_promotions_active on promotions(is_active);`);
   await db.query(`create index if not exists idx_promotions_created_at on promotions(created_at desc);`);
+  await db.query(`create index if not exists idx_promotions_usage on promotions(usage_limit, used_count);`);
 
   await db.query(`create index if not exists idx_product_images_product on product_images(product_id, "position");`);
 }
