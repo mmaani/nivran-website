@@ -163,6 +163,25 @@ export default async function FAQPage({
           justify-content: space-between;
           gap: 12px;
         }
+                  /* Alternate density: even rows get a slightly deeper tint (same hue) */
+        .faq-list > article:nth-child(even) > details > summary.faq-summary {
+          background:
+            linear-gradient(
+              180deg,
+              rgba(199, 165, 106, 0.07),
+              rgba(199, 165, 106, 0.03)
+            ),
+            var(--bg-soft);
+          border-color: rgba(20, 20, 20, 0.14);
+        }
+
+        /* Keep open state consistent across all rows (overrides odd/even) */
+        .faq-list > article > details[open] > summary.faq-summary {
+          background: #fff;
+          border-color: rgba(199,165,106,.45);
+          box-shadow: 0 10px 24px var(--shadow);
+        }
+
         .faq-summary:hover{
           background: rgba(255,255,255,.92);
           transform: translateY(-1px);
@@ -205,7 +224,7 @@ export default async function FAQPage({
         }
       `}</style>
 
-      <div style={{ display: "grid", gap: ".8rem" }}>
+      <div className="faq-list" style={{ display: "grid", gap: ".8rem" }}>
         {faqs.map(([q, a]) => (
           <article key={q} className="panel">
             {/* name => exclusive accordion in supporting browsers */}

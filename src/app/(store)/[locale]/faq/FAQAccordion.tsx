@@ -67,7 +67,7 @@ export default function FAQAccordion({ faqs }: { faqs: FAQ[] }) {
         }
       `}</style>
 
-      <div style={{ display: "grid", gap: ".8rem" }}>
+        <div className="faq-list" style={{ display: "grid", gap: ".8rem" }}>
         {faqs.map((item, idx) => (
           <article key={item.q} className="panel">
             <details
