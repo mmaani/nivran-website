@@ -3,8 +3,6 @@ import { ensureOrdersTables } from "@/lib/orders";
 import OrdersClient from "./ui";
 import { adminT, getAdminLang } from "@/lib/admin-lang";
 
-
-// ...existing code...
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -20,6 +18,11 @@ type OrdersRow = {
   created_at: string;
   customer: unknown;
   shipping: unknown;
+  items: unknown;
+  subtotal_before_discount_jod: string | null;
+  discount_jod: string | null;
+  shipping_jod: string | null;
+  total_jod: string | null;
 };
 
 async function hasColumn(columnName: string): Promise<boolean> {
@@ -42,19 +45,33 @@ export default async function AdminOrdersPage() {
   const lang = await getAdminLang();
   const t = adminT(lang);
 
-  const [hasPaymentMethod, hasTranRef] = await Promise.all([
+  const [hasPaymentMethod, hasTranRef, hasItems, hasTotals] = await Promise.all([
     hasColumn("payment_method"),
     hasColumn("paytabs_tran_ref"),
+    hasColumn("items"),
+    hasColumn("total_jod"),
   ]);
 
   const paymentMethodSelect = hasPaymentMethod ? "payment_method" : "'PAYTABS'::text as payment_method";
   const tranRefSelect = hasTranRef ? "paytabs_tran_ref" : "null::text as paytabs_tran_ref";
+  const itemsSelect = hasItems ? "items" : "'[]'::jsonb as items";
+  const subtotalSelect = hasTotals ? "subtotal_before_discount_jod::text" : "null::text as subtotal_before_discount_jod";
+  const discountSelect = hasTotals ? "discount_jod::text" : "null::text as discount_jod";
+  const shippingSelect = hasTotals ? "shipping_jod::text" : "null::text as shipping_jod";
+  const totalSelect = hasTotals ? "total_jod::text" : "null::text as total_jod";
 
   const { rows } = await db.query<OrdersRow>(
     `select id, cart_id, status, amount, currency, locale,
             ${paymentMethodSelect},
             ${tranRefSelect},
-            created_at, customer, shipping
+            created_at,
+            coalesce(customer, jsonb_build_object('name', customer_name, 'phone', customer_phone, 'email', customer_email)) as customer,
+            coalesce(shipping, jsonb_build_object('city', shipping_city, 'address', shipping_address, 'country', shipping_country)) as shipping,
+            ${itemsSelect},
+            ${subtotalSelect},
+            ${discountSelect},
+            ${shippingSelect},
+            ${totalSelect}
      from orders
      order by created_at desc
      limit 200`
@@ -72,7 +89,7 @@ export default async function AdminOrdersPage() {
         <p className="admin-muted">{hint}</p>
       </div>
 
-      <OrdersClient initialRows={rows as OrdersRow[]} lang={lang} />
+      <OrdersClient initialRows={rows} lang={lang} />
     </div>
   );
 }

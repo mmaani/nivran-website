@@ -117,6 +117,7 @@ export async function ensureCatalogTables() {
     );
   `);
 
+  await db.query(`alter table promotions add column if not exists promo_kind text not null default 'CODE';`);
   await db.query(`alter table promotions add column if not exists code text;`);
   await db.query(`alter table promotions add column if not exists title_en text;`);
   await db.query(`alter table promotions add column if not exists title_ar text;`);
@@ -125,6 +126,8 @@ export async function ensureCatalogTables() {
   await db.query(`alter table promotions add column if not exists starts_at timestamptz;`);
   await db.query(`alter table promotions add column if not exists ends_at timestamptz;`);
   await db.query(`alter table promotions add column if not exists usage_limit integer;`);
+  await db.query(`alter table promotions add column if not exists min_order_jod numeric(10,2);`);
+  await db.query(`alter table promotions add column if not exists used_count integer not null default 0;`);
   await db.query(`alter table promotions add column if not exists is_active boolean not null default true;`);
   await db.query(`alter table promotions add column if not exists created_at timestamptz not null default now();`);
   await db.query(`alter table promotions add column if not exists updated_at timestamptz not null default now();`);
@@ -147,6 +150,28 @@ export async function ensureCatalogTables() {
     where p.code = d.code;
   `);
 
+
+  await db.query(`
+    update promotions
+       set promo_kind = case when nullif(code,'') is null then 'AUTO' else 'CODE' end
+     where promo_kind is null or promo_kind not in ('AUTO','CODE')
+  `);
+
+  await db.query(`
+    do $$
+    begin
+      if not exists (
+        select 1 from pg_constraint where conname='promotions_kind_code_chk'
+      ) then
+        alter table promotions
+          add constraint promotions_kind_code_chk
+          check (
+            (promo_kind='AUTO' and (code is null or btrim(code)=''))
+            or (promo_kind='CODE' and code is not null and btrim(code) <> '')
+          );
+      end if;
+    end $$;
+  `);
   // ---------- PRODUCT IMAGES (bytea in Postgres) ----------
   await db.query(`
     create table if not exists product_images (
@@ -170,9 +195,12 @@ export async function ensureCatalogTables() {
   await db.query(`create index if not exists idx_categories_active on categories(is_active);`);
   await db.query(`create index if not exists idx_categories_sort on categories(sort_order asc);`);
 
-  await db.query(`create unique index if not exists idx_promotions_code_unique on promotions(code);`);
+  await db.query(`drop index if exists idx_promotions_code_unique`);
+  await db.query(`create unique index if not exists idx_promotions_code_unique on promotions(code) where promo_kind='CODE';`);
   await db.query(`create index if not exists idx_promotions_active on promotions(is_active);`);
+  await db.query(`create index if not exists idx_promotions_kind on promotions(promo_kind);`);
   await db.query(`create index if not exists idx_promotions_created_at on promotions(created_at desc);`);
+  await db.query(`create index if not exists idx_promotions_usage on promotions(usage_limit, used_count);`);
 
   await db.query(`create index if not exists idx_product_images_product on product_images(product_id, "position");`);
 }

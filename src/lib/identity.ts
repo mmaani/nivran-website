@@ -98,13 +98,14 @@ export async function ensureIdentityTables() {
       revoked_at timestamptz
     );
   `);
-  await db.query(`create index if not exists customer_sessions_token_hash_idx on customer_sessions(token_hash);`);
-
+  // Bring legacy schemas forward before adding indexes.
   await db.query(`alter table customer_sessions add column if not exists token text`);
   await db.query(`alter table customer_sessions add column if not exists token_hash text`);
   await db.query(`alter table customer_sessions add column if not exists expires_at timestamptz`);
   await db.query(`alter table customer_sessions add column if not exists revoked_at timestamptz`);
   await db.query(`update customer_sessions set expires_at = now() + interval '30 days' where expires_at is null`);
+
+  await db.query(`create index if not exists customer_sessions_token_hash_idx on customer_sessions(token_hash);`);
 
   await db.query(`
     create table if not exists password_reset_tokens (
