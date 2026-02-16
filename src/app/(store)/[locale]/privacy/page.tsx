@@ -159,7 +159,7 @@ export default async function PrivacyPage({
       </div>
 
       <div className="grid-2" style={{ marginTop: "1rem", alignItems: "start" }}>
-        <aside className="panel" style={{ position: "sticky", top: 92 }}>
+        <aside className="panel policy-contents">
           <h3 style={{ marginTop: 0 }}>{isAr ? "المحتويات" : "Contents"}</h3>
           <ol style={{ margin: 0, paddingInlineStart: 18, display: "grid", gap: ".35rem" }}>
             {content.sections.map((s) => (
