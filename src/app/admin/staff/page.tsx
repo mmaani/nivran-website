@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { hasColumn } from "@/lib/dbSchema";
 import { ensureIdentityTables } from "@/lib/identity";
 import { getAdminLang } from "@/lib/admin-lang";
 
@@ -23,6 +24,7 @@ const ROLE_LABELS: Record<string, { en: string; ar: string }> = {
 export default async function AdminStaffPage() {
   await ensureIdentityTables();
   const lang = await getAdminLang();
+  const hasUsername = await hasColumn("staff_users", "username");
 
   const L =
     lang === "ar"
@@ -70,7 +72,7 @@ export default async function AdminStaffPage() {
         };
 
   const { rows } = await db.query<StaffRow>(
-    `select id, username, full_name, role, is_active, created_at::text
+    `select id, ${hasUsername ? "username" : "email"} as username, full_name, role, is_active, created_at::text
      from staff_users
      order by created_at desc
      limit 200`

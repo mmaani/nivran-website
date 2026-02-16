@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   await ensureIdentityTables();
-  const body = await req.json().catch(() => ({} as any));
+  const body = (await req.json().catch(() => ({}))) as { token?: string; password?: string };
   const token = String(body?.token || "").trim();
   const password = String(body?.password || "");
 

@@ -4,13 +4,21 @@ import { ensureCatalogTables } from "@/lib/catalog";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(_: Request, { params }: any) {
+type ProductImageRow = {
+  id: number;
+  content_type: string | null;
+  bytes: Buffer | Uint8Array;
+  filename: string | null;
+};
+
+export async function GET(_: Request, { params }: { params: Promise<{ id?: string }> }) {
   await ensureCatalogTables();
 
-  const id = Number(params?.id || 0);
+  const resolved = await params;
+  const id = Number(resolved?.id || 0);
   if (!id) return new Response("Not found", { status: 404 });
 
-  const r = await db.query(
+  const r = await db.query<ProductImageRow>(
     `select id, content_type, bytes, filename
        from product_images
       where id=$1
@@ -18,7 +26,7 @@ export async function GET(_: Request, { params }: any) {
     [id]
   );
 
-  const row = r.rows[0] as any;
+  const row = r.rows[0];
   if (!row) return new Response("Not found", { status: 404 });
 
   const contentType = String(row.content_type || "application/octet-stream");

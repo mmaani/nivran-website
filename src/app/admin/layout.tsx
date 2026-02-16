@@ -1,6 +1,5 @@
 import "./admin.css";
 import Link from "next/link";
-import { RequireAdmin } from "./_components/RequireAdmin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,19 +14,17 @@ function NavLink({ href, label }: { href: string; label: string }) {
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <RequireAdmin>
-      <div className="admin-shell">
-        <aside className="admin-nav">
-          <div className="admin-brand">NIVRAN Admin</div>
-          <nav style={{ display: "grid", gap: 6 }}>
-            <NavLink href="/admin/orders" label="Orders" />
-            <NavLink href="/admin/catalog" label="Catalog" />
-            <NavLink href="/admin/customers" label="Customers" />
-            <NavLink href="/admin/staff" label="Staff" />
-          </nav>
-        </aside>
-        <main className="admin-main">{children}</main>
-      </div>
-    </RequireAdmin>
+    <div className="admin-shell">
+      <aside className="admin-nav">
+        <div className="admin-brand">NIVRAN Admin</div>
+        <nav style={{ display: "grid", gap: 6 }}>
+          <NavLink href="/admin/orders" label="Orders" />
+          <NavLink href="/admin/catalog" label="Catalog" />
+          <NavLink href="/admin/customers" label="Customers" />
+          <NavLink href="/admin/staff" label="Staff" />
+        </nav>
+      </aside>
+      <main className="admin-main">{children}</main>
+    </div>
   );
 }

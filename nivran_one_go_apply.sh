@@ -18,7 +18,7 @@ mkdir -p "src/app/(store)/[locale]/account/signup"
 mkdir -p "src/app/(store)/[locale]/checkout"
 
 echo "==> Writing SQL patch (Neon)"
-cat > sql/nivran_account_checkout_patch.sql <<'SQL'
+cat > db/migrations/patches/006_account_checkout_patch.sql <<'SQL'
 -- NIVRAN: account + checkout + cart persistence patch
 -- Safe to run multiple times.
 
@@ -1664,13 +1664,13 @@ echo "==> Done writing files."
 
 echo "==> Running DB patch if possible (optional)"
 if command -v psql >/dev/null 2>&1 && [[ -n "${DATABASE_URL:-}" ]]; then
-  echo "psql detected + DATABASE_URL set — applying sql/nivran_account_checkout_patch.sql"
-  psql "$DATABASE_URL" -f sql/nivran_account_checkout_patch.sql
+  echo "psql detected + DATABASE_URL set — applying db/migrations/patches/006_account_checkout_patch.sql"
+  psql "$DATABASE_URL" -f db/migrations/patches/006_account_checkout_patch.sql
 else
   echo "Skipped DB patch auto-run."
   echo "To apply manually:"
-  echo "  psql \"\$DATABASE_URL\" -f sql/nivran_account_checkout_patch.sql"
-  echo "Or paste sql/nivran_account_checkout_patch.sql into Neon SQL Editor."
+  echo "  psql \"\$DATABASE_URL\" -f db/migrations/patches/006_account_checkout_patch.sql"
+  echo "Or paste db/migrations/patches/006_account_checkout_patch.sql into Neon SQL Editor."
 fi
 
 echo "==> Next recommended commands:"

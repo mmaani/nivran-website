@@ -3,6 +3,13 @@
 import { useParams } from "next/navigation";
 import { useState } from "react";
 
+type JsonRecord = Record<string, unknown>;
+function isRecord(v: unknown): v is JsonRecord {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+type ForgotPasswordResponse = { ok?: boolean; error?: string; resetUrl?: string };
+
 export default function ForgotPasswordPage() {
   const p = useParams<{ locale?: string }>();
   const locale = p?.locale === "ar" ? "ar" : "en";
@@ -18,12 +25,22 @@ export default function ForgotPasswordPage() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email, locale }),
     });
-    const data = await res.json().catch(() => ({} as unknown));
-    if (!res.ok || !data?.ok) {
-      setMsg(data?.error || (isAr ? "حدث خطأ" : "Something went wrong"));
+
+    const raw: unknown = await res.json().catch(() => null);
+    const data: ForgotPasswordResponse = isRecord(raw) ? (raw as ForgotPasswordResponse) : {};
+
+    if (!res.ok || !data.ok) {
+      setMsg(data.error || (isAr ? "حدث خطأ" : "Something went wrong"));
       return;
     }
-    setMsg(data?.resetUrl ? `${isAr ? "رابط إعادة التعيين:" : "Reset link:"} ${data.resetUrl}` : (isAr ? "إذا كان البريد موجودًا فسيتم إرسال رابط إعادة التعيين." : "If the email exists, a reset link has been sent."));
+
+    setMsg(
+      data.resetUrl
+        ? `${isAr ? "رابط إعادة التعيين:" : "Reset link:"} ${data.resetUrl}`
+        : isAr
+          ? "إذا كان البريد موجودًا فسيتم إرسال رابط إعادة التعيين."
+          : "If the email exists, a reset link has been sent."
+    );
   }
 
   return (

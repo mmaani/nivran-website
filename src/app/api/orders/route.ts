@@ -1,5 +1,7 @@
+import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { hasAllColumns, hasColumn } from "@/lib/dbSchema";
 import { ensureOrdersTables } from "@/lib/orders";
 import { ensureCatalogTables } from "@/lib/catalog";
 import { getCustomerIdFromRequest } from "@/lib/identity";
@@ -14,6 +16,18 @@ type IncomingItem = {
   priceJod?: number;
 };
 
+type CustomerInput = { name?: string; phone?: string; email?: string };
+type ShippingInput = { city?: string; address?: string; notes?: string; country?: string };
+
+type ProductRow = {
+  slug: string;
+  name_en: string | null;
+  name_ar: string | null;
+  price_jod: string | number;
+  category_key: string | null;
+  is_active: boolean;
+};
+
 type OrderLine = {
   slug: string;
   name_en: string;
@@ -26,7 +40,7 @@ type OrderLine = {
 
 async function fetchProductsBySlugs(slugs: string[]) {
   await ensureCatalogTables();
-  const r = await db.query(
+  const r = await db.query<ProductRow>(
     `select slug, name_en, name_ar, price_jod, category_key, is_active
        from products
       where slug = any($1::text[])`,
@@ -35,7 +49,7 @@ async function fetchProductsBySlugs(slugs: string[]) {
   return r.rows || [];
 }
 
-function normalizeItems(items: any): { slug: string; qty: number }[] {
+function normalizeItems(items: unknown): { slug: string; qty: number }[] {
   if (!Array.isArray(items)) return [];
   return items
     .map((x: IncomingItem) => ({
@@ -53,7 +67,7 @@ export async function POST(req: NextRequest) {
 
   const customerId = await getCustomerIdFromRequest(req).catch(() => null);
 
-  const body = await req.json().catch(() => null as any);
+  const body: Record<string, unknown> | null = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
 
   const locale = body.locale === "ar" ? "ar" : "en";
@@ -61,8 +75,8 @@ export async function POST(req: NextRequest) {
   const paymentMethod: PaymentMethod =
     String(body.paymentMethod || body.mode || "").toUpperCase() === "COD" ? "COD" : "PAYTABS";
 
-  const customer = body.customer || {};
-  const shipping = body.shipping || {};
+  const customer = (body.customer || {}) as CustomerInput;
+  const shipping = (body.shipping || {}) as ShippingInput;
 
   const name = String(customer.name || "").trim();
   const phone = String(customer.phone || "").trim();
@@ -98,7 +112,7 @@ export async function POST(req: NextRequest) {
   const slugs = Array.from(new Set(items.map((i) => i.slug)));
   const products = await fetchProductsBySlugs(slugs);
 
-  const map = new Map<string, any>();
+  const map = new Map<string, ProductRow>();
   for (const p of products) map.set(String(p.slug), p);
 
   // Build order lines with server pricing
@@ -141,54 +155,116 @@ export async function POST(req: NextRequest) {
     line_total_jod: l.line_total_jod,
   }));
 
-  const r = await db.query<{ cart_id: string }>(
-    `
-    insert into orders (
-      locale,
-      status,
-      payment_method,
-      customer_id,
-      customer_name,
-      customer_phone,
-      customer_email,
-      shipping_city,
-      shipping_address,
-      shipping_country,
-      notes,
-      items,
-      subtotal_before_discount_jod,
-      discount_jod,
-      subtotal_after_discount_jod,
-      shipping_jod,
-      total_jod
-    )
-    values (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
-      $12::jsonb,
-      $13,$14,$15,$16,$17
-    )
-    returning cart_id
-  `,
-    [
-      locale,
-      status,
-      paymentMethod,
-      customerId ? Number(customerId) : null,
-      name,
-      phone,
-      email,
-      city || null,
-      address,
-      country,
-      notes || null,
-      JSON.stringify(itemsJson),
-      subtotalBeforeDiscount,
-      discount,
-      subtotalAfterDiscount,
-      shippingJod,
-      totalJod,
-    ]
-  );
+  const generatedCartId = `NIV-${Date.now()}-${randomUUID().slice(0, 8)}`;
+
+  const hasExtendedOrderColumns = await hasAllColumns("orders", [
+    "customer_phone",
+    "shipping_city",
+    "shipping_address",
+    "shipping_country",
+    "notes",
+    "items",
+    "subtotal_before_discount_jod",
+    "discount_jod",
+    "subtotal_after_discount_jod",
+    "shipping_jod",
+    "total_jod",
+  ]);
+  const hasCustomerId = await hasColumn("orders", "customer_id");
+
+  const r = hasExtendedOrderColumns
+    ? await db.query<{ cart_id: string }>(
+        `
+        insert into orders (
+          cart_id,
+          locale,
+          status,
+          amount,
+          currency,
+          payment_method,
+          ${hasCustomerId ? "customer_id," : ""}
+          customer_name,
+          customer_phone,
+          customer_email,
+          shipping_city,
+          shipping_address,
+          shipping_country,
+          notes,
+          items,
+          subtotal_before_discount_jod,
+          discount_jod,
+          subtotal_after_discount_jod,
+          shipping_jod,
+          total_jod
+        )
+        values (
+          $1,$2,$3,$4,$5,$6,
+          ${hasCustomerId ? "$7," : ""}
+          $8,$9,$10,$11,$12,$13,$14,
+          $15::jsonb,
+          $16,$17,$18,$19,$20
+        )
+        returning cart_id
+      `,
+        [
+          generatedCartId,
+          locale,
+          status,
+          totalJod,
+          "JOD",
+          paymentMethod,
+          ...(hasCustomerId ? [customerId ? Number(customerId) : null] : []),
+          name,
+          phone,
+          email,
+          city || null,
+          address,
+          country,
+          notes || null,
+          JSON.stringify(itemsJson),
+          subtotalBeforeDiscount,
+          discount,
+          subtotalAfterDiscount,
+          shippingJod,
+          totalJod,
+        ]
+      )
+    : await db.query<{ cart_id: string }>(
+        `
+        insert into orders (
+          cart_id,
+          locale,
+          status,
+          amount,
+          currency,
+          payment_method,
+          ${hasCustomerId ? "customer_id," : ""}
+          customer_name,
+          customer_email,
+          customer,
+          shipping
+        )
+        values (
+          $1,$2,$3,$4,$5,$6,
+          ${hasCustomerId ? "$7," : ""}
+          $8,$9,$10::jsonb,$11::jsonb
+        )
+        returning cart_id
+      `,
+        [
+          generatedCartId,
+          locale,
+          status,
+          totalJod,
+          "JOD",
+          paymentMethod,
+          ...(hasCustomerId ? [customerId ? Number(customerId) : null] : []),
+          name,
+          email,
+          JSON.stringify({ name, phone, email }),
+          JSON.stringify({ city, address, country, notes, items: itemsJson }),
+        ]
+      );
 
   const cartId = r.rows?.[0]?.cart_id;
   return NextResponse.json({ ok: true, cartId, status }, { status: 200 });

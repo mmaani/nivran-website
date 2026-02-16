@@ -3,6 +3,13 @@
 import { useParams, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
+type JsonRecord = Record<string, unknown>;
+function isRecord(v: unknown): v is JsonRecord {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+type ResetPasswordResponse = { ok?: boolean; error?: string };
+
 export default function ResetPasswordPage() {
   const p = useParams<{ locale?: string }>();
   const locale = p?.locale === "ar" ? "ar" : "en";
@@ -26,9 +33,12 @@ export default function ResetPasswordPage() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ token, password }),
     });
-    const data = await res.json().catch(() => ({} as any));
-    if (!res.ok || !data?.ok) {
-      setMsg(data?.error || (isAr ? "حدث خطأ" : "Something went wrong"));
+
+    const raw: unknown = await res.json().catch(() => null);
+    const data: ResetPasswordResponse = isRecord(raw) ? (raw as ResetPasswordResponse) : {};
+
+    if (!res.ok || !data.ok) {
+      setMsg(data.error || (isAr ? "حدث خطأ" : "Something went wrong"));
       return;
     }
     setMsg(isAr ? "تم تغيير كلمة المرور. يمكنك تسجيل الدخول الآن." : "Password changed. You can login now.");

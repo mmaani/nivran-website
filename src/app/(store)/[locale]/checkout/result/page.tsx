@@ -3,6 +3,19 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 
+type OrderStatusResponse = {
+  cart_id?: string;
+  status?: string;
+  amount?: number | string;
+  currency?: string;
+};
+
+type OrdersStatusApiResponse = {
+  ok?: boolean;
+  error?: string;
+  order?: OrderStatusResponse;
+};
+
 const COPY = {
   en: {
     title: "Order status",
@@ -41,6 +54,12 @@ function statusMsg(locale: "en" | "ar", s: string) {
   return t.pending;
 }
 
+function toErrorMessage(value: unknown): string {
+  if (value instanceof Error) return value.message;
+  if (typeof value === "string") return value;
+  return "Failed";
+}
+
 export default function CheckoutResultPage() {
   const params = useParams<{ locale: string }>();
   const search = useSearchParams();
@@ -49,22 +68,22 @@ export default function CheckoutResultPage() {
 
   const cartId = (search?.get("cartId") || "").trim();
 
-  const [data, setData] = useState<any | null>(null);
+  const [data, setData] = useState<OrderStatusResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     let stop = false;
-    let timer: any;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
     async function poll() {
       if (!cartId) return;
       try {
         const r = await fetch(`/api/orders/status?cartId=${encodeURIComponent(cartId)}`, { cache: "no-store" });
-        const j = await r.json();
+        const j = (await r.json().catch(() => ({}))) as OrdersStatusApiResponse;
         if (!r.ok || !j?.ok) throw new Error(j?.error || "Failed");
-        if (!stop) setData(j.order);
-      } catch (e: any) {
-        if (!stop) setErr(e?.message || "Failed");
+        if (!stop) setData(j.order || null);
+      } catch (e: unknown) {
+        if (!stop) setErr(toErrorMessage(e));
       } finally {
         if (!stop) {
           timer = setTimeout(poll, 3000);
@@ -103,7 +122,7 @@ export default function CheckoutResultPage() {
           <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
               <span>{t.cart}</span>
-              <span className="ltr">{data.cartId}</span>
+              <span className="ltr">{data.cart_id || cartId}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
               <span>{t.status}</span>

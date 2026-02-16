@@ -20,12 +20,15 @@ function readCart(): CartItem[] {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .map((x: any) => ({
-        slug: String(x?.slug || "").trim(),
-        name: String(x?.name || "").trim(),
-        priceJod: Number(x?.priceJod || 0),
-        qty: Math.max(1, Math.min(99, Number(x?.qty || 1))),
-      }))
+      .map((x: unknown) => {
+        const item = typeof x === "object" && x !== null ? (x as Record<string, unknown>) : {};
+        return ({
+        slug: String(item.slug || "").trim(),
+        name: String(item.name || "").trim(),
+        priceJod: Number(item.priceJod || 0),
+        qty: Math.max(1, Math.min(99, Number(item.qty || 1))),
+      });
+      })
       .filter((x: CartItem) => !!x.slug);
   } catch {
     return [];
@@ -59,8 +62,8 @@ export default function CartClient({ locale }: { locale: Locale }) {
   useEffect(() => {
     setItems(readCart());
     const onCustom = () => setItems(readCart());
-    window.addEventListener("nivran_cart_updated", onCustom as any);
-    return () => window.removeEventListener("nivran_cart_updated", onCustom as any);
+    window.addEventListener("nivran_cart_updated", onCustom as EventListener);
+    return () => window.removeEventListener("nivran_cart_updated", onCustom as EventListener);
   }, []);
 
   const totals = useMemo(() => {

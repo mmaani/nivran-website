@@ -1,8 +1,11 @@
-export default function Policy() {
-  return (
-    <div style={{ padding: 24, fontFamily: "system-ui" }}>
-      <h1>Compliance Policy</h1>
-      <p style={{ opacity: 0.7 }}>Content goes here.</p>
-    </div>
-  );
+import { redirect } from "next/navigation";
+
+export default async function LegacyCompliancePolicyPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale: rawLocale } = await params;
+  const locale = rawLocale === "ar" ? "ar" : "en";
+  redirect(`/${locale}/compliance`);
 }

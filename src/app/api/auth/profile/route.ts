@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
 import { ensureIdentityTables, getCustomerIdFromRequest } from "@/lib/identity";
+import { hasColumn } from "@/lib/dbSchema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,8 +13,18 @@ export async function GET(req: Request) {
   const customerId = await getCustomerIdFromRequest(req);
   if (!customerId) return Response.json({ ok: false }, { status: 401 });
 
+  const hasFullName = await hasColumn("customers", "full_name");
+  const hasAddressLine1 = await hasColumn("customers", "address_line1");
+  const hasCity = await hasColumn("customers", "city");
+  const hasCountry = await hasColumn("customers", "country");
+
   const pr = await db.query(
-    `select id, email, full_name, phone, address_line1, city, country,
+    `select id, email,
+            ${hasFullName ? "full_name" : "trim(concat_ws(' ', first_name, last_name))"} as full_name,
+            phone,
+            ${hasAddressLine1 ? "address_line1" : "null::text"} as address_line1,
+            ${hasCity ? "city" : "null::text"} as city,
+            ${hasCountry ? "country" : "null::text"} as country,
             created_at::text as created_at
        from customers
       where id=$1 and is_active=true
@@ -24,9 +35,10 @@ export async function GET(req: Request) {
   if (!profile) return Response.json({ ok: false }, { status: 401 });
 
   // Orders summary
+  const hasTotalJod = await hasColumn("orders", "total_jod");
   const or = await db.query(
     `select id, cart_id, status,
-            amount_jod::text as amount_jod,
+            ${hasTotalJod ? "coalesce(total_jod, amount)" : "amount"}::text as amount_jod,
             created_at::text as created_at
        from orders
       where customer_id=$1
@@ -43,6 +55,11 @@ export async function PUT(req: Request) {
 
   const customerId = await getCustomerIdFromRequest(req);
   if (!customerId) return Response.json({ ok: false }, { status: 401 });
+
+  const hasFullName = await hasColumn("customers", "full_name");
+  const hasAddressLine1 = await hasColumn("customers", "address_line1");
+  const hasCity = await hasColumn("customers", "city");
+  const hasCountry = await hasColumn("customers", "country");
 
   const body = await req.json().catch(() => ({}));
 
@@ -62,7 +79,12 @@ export async function PUT(req: Request) {
 
   await db.query(
     `update customers
-        set full_name=$1, phone=$2, address_line1=$3, city=$4, country=$5, updated_at=now()
+        set ${hasFullName ? "full_name=$1" : "first_name=$1"},
+            phone=$2,
+            ${hasAddressLine1 ? "address_line1=$3," : ""}
+            ${hasCity ? "city=$4," : ""}
+            ${hasCountry ? "country=$5," : ""}
+            updated_at=now()
       where id=$6`,
     [fullName, phone, addressLine1, city, country, customerId]
   );

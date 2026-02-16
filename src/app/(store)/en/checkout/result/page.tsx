@@ -1,5 +1,14 @@
-export default async function ResultPage({ searchParams }: any) {
-  const cartId = String(searchParams?.cart_id || "");
+type SearchParams = {
+  cart_id?: string;
+};
+
+export default async function ResultPage({
+  searchParams,
+}: {
+  searchParams?: Promise<SearchParams>;
+}) {
+  const resolved = (await searchParams) || {};
+  const cartId = String(resolved?.cart_id || "");
   return (
     <div style={{ padding: 24, fontFamily: "system-ui", maxWidth: 720, margin: "0 auto" }}>
       <h1 style={{ marginBottom: 8 }}>Payment status</h1>

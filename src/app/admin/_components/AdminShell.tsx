@@ -40,6 +40,7 @@ export default function AdminShell({
       { href: "/admin/orders", en: "Orders", ar: "الطلبات" },
       { href: "/admin/catalog", en: "Catalog", ar: "المنتجات" },
       { href: "/admin/inbox", en: "Inbox", ar: "الوارد" },
+      { href: "/admin/customers", en: "Customers", ar: "العملاء" },
       { href: "/admin/staff", en: "Staff", ar: "الموظفون" },
     ],
     []

@@ -1,34 +1,38 @@
 import type { MetadataRoute } from "next";
 
+const LOCALES = ["en", "ar"] as const;
+
+const STORE_PATHS = [
+  "",
+  "/story",
+  "/product",
+  "/contact",
+  "/faq",
+  "/cart",
+  "/checkout",
+  "/account",
+  "/privacy",
+  "/returns",
+  "/shipping",
+  "/terms",
+  "/compliance",
+] as const;
+
 export default function sitemap(): MetadataRoute.Sitemap {
   const rawBase = process.env.NEXT_PUBLIC_SITE_URL || "https://www.nivran.com";
-  // Normalize to https://www.nivran.com to match your primary domain
   const base = rawBase.replace(/^https?:\/\/(?!www\.)/, "https://www.");
-
   const now = new Date();
 
-  const paths = [
-    "",
+  const localizedPaths = LOCALES.flatMap((locale) =>
+    STORE_PATHS.map((path) => `/${locale}${path}`)
+  );
 
-    // EN
-    "/en",
-    "/en/story",
-    "/en/product",
-    "/en/contact",
-    "/en/faq",
+  const paths = ["", ...localizedPaths];
 
-    // AR
-    "/ar",
-    "/ar/story",
-    "/ar/product",
-    "/ar/contact",
-    "/ar/faq",
-  ];
-
-  return paths.map((p) => ({
-    url: `${base}${p}`,
+  return paths.map((path) => ({
+    url: `${base}${path}`,
     lastModified: now,
-    changeFrequency: "weekly",
-    priority: p === "" ? 1 : 0.7,
+    changeFrequency: path === "" ? "daily" : "weekly",
+    priority: path === "" ? 1 : 0.7,
   }));
 }
