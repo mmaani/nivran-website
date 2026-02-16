@@ -37,20 +37,13 @@ export default function ResetPasswordPage() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ token, password }),
     });
-<<<<<<< HEAD
+const raw: unknown = await res.json().catch(() => null);
+const data: ResetPasswordResponse = isRecord(raw) ? (raw as ResetPasswordResponse) : {};
 
-    const raw: unknown = await res.json().catch(() => null);
-    const data: ResetPasswordResponse = isRecord(raw) ? (raw as ResetPasswordResponse) : {};
-
-    if (!res.ok || !data.ok) {
-      setMsg(data.error || (isAr ? "حدث خطأ" : "Something went wrong"));
-=======
-    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-    if (!res.ok || !data?.ok) {
-      setMsg(data?.error || (isAr ? "حدث خطأ" : "Something went wrong"));
->>>>>>> fd0eccf (Remove all explicit any usages across app and API routes)
-      return;
-    }
+if (!res.ok || !data.ok) {
+  setMsg(data.error || (isAr ? "حدث خطأ" : "Something went wrong"));
+  return;
+}
 
     setMsg(isAr ? "تم تغيير كلمة المرور. يمكنك تسجيل الدخول الآن." : "Password changed. You can login now.");
 
