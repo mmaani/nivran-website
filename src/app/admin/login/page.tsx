@@ -12,6 +12,6 @@ export default async function AdminLoginPage({
   searchParams?: Promise<SearchParams>;
 }) {
   const resolved = (await searchParams) || {};
-  const nextPath = typeof resolved?.next === "string" ? resolved.next : "/admin/orders";
+  const nextPath = typeof resolved?.next === "string" ? resolved.next : "/admin";
   return <LoginClient nextPath={nextPath} />;
 }

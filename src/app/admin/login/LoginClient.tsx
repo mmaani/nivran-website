@@ -61,9 +61,9 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
   const [err, setErr] = useState("");
 
   const safeNext = useMemo(() => {
-    if (!nextPath || typeof nextPath !== "string") return "/admin/orders";
-    if (!nextPath.startsWith("/")) return "/admin/orders";
-    if (nextPath.startsWith("//")) return "/admin/orders";
+    if (!nextPath || typeof nextPath !== "string") return "/admin";
+    if (!nextPath.startsWith("/")) return "/admin";
+    if (nextPath.startsWith("//")) return "/admin";
     return nextPath;
   }, [nextPath]);
 
@@ -89,11 +89,9 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
   }
 
   return (
-    <div className="admin-shell admin-login-shell" dir={lang === "ar" ? "rtl" : "ltr"}>
-      <div className="admin-content">
-        <div className="admin-card admin-login-card">
-          <div className="admin-login-layout">
-            <aside className="admin-login-side">
+    <div className="admin-card admin-login-card">
+      <div className="admin-login-layout">
+        <aside className="admin-login-side">
               <p className="admin-muted" style={{ textTransform: "uppercase", letterSpacing: ".12em", fontWeight: 700 }}>
                 {t.sideTitle}
               </p>
@@ -149,8 +147,6 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
                 </div>
               ) : null}
             </form>
-          </div>
-        </div>
       </div>
     </div>
   );
