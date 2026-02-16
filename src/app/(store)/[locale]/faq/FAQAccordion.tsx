@@ -6,10 +6,8 @@ type FAQ = { q: string; a: string };
 
 export default function FAQAccordion({
   faqs,
-  isAr,
 }: {
   faqs: FAQ[];
-  isAr: boolean;
 }) {
   const [openIndex, setOpenIndex] = useState<number>(-1); 
 
