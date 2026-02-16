@@ -2,7 +2,30 @@
 
 import { useMemo, useState } from "react";
 
-type StaffLang = "en" | "ar";
+type JsonRecord = Record<string, unknown>;
+function isRecord(v: unknown): v is JsonRecord {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function readString(obj: unknown, key: string): string {
+  if (!isRecord(obj)) return "";
+  const v = obj[key];
+  return typeof v === "string" ? v : v == null ? "" : String(v);
+}
+
+type Row = {
+  id: number;
+  cart_id: string;
+  status: string;
+  amount: string | number;
+  currency: string;
+  locale: string;
+  payment_method: string;
+  paytabs_tran_ref: string | null;
+  created_at: string;
+  customer: unknown; // was any
+  shipping: unknown; // was any
+};
 
 const STATUS_OPTIONS = [
   "PENDING_PAYMENT",
@@ -16,8 +39,6 @@ const STATUS_OPTIONS = [
   "PAID_COD",
 ] as const;
 
-type OrderStatus = (typeof STATUS_OPTIONS)[number];
-
 const STATUS_AR: Record<string, string> = {
   PENDING_PAYMENT: "بانتظار الدفع",
   PAID: "مدفوع",
@@ -30,52 +51,9 @@ const STATUS_AR: Record<string, string> = {
   PAID_COD: "مدفوع (COD)",
 };
 
-type CustomerInfo = {
-  name: string | null;
-  phone: string | null;
-};
+type UpdateStatusResponse = { ok?: boolean; error?: string };
 
-type ShippingInfo = {
-  address_line1?: string | null;
-  city?: string | null;
-  country?: string | null;
-};
-
-export type Row = {
-  id: number;
-  cart_id: string;
-  status: string; // keep flexible for legacy/unknown statuses
-  amount: string | number;
-  currency: string;
-  locale: string;
-  payment_method: string;
-  paytabs_tran_ref: string | null;
-  created_at: string;
-  customer: CustomerInfo | null;
-  shipping: ShippingInfo | null;
-};
-
-type JsonRecord = Record<string, unknown>;
-function isRecord(v: unknown): v is JsonRecord {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-
-function getStr(v: unknown): string {
-  return typeof v === "string" ? v : String(v ?? "");
-}
-
-function getCustomer(v: unknown): CustomerInfo | null {
-  if (!isRecord(v)) return null;
-  const name = typeof v.name === "string" ? v.name : null;
-  const phone = typeof v.phone === "string" ? v.phone : null;
-  return { name, phone };
-}
-
-function toStatus(v: string): OrderStatus | null {
-  return (STATUS_OPTIONS as readonly string[]).includes(v) ? (v as OrderStatus) : null;
-}
-
-export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]; lang: StaffLang }) {
+export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]; lang: "en" | "ar" }) {
   const [rows, setRows] = useState<Row[]>(Array.isArray(initialRows) ? initialRows : []);
   const [q, setQ] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -117,23 +95,19 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
     if (!s) return rows;
 
     return rows.filter((r) => {
-      const customer = getCustomer(r.customer);
-      const name = (customer?.name || "").toLowerCase();
-      const phone = (customer?.phone || "").toLowerCase();
+      const name = readString(r.customer, "name").toLowerCase();
+      const phone = readString(r.customer, "phone").toLowerCase();
 
       return (
-        String(r.cart_id || "").toLowerCase().includes(s) ||
-        String(r.status || "").toLowerCase().includes(s) ||
+        String(r.cart_id).toLowerCase().includes(s) ||
+        String(r.status).toLowerCase().includes(s) ||
         name.includes(s) ||
         phone.includes(s)
       );
     });
   }, [rows, q]);
 
-  async function updateStatus(id: number, nextStatusRaw: string) {
-    const next = toStatus(nextStatusRaw);
-    if (!next) return; // ignore unknown values
-
+  async function updateStatus(id: number, nextStatus: string) {
     setErr(null);
     setBusyId(id);
 
@@ -141,18 +115,18 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
       const res = await fetch("/api/admin/order-status", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id, status: next }),
+        body: JSON.stringify({ id, status: nextStatus }),
       });
 
-      const data: unknown = await res.json().catch(() => ({}));
-      const ok = isRecord(data) && data.ok === true;
-      const errorMsg = isRecord(data) ? getStr(data.error) : "";
+      const raw: unknown = await res.json().catch(() => null);
+      const data: UpdateStatusResponse =
+        isRecord(raw) ? (raw as UpdateStatusResponse) : {};
 
-      if (!res.ok || !ok) {
-        throw new Error(errorMsg || "Update failed");
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "Update failed");
       }
 
-      setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: next } : r)));
+      setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: nextStatus } : r)));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setErr(msg || "Error");
@@ -163,7 +137,12 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
 
   return (
     <div className="admin-grid">
-      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={L.search} className="admin-input" />
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder={L.search}
+        className="admin-input"
+      />
 
       {err && <p style={{ color: "crimson", margin: 0 }}>{err}</p>}
 
@@ -184,12 +163,12 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
 
           <tbody>
             {filtered.map((r) => {
-              const customer = getCustomer(r.customer);
-              const customerText = `${customer?.name || "-"} / ${customer?.phone || "-"}`;
+              const cname = readString(r.customer, "name") || "-";
+              const cphone = readString(r.customer, "phone") || "-";
+              const customer = `${cname} / ${cphone}`;
 
               const n = Number(r.amount);
-              const amountNum = Number.isFinite(n) ? n : 0;
-              const amountText = `${amountNum.toFixed(2)} ${r.currency || ""}`;
+              const amount = `${Number.isFinite(n) ? n.toFixed(2) : "0.00"} ${r.currency}`;
 
               return (
                 <tr key={r.id}>
@@ -209,12 +188,14 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                       </div>
                     ) : null}
                   </td>
-                  <td className="ltr">{amountText}</td>
-                  <td>{customerText}</td>
-                  <td style={{ fontSize: 12, opacity: 0.8 }}>{new Date(r.created_at).toLocaleString()}</td>
+                  <td className="ltr">{amount}</td>
+                  <td>{customer}</td>
+                  <td style={{ fontSize: 12, opacity: 0.8 }}>
+                    {new Date(r.created_at).toLocaleString()}
+                  </td>
                   <td>
                     <select
-                      defaultValue={String(r.status)}
+                      value={r.status}
                       disabled={busyId === r.id}
                       onChange={(e) => updateStatus(r.id, e.target.value)}
                       className="admin-select"
