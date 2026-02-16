@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import { CART_LOCAL_KEY } from "@/lib/cartStore";
 
 type Locale = "en" | "ar";
@@ -10,10 +11,14 @@ function t(locale: Locale, en: string, ar: string) {
 
 type CartLocalItem = { slug: string; qty: number };
 
+type JsonRecord = Record<string, unknown>;
+function isRecord(v: unknown): v is JsonRecord {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
 function isCartLocalItem(v: unknown): v is CartLocalItem {
-  if (typeof v !== "object" || v === null) return false;
-  const o = v as Record<string, unknown>;
-  return typeof o.slug === "string" && typeof o.qty === "number" && Number.isFinite(o.qty);
+  if (!isRecord(v)) return false;
+  return typeof v.slug === "string" && typeof v.qty === "number" && Number.isFinite(v.qty);
 }
 
 function readLocalCart(): CartLocalItem[] {
@@ -32,23 +37,9 @@ function readLocalCart(): CartLocalItem[] {
 
 type SignupResponse = { ok?: boolean; error?: string };
 
-export default function SignupPage(props: { params: Promise<{ locale: string }> }) {
-  const [locale, setLocale] = useState<Locale>("en");
-
-  useEffect(() => {
-    let alive = true;
-    props.params
-      .then((p) => {
-        if (!alive) return;
-        setLocale(p?.locale === "ar" ? "ar" : "en");
-      })
-      .catch(() => {
-        // keep default "en"
-      });
-    return () => {
-      alive = false;
-    };
-  }, [props.params]);
+export default function SignupPage() {
+  const p = useParams<{ locale?: string }>();
+  const locale: Locale = p?.locale === "ar" ? "ar" : "en";
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -96,8 +87,8 @@ export default function SignupPage(props: { params: Promise<{ locale: string }> 
       }),
     });
 
-    const data: unknown = await res.json().catch(() => ({}));
-    const d: SignupResponse = typeof data === "object" && data !== null ? (data as SignupResponse) : {};
+    const raw: unknown = await res.json().catch(() => null);
+    const d: SignupResponse = isRecord(raw) ? (raw as SignupResponse) : {};
 
     if (!res.ok || !d.ok) {
       setBusy(false);
@@ -152,7 +143,11 @@ export default function SignupPage(props: { params: Promise<{ locale: string }> 
 
         {error ? <p style={{ color: "crimson", marginTop: 10 }}>{error}</p> : null}
 
-        <button className={"btn" + (!can || busy ? " btn-disabled" : "")} disabled={!can || busy} style={{ marginTop: 12 }}>
+        <button
+          className={"btn" + (!can || busy ? " btn-disabled" : "")}
+          disabled={!can || busy}
+          style={{ marginTop: 12 }}
+        >
           {busy ? t(locale, "Please wait…", "يرجى الانتظار…") : t(locale, "Create account", "إنشاء الحساب")}
         </button>
 
