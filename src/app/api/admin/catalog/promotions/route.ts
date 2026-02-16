@@ -7,7 +7,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function unauthorized(req: Request, status: number, error: string) {
-  // If this came from a browser form submit, redirect to login
   const accept = req.headers.get("accept") || "";
   const isBrowser = accept.includes("text/html");
   if (isBrowser) {
@@ -19,10 +18,18 @@ function unauthorized(req: Request, status: number, error: string) {
 
 function readCategoryKeys(form: FormData): string[] | null {
   const raw = form.getAll("category_keys").map((v) => String(v || "").trim()).filter(Boolean);
-  // "__ALL__" means apply promo to all categories (store null)
   if (!raw.length || raw.includes("__ALL__")) return null;
-  // De-dupe
   return Array.from(new Set(raw));
+}
+
+
+function readProductSlugs(raw: string): string[] | null {
+  const values = raw
+    .split(",")
+    .map((v) => v.trim().toLowerCase())
+    .filter(Boolean);
+  if (!values.length) return null;
+  return Array.from(new Set(values));
 }
 
 export async function POST(req: Request) {
@@ -34,11 +41,12 @@ export async function POST(req: Request) {
   const action = String(form.get("action") || "create");
 
   if (action === "create") {
-    const code = String(form.get("code") || "").trim().toUpperCase();
+    const promoKind = String(form.get("promo_kind") || "CODE").toUpperCase() === "AUTO" ? "AUTO" : "CODE";
+    const codeRaw = String(form.get("code") || "").trim().toUpperCase();
+    const code = promoKind === "CODE" ? codeRaw : null;
     const titleEn = String(form.get("title_en") || "").trim();
     const titleAr = String(form.get("title_ar") || "").trim();
-    const discountType =
-      String(form.get("discount_type") || "PERCENT").toUpperCase() === "FIXED" ? "FIXED" : "PERCENT";
+    const discountType = String(form.get("discount_type") || "PERCENT").toUpperCase() === "FIXED" ? "FIXED" : "PERCENT";
     const discountValue = Number(form.get("discount_value") || 0);
     const startsAt = String(form.get("starts_at") || "").trim() || null;
     const endsAt = String(form.get("ends_at") || "").trim() || null;
@@ -46,28 +54,50 @@ export async function POST(req: Request) {
     const usageLimitRaw = String(form.get("usage_limit") || "").trim();
     const usageLimit = usageLimitRaw ? Number(usageLimitRaw) : null;
 
+    const minOrderRaw = String(form.get("min_order_jod") || "").trim();
+    const minOrderJod = minOrderRaw ? Number(minOrderRaw) : null;
+
+    const priority = Number(form.get("priority") || 0);
+    const productSlugsRaw = String(form.get("product_slugs") || "").trim();
+    const productSlugs = readProductSlugs(productSlugsRaw);
+
     const isActive = String(form.get("is_active") || "") === "on";
     const categoryKeys = readCategoryKeys(form);
 
-    if (!code || !titleEn || !titleAr || !Number.isFinite(discountValue) || discountValue <= 0) {
+    if (!titleEn || !titleAr || !Number.isFinite(discountValue) || discountValue <= 0) {
       return NextResponse.redirect(new URL("/admin/catalog?error=invalid-promo", req.url));
     }
 
+    if (promoKind === "CODE" && !code) {
+      return NextResponse.redirect(new URL("/admin/catalog?error=missing-code", req.url));
+    }
+
+    if (minOrderRaw && (!Number.isFinite(minOrderJod) || Number(minOrderJod) < 0)) {
+      return NextResponse.redirect(new URL("/admin/catalog?error=invalid-min-order", req.url));
+    }
+
     await db.query(
-      `insert into promotions (code, title_en, title_ar, discount_type, discount_value, starts_at, ends_at, usage_limit, is_active, category_keys)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-       on conflict (code) do update
-         set title_en=excluded.title_en,
+      `insert into promotions
+        (promo_kind, code, title_en, title_ar, discount_type, discount_value, starts_at, ends_at, usage_limit, min_order_jod, priority, product_slugs, is_active, category_keys)
+       values
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+       on conflict (code) where promo_kind='CODE'
+       do update
+         set promo_kind=excluded.promo_kind,
+             title_en=excluded.title_en,
              title_ar=excluded.title_ar,
              discount_type=excluded.discount_type,
              discount_value=excluded.discount_value,
              starts_at=excluded.starts_at,
              ends_at=excluded.ends_at,
              usage_limit=excluded.usage_limit,
+             min_order_jod=excluded.min_order_jod,
+             priority=excluded.priority,
+             product_slugs=excluded.product_slugs,
              is_active=excluded.is_active,
              category_keys=excluded.category_keys,
              updated_at=now()`,
-      [code, titleEn, titleAr, discountType, discountValue, startsAt, endsAt, usageLimit, isActive, categoryKeys]
+      [promoKind, code, titleEn, titleAr, discountType, discountValue, startsAt, endsAt, usageLimit, minOrderJod, Number.isFinite(priority) ? Math.trunc(priority) : 0, productSlugs, isActive, categoryKeys]
     );
   }
 
@@ -76,6 +106,13 @@ export async function POST(req: Request) {
     const isActive = String(form.get("is_active") || "") === "on";
     if (id > 0) {
       await db.query(`update promotions set is_active=$2, updated_at=now() where id=$1`, [id, isActive]);
+    }
+  }
+
+  if (action === "delete") {
+    const id = Number(form.get("id") || 0);
+    if (id > 0) {
+      await db.query(`delete from promotions where id=$1`, [id]);
     }
   }
 

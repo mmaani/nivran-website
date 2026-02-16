@@ -23,6 +23,9 @@ type ProductRow = {
   category_key: string;
   inventory_qty: number;
   image_id: number | null;
+  promo_type: "PERCENT" | "FIXED" | null;
+  promo_value: string | null;
+  discounted_price_jod: string | null;
 };
 
 const FALLBACK_CATS: Record<string, { en: string; ar: string }> = {
@@ -37,6 +40,13 @@ function fallbackFromSlug(slug: string) {
   const s = String(slug || "").toLowerCase();
   const family = s.includes("noir") ? "noir" : s.includes("bloom") ? "bloom" : "calm";
   return `/products/${family}-1.svg`;
+}
+
+function promoBadgeText(locale: "en" | "ar", promoType: string | null, promoValue: number): string {
+  if (promoType === "PERCENT") {
+    return locale === "ar" ? `خصم ${promoValue}%` : `-${promoValue}%`;
+  }
+  return locale === "ar" ? `وفر ${promoValue.toFixed(2)} د.أ` : `Save ${promoValue.toFixed(2)} JOD`;
 }
 
 export const runtime = "nodejs";
@@ -72,22 +82,45 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
               where pi.product_id=p.id
               order by pi."position" asc, pi.id asc
               limit 1
-            ) as image_id
+            ) as image_id,
+            bp.discount_type as promo_type,
+            bp.discount_value::text as promo_value,
+            (
+              case
+                when bp.id is null then null
+                when bp.discount_type='PERCENT' then greatest(0, p.price_jod - (p.price_jod * (bp.discount_value / 100)))
+                when bp.discount_type='FIXED' then greatest(0, p.price_jod - bp.discount_value)
+                else null
+              end
+            )::text as discounted_price_jod
        from products p
+       left join lateral (
+         select pr.id, pr.discount_type, pr.discount_value, pr.priority
+         from promotions pr
+         where pr.promo_kind='AUTO'
+           and pr.is_active=true
+           and (pr.starts_at is null or pr.starts_at <= now())
+           and (pr.ends_at is null or pr.ends_at >= now())
+           and (pr.category_keys is null or array_length(pr.category_keys, 1) is null or p.category_key = any(pr.category_keys))
+           and (pr.product_slugs is null or array_length(pr.product_slugs, 1) is null or p.slug = any(pr.product_slugs))
+           and (pr.min_order_jod is null or pr.min_order_jod <= p.price_jod)
+         order by pr.priority desc,
+                  case
+                    when pr.discount_type='PERCENT' then (p.price_jod * (pr.discount_value / 100))
+                    when pr.discount_type='FIXED' then pr.discount_value
+                    else 0
+                  end desc,
+                  pr.created_at desc
+         limit 1
+       ) bp on true
       where p.is_active=true
       order by p.created_at desc
       limit 500`
   );
 
   const cats: Array<{ key: string; label: string }> = categoriesRes.rows.length
-    ? categoriesRes.rows.map((c) => ({
-        key: c.key,
-        label: locale === "ar" ? c.name_ar : c.name_en,
-      }))
-    : Object.entries(FALLBACK_CATS).map(([key, v]) => ({
-        key,
-        label: v[locale],
-      }));
+    ? categoriesRes.rows.map((c) => ({ key: c.key, label: locale === "ar" ? c.name_ar : c.name_en }))
+    : Object.entries(FALLBACK_CATS).map(([key, v]) => ({ key, label: v[locale] }));
 
   const catLabel = (key: string) => {
     const found = categoriesRes.rows.find((c) => c.key === key);
@@ -117,6 +150,9 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
           const name = isAr ? p.name_ar : p.name_en;
           const desc = isAr ? p.description_ar : p.description_en;
           const price = Number(p.price_jod || 0);
+          const discounted = p.discounted_price_jod != null ? Number(p.discounted_price_jod) : null;
+          const promoValue = Number(p.promo_value || 0);
+          const hasPromo = discounted != null && discounted < price;
           const outOfStock = Number(p.inventory_qty || 0) <= 0;
 
           const apiSrc = p.image_id ? `/api/catalog/product-image/${p.image_id}` : "";
@@ -149,13 +185,39 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
                   style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
                   loading="lazy"
                 />
+                {hasPromo ? (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: 10,
+                      insetInlineStart: 10,
+                      background: "linear-gradient(135deg, #141414, #2a2622)",
+                      color: "#fff",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      padding: "6px 10px",
+                      borderRadius: 999,
+                    }}
+                  >
+                    {promoBadgeText(locale, p.promo_type, promoValue)}
+                  </div>
+                ) : null}
               </div>
 
               <h3 style={{ margin: "0 0 .35rem" }}>{name}</h3>
               {desc ? <p className="muted">{desc}</p> : null}
 
               <p>
-                <strong>{price.toFixed(2)} JOD</strong>
+                {hasPromo ? (
+                  <>
+                    <span style={{ textDecoration: "line-through", opacity: 0.7, marginInlineEnd: 8 }}>
+                      {price.toFixed(2)} JOD
+                    </span>
+                    <strong>{discounted.toFixed(2)} JOD</strong>
+                  </>
+                ) : (
+                  <strong>{price.toFixed(2)} JOD</strong>
+                )}
               </p>
 
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
@@ -167,14 +229,12 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
                   locale={locale}
                   slug={p.slug}
                   name={name}
-                  priceJod={price}
+                  priceJod={hasPromo ? discounted ?? price : price}
                   label={outOfStock ? (isAr ? "غير متوفر" : "Out of stock") : (isAr ? "أضف إلى السلة" : "Add to cart")}
                   addedLabel={isAr ? "تمت الإضافة ✓" : "Added ✓"}
                   updatedLabel={isAr ? "تم التحديث ✓" : "Updated ✓"}
                   className={"btn btn-outline" + (outOfStock ? " btn-disabled" : "")}
                   disabled={outOfStock}
-                  minQty={1}
-                  maxQty={99}
                 />
               </div>
             </article>
@@ -183,7 +243,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
       </div>
 
       {productsRes.rows.length === 0 ? (
-        <p className="muted" style={{ marginTop: 16 }}>
+        <p className="muted" style={{ marginTop: 14 }}>
           {isAr ? "لا توجد منتجات بعد. أضف المنتجات من لوحة الإدارة." : "No products yet. Add products from Admin."}
         </p>
       ) : null}

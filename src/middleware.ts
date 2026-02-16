@@ -4,7 +4,11 @@ export function adminMiddleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
 
   const adminToken = process.env.ADMIN_TOKEN || "";
-  const cookieToken = req.cookies.get("admin_token")?.value || req.cookies.get("nivran_admin_token")?.value || "";
+  const cookieToken =
+    req.cookies.get("admin_token")?.value ||
+    req.cookies.get("nivran_admin_token")?.value ||
+    req.cookies.get("admin_token_client")?.value ||
+    "";
 
   const isAdminRoute = path.startsWith("/admin");
   const isAdminApi = path.startsWith("/api/admin");
