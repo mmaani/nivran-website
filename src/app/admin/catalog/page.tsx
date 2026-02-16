@@ -30,7 +30,8 @@ type ProductRow = {
 
 type PromoRow = {
   id: number;
-  code: string;
+  promo_kind: "AUTO" | "CODE" | string;
+  code: string | null;
   title_en: string;
   title_ar: string;
   discount_type: "PERCENT" | "FIXED" | string;
@@ -79,7 +80,7 @@ export default async function AdminCatalogPage() {
   );
 
   const promosRes = await db.query<PromoRow>(
-    `select id, code, title_en, title_ar, discount_type, discount_value::text,
+    `select id, promo_kind, code, title_en, title_ar, discount_type, discount_value::text,
             is_active, category_keys, usage_limit, used_count, min_order_jod::text
        from promotions
       order by created_at desc`
@@ -111,6 +112,9 @@ export default async function AdminCatalogPage() {
         promoCats: "فئات العرض",
         promoUsage: "الاستخدام",
         promoMin: "حد أدنى للطلب",
+        promoType: "نوع الخصم",
+        autoPromo: "تلقائي",
+        codePromo: "كوبون",
       }
     : {
         title: "Catalog",
@@ -137,6 +141,9 @@ export default async function AdminCatalogPage() {
         promoCats: "Promo categories",
         promoUsage: "Usage",
         promoMin: "Min order",
+        promoType: "Type",
+        autoPromo: "Automatic",
+        codePromo: "Promo code",
       };
 
   const byKey = new Map(categoriesRes.rows.map((c) => [c.key, c]));
@@ -237,7 +244,11 @@ export default async function AdminCatalogPage() {
         <form action="/api/admin/catalog/promotions" method="post" className={styles.adminGrid}>
           <input type="hidden" name="action" value="create" />
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
-            <input name="code" required placeholder="NIVRAN10" className={`${styles.adminInput} ${styles.ltr}`} />
+            <select name="promo_kind" defaultValue="CODE" className={styles.adminSelect}>
+              <option value="CODE">{L.codePromo}</option>
+              <option value="AUTO">{L.autoPromo}</option>
+            </select>
+            <input name="code" placeholder="NIVRAN10 (for promo code type)" className={`${styles.adminInput} ${styles.ltr}`} />
             <select name="discount_type" defaultValue="PERCENT" className={styles.adminSelect}>
               <option value="PERCENT">{L.percent}</option>
               <option value="FIXED">{L.fixed}</option>
@@ -279,7 +290,7 @@ export default async function AdminCatalogPage() {
         <ul style={{ margin: 0, paddingInlineStart: 18 }}>
           {promosRes.rows.map((r) => (
             <li key={r.id} style={{ marginBottom: 12 }}>
-              <strong className={styles.ltr}>{r.code}</strong> — <span className={styles.ltr}>{r.discount_type === "PERCENT" ? `${r.discount_value}%` : `${r.discount_value} JOD`}</span>
+              <strong className={styles.ltr}>{r.code || "(AUTO)"}</strong> — <span className={styles.ltr}>{r.discount_type === "PERCENT" ? `${r.discount_value}%` : `${r.discount_value} JOD`}</span>
               <div style={{ fontSize: 12, opacity: 0.82, marginTop: 4 }}>
                 {isAr ? r.title_ar : r.title_en}
               </div>
@@ -287,7 +298,7 @@ export default async function AdminCatalogPage() {
                 {L.promoCats}: {!r.category_keys || r.category_keys.length === 0 ? L.allCats : r.category_keys.join(", ")}
               </div>
               <div style={{ fontSize: 12, opacity: 0.82 }}>
-                {L.promoUsage}: {r.used_count || 0}{r.usage_limit ? ` / ${r.usage_limit}` : ""} • {L.promoMin}: {r.min_order_jod || "0"} JOD
+                {L.promoType}: {String(r.promo_kind || "CODE").toUpperCase() === "AUTO" ? L.autoPromo : L.codePromo} • {L.promoUsage}: {r.used_count || 0}{r.usage_limit ? ` / ${r.usage_limit}` : ""} • {L.promoMin}: {r.min_order_jod || "0"} JOD
               </div>
               <form action="/api/admin/catalog/promotions" method="post" style={{ marginTop: 8 }}>
                 <input type="hidden" name="action" value="toggle" />
@@ -296,6 +307,11 @@ export default async function AdminCatalogPage() {
                   <input type="checkbox" name="is_active" defaultChecked={r.is_active} /> {L.active}
                 </label>
                 <button className={styles.adminBtn} type="submit" style={{ marginTop: 6 }}>{L.update}</button>
+              </form>
+              <form action="/api/admin/catalog/promotions" method="post" style={{ marginTop: 6 }}>
+                <input type="hidden" name="action" value="delete" />
+                <input type="hidden" name="id" value={r.id} />
+                <button className={styles.adminBtn} type="submit">{L.del}</button>
               </form>
             </li>
           ))}

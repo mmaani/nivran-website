@@ -5,7 +5,11 @@ import { hasAllColumns, hasColumn } from "@/lib/dbSchema";
 import { ensureOrdersTables } from "@/lib/orders";
 import { ensureCatalogTables } from "@/lib/catalog";
 import { getCustomerIdFromRequest } from "@/lib/identity";
-import { consumePromotionUsage, evaluatePromoCodeForLines } from "@/lib/promotions";
+import {
+  consumePromotionUsage,
+  evaluateAutomaticPromotionForLines,
+  evaluatePromoCodeForLines,
+} from "@/lib/promotions";
 
 type PaymentMethod = "PAYTABS" | "COD";
 
@@ -72,6 +76,8 @@ export async function POST(req: NextRequest) {
 
   const locale = body.locale === "ar" ? "ar" : "en";
   const promoCode = String(body.promoCode || "").trim().toUpperCase();
+  const discountMode = String(body.discountMode || "NONE").toUpperCase();
+  const discountSource = discountMode === "AUTO" ? "AUTO" : discountMode === "CODE" ? "CODE" : null;
 
   const paymentMethod: PaymentMethod =
     String(body.paymentMethod || body.mode || "").toUpperCase() === "COD" ? "COD" : "PAYTABS";
@@ -107,6 +113,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: locale === "ar" ? "لا توجد عناصر في السلة." : "No items" }, { status: 400 });
   }
 
+  if (discountSource === "CODE" && !promoCode) {
+    return NextResponse.json({ ok: false, error: locale === "ar" ? "أدخل كود الخصم" : "Promo code is required" }, { status: 400 });
+  }
+
   const slugs = Array.from(new Set(items.map((i) => i.slug)));
   const products = await fetchProductsBySlugs(slugs);
 
@@ -137,24 +147,30 @@ export async function POST(req: NextRequest) {
   let discount = 0;
   let subtotalAfterDiscount = subtotalBeforeDiscount;
   let promotionId: number | null = null;
-  let promotionError = "";
+  let finalPromoCode: string | null = null;
 
-  if (promoCode) {
-    const promoEval = await evaluatePromoCodeForLines(db, promoCode, lines, subtotalBeforeDiscount);
-    if (!promoEval.ok) {
-      promotionError =
-        locale === "ar"
-          ? "كود الخصم غير صالح أو غير متاح لهذا الطلب"
-          : "Promo code is invalid or not eligible for this order";
-    } else {
-      discount = promoEval.discountJod;
-      subtotalAfterDiscount = promoEval.subtotalAfterDiscountJod;
-      promotionId = promoEval.promotionId;
+  if (discountSource === "AUTO") {
+    const autoEval = await evaluateAutomaticPromotionForLines(db, lines, subtotalBeforeDiscount);
+    if (autoEval.ok) {
+      discount = autoEval.discountJod;
+      subtotalAfterDiscount = autoEval.subtotalAfterDiscountJod;
+      promotionId = autoEval.promotionId;
+      finalPromoCode = null;
     }
   }
 
-  if (promotionError) {
-    return NextResponse.json({ ok: false, error: promotionError }, { status: 400 });
+  if (discountSource === "CODE") {
+    const codeEval = await evaluatePromoCodeForLines(db, promoCode, lines, subtotalBeforeDiscount);
+    if (!codeEval.ok) {
+      return NextResponse.json(
+        { ok: false, error: locale === "ar" ? "كود الخصم غير صالح أو غير متاح" : "Promo code is invalid or not eligible" },
+        { status: 400 }
+      );
+    }
+    discount = codeEval.discountJod;
+    subtotalAfterDiscount = codeEval.subtotalAfterDiscountJod;
+    promotionId = codeEval.promotionId;
+    finalPromoCode = codeEval.promoCode || promoCode;
   }
 
   const shippingJod = lines.length ? 3.5 : 0;
@@ -188,20 +204,22 @@ export async function POST(req: NextRequest) {
     "total_jod",
     "promo_code",
     "promotion_id",
+    "discount_source",
   ]);
   const hasCustomerId = await hasColumn("orders", "customer_id");
 
-  const insertedCartId = await db.withTransaction(async (trx) => {
-    if (promotionId) {
-      const consumed = await consumePromotionUsage(trx, promotionId);
-      if (!consumed) {
-        throw new Error(locale === "ar" ? "كود الخصم تجاوز حد الاستخدام" : "Promo code usage limit reached");
+  const insertedCartId = await db
+    .withTransaction(async (trx) => {
+      if (promotionId) {
+        const consumed = await consumePromotionUsage(trx, promotionId);
+        if (!consumed) {
+          throw new Error(locale === "ar" ? "كود الخصم تجاوز حد الاستخدام" : "Promo code usage limit reached");
+        }
       }
-    }
 
-    const r = hasExtendedOrderColumns
-      ? await trx.query<{ cart_id: string }>(
-          `
+      const r = hasExtendedOrderColumns
+        ? await trx.query<{ cart_id: string }>(
+            `
           insert into orders (
             cart_id,
             locale,
@@ -224,44 +242,46 @@ export async function POST(req: NextRequest) {
             shipping_jod,
             total_jod,
             promo_code,
-            promotion_id
+            promotion_id,
+            discount_source
           )
           values (
             $1,$2,$3,$4,$5,$6,
             ${hasCustomerId ? "$7," : ""}
             $8,$9,$10,$11,$12,$13,$14,
             $15::jsonb,
-            $16,$17,$18,$19,$20,$21,$22
+            $16,$17,$18,$19,$20,$21,$22,$23
           )
           returning cart_id
         `,
-          [
-            generatedCartId,
-            locale,
-            status,
-            totalJod,
-            "JOD",
-            paymentMethod,
-            ...(hasCustomerId ? [customerId ? Number(customerId) : null] : []),
-            name,
-            phone,
-            email,
-            city || null,
-            address,
-            country,
-            notes || null,
-            JSON.stringify(itemsJson),
-            subtotalBeforeDiscount,
-            discount,
-            subtotalAfterDiscount,
-            shippingJod,
-            totalJod,
-            promoCode || null,
-            promotionId,
-          ]
-        )
-      : await trx.query<{ cart_id: string }>(
-          `
+            [
+              generatedCartId,
+              locale,
+              status,
+              totalJod,
+              "JOD",
+              paymentMethod,
+              ...(hasCustomerId ? [customerId ? Number(customerId) : null] : []),
+              name,
+              phone,
+              email,
+              city || null,
+              address,
+              country,
+              notes || null,
+              JSON.stringify(itemsJson),
+              subtotalBeforeDiscount,
+              discount,
+              subtotalAfterDiscount,
+              shippingJod,
+              totalJod,
+              finalPromoCode,
+              promotionId,
+              discountSource,
+            ]
+          )
+        : await trx.query<{ cart_id: string }>(
+            `
           insert into orders (
             cart_id,
             locale,
@@ -282,26 +302,27 @@ export async function POST(req: NextRequest) {
           )
           returning cart_id
         `,
-          [
-            generatedCartId,
-            locale,
-            status,
-            totalJod,
-            "JOD",
-            paymentMethod,
-            ...(hasCustomerId ? [customerId ? Number(customerId) : null] : []),
-            name,
-            email,
-            JSON.stringify({ name, phone, email, promoCode: promoCode || null }),
-            JSON.stringify({ city, address, country, notes, items: itemsJson }),
-          ]
-        );
+            [
+              generatedCartId,
+              locale,
+              status,
+              totalJod,
+              "JOD",
+              paymentMethod,
+              ...(hasCustomerId ? [customerId ? Number(customerId) : null] : []),
+              name,
+              email,
+              JSON.stringify({ name, phone, email, promoCode: finalPromoCode, discountSource }),
+              JSON.stringify({ city, address, country, notes, items: itemsJson }),
+            ]
+          );
 
-    return r.rows?.[0]?.cart_id || generatedCartId;
-  }).catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : "Order create failed";
-    return NextResponse.json({ ok: false, error: message }, { status: 400 });
-  });
+      return r.rows?.[0]?.cart_id || generatedCartId;
+    })
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : "Order create failed";
+      return NextResponse.json({ ok: false, error: message }, { status: 400 });
+    });
 
   if (insertedCartId instanceof NextResponse) return insertedCartId;
 
@@ -317,13 +338,12 @@ export async function POST(req: NextRequest) {
         shippingJod,
         totalJod,
       },
-      promo: promoCode
-        ? {
-            code: promoCode,
-            applied: discount > 0,
-            discountJod: discount,
-          }
-        : null,
+      discount: {
+        source: discountSource,
+        code: finalPromoCode,
+        applied: discount > 0,
+        discountJod: discount,
+      },
     },
     { status: 200 }
   );

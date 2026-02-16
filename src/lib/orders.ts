@@ -44,6 +44,7 @@ export async function ensureOrdersTables() {
   await db.query(`alter table orders add column if not exists total_jod numeric(10,2)`);
   await db.query(`alter table orders add column if not exists promo_code text`);
   await db.query(`alter table orders add column if not exists promotion_id bigint`);
+  await db.query(`alter table orders add column if not exists discount_source text`);
   await db.query(`alter table orders add column if not exists payment_method text not null default 'PAYTABS'`);
   await db.query(`alter table orders add column if not exists customer_id bigint`);
   await db.query(`alter table orders add column if not exists paytabs_tran_ref text`);
@@ -52,6 +53,36 @@ export async function ensureOrdersTables() {
   await db.query(`alter table orders add column if not exists paytabs_response_status text`);
   await db.query(`alter table orders add column if not exists paytabs_response_message text`);
 
+
+  await db.query(`
+    do $$
+    begin
+      if not exists (
+        select 1 from pg_constraint where conname='orders_discount_source_chk'
+      ) then
+        alter table orders
+          add constraint orders_discount_source_chk
+          check (discount_source in ('AUTO','CODE') or discount_source is null);
+      end if;
+    end $$;
+  `);
+
+  await db.query(`
+    do $$
+    begin
+      if not exists (
+        select 1 from pg_constraint where conname='orders_single_discount_chk'
+      ) then
+        alter table orders
+          add constraint orders_single_discount_chk
+          check (
+            (discount_source is null and promo_code is null)
+            or (discount_source='AUTO' and promo_code is null)
+            or (discount_source='CODE' and promo_code is not null)
+          );
+      end if;
+    end $$;
+  `);
   // Keep amount/currency in sync for legacy readers.
   await db.query(`
     update orders
@@ -81,6 +112,7 @@ export async function ensureOrdersTables() {
   await db.query(`create index if not exists idx_orders_created_at on orders(created_at desc)`);
   await db.query(`create index if not exists idx_orders_paytabs_tran_ref on orders(paytabs_tran_ref)`);
   await db.query(`create index if not exists idx_orders_promo_code on orders(promo_code)`);
+  await db.query(`create index if not exists idx_orders_discount_source on orders(discount_source)`);
 
   await db.query(`create index if not exists idx_paytabs_callbacks_cart_id on paytabs_callbacks(cart_id)`);
   await db.query(`create index if not exists idx_paytabs_callbacks_tran_ref on paytabs_callbacks(tran_ref)`);

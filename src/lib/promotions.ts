@@ -10,7 +10,8 @@ export type PricedOrderLine = {
 
 type PromotionRow = {
   id: number;
-  code: string;
+  promo_kind: "AUTO" | "CODE" | string;
+  code: string | null;
   title_en: string | null;
   title_ar: string | null;
   discount_type: "PERCENT" | "FIXED" | string;
@@ -28,7 +29,8 @@ export type PromotionEvaluation =
   | {
       ok: true;
       promotionId: number;
-      promoCode: string;
+      promoCode: string | null;
+      promoKind: "AUTO" | "CODE";
       discountJod: number;
       eligibleSubtotalJod: number;
       subtotalAfterDiscountJod: number;
@@ -62,28 +64,16 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-export async function evaluatePromoCodeForLines(
-  dbx: DbExecutor,
-  promoCodeRaw: string,
+function parsePromoKind(value: unknown): "AUTO" | "CODE" {
+  return String(value || "").toUpperCase() === "AUTO" ? "AUTO" : "CODE";
+}
+
+function evaluatePromotionRow(
+  promo: PromotionRow,
   lines: PricedOrderLine[],
   subtotalJod: number,
-  now = new Date()
-): Promise<PromotionEvaluation> {
-  const promoCode = String(promoCodeRaw || "").trim().toUpperCase();
-  if (!promoCode) return { ok: false, code: "PROMO_INVALID", error: "Promo code is required" };
-
-  const promoRes = await dbx.query<PromotionRow>(
-    `select id, code, title_en, title_ar, discount_type, discount_value,
-            starts_at::text, ends_at::text,
-            usage_limit, used_count, is_active, category_keys, min_order_jod
-       from promotions
-      where code = $1
-      limit 1`,
-    [promoCode]
-  );
-
-  const promo = promoRes.rows[0];
-  if (!promo) return { ok: false, code: "PROMO_NOT_FOUND", error: "Promo code not found" };
+  now: Date
+): PromotionEvaluation {
   if (!promo.is_active) return { ok: false, code: "PROMO_INACTIVE", error: "Promo code is inactive" };
 
   const startsAt = promo.starts_at ? new Date(promo.starts_at) : null;
@@ -113,7 +103,11 @@ export async function evaluatePromoCodeForLines(
   const hasScopedCategories = keys.length > 0;
 
   const eligibleSubtotal = hasScopedCategories
-    ? round2(lines.filter((line) => line.category_key && keys.includes(line.category_key)).reduce((sum, line) => sum + toNum(line.line_total_jod), 0))
+    ? round2(
+        lines
+          .filter((line) => line.category_key && keys.includes(line.category_key))
+          .reduce((sum, line) => sum + toNum(line.line_total_jod), 0)
+      )
     : round2(subtotalJod);
 
   if (eligibleSubtotal <= 0) {
@@ -133,7 +127,8 @@ export async function evaluatePromoCodeForLines(
   return {
     ok: true,
     promotionId: promo.id,
-    promoCode,
+    promoCode: promo.code,
+    promoKind: parsePromoKind(promo.promo_kind),
     discountJod,
     eligibleSubtotalJod: eligibleSubtotal,
     subtotalAfterDiscountJod,
@@ -144,6 +139,61 @@ export async function evaluatePromoCodeForLines(
       titleAr: promo.title_ar,
     },
   };
+}
+
+export async function evaluatePromoCodeForLines(
+  dbx: DbExecutor,
+  promoCodeRaw: string,
+  lines: PricedOrderLine[],
+  subtotalJod: number,
+  now = new Date()
+): Promise<PromotionEvaluation> {
+  const promoCode = String(promoCodeRaw || "").trim().toUpperCase();
+  if (!promoCode) return { ok: false, code: "PROMO_INVALID", error: "Promo code is required" };
+
+  const promoRes = await dbx.query<PromotionRow>(
+    `select id, promo_kind, code, title_en, title_ar, discount_type, discount_value,
+            starts_at::text, ends_at::text,
+            usage_limit, used_count, is_active, category_keys, min_order_jod
+       from promotions
+      where code = $1 and promo_kind='CODE'
+      limit 1`,
+    [promoCode]
+  );
+
+  const promo = promoRes.rows[0];
+  if (!promo) return { ok: false, code: "PROMO_NOT_FOUND", error: "Promo code not found" };
+  return evaluatePromotionRow(promo, lines, subtotalJod, now);
+}
+
+export async function evaluateAutomaticPromotionForLines(
+  dbx: DbExecutor,
+  lines: PricedOrderLine[],
+  subtotalJod: number,
+  now = new Date()
+): Promise<PromotionEvaluation> {
+  const promoRes = await dbx.query<PromotionRow>(
+    `select id, promo_kind, code, title_en, title_ar, discount_type, discount_value,
+            starts_at::text, ends_at::text,
+            usage_limit, used_count, is_active, category_keys, min_order_jod
+       from promotions
+      where promo_kind='AUTO' and is_active=true
+      order by created_at desc
+      limit 200`
+  );
+
+  let best: PromotionEvaluation | null = null;
+
+  for (const promo of promoRes.rows) {
+    const evaluated = evaluatePromotionRow(promo, lines, subtotalJod, now);
+    if (!evaluated.ok) continue;
+    if (!best || (evaluated.ok && evaluated.discountJod > best.discountJod)) {
+      best = evaluated;
+    }
+  }
+
+  if (!best) return { ok: false, code: "PROMO_NOT_FOUND", error: "No automatic promotion applies" };
+  return best;
 }
 
 export async function consumePromotionUsage(dbx: DbExecutor, promotionId: number): Promise<boolean> {

@@ -6,9 +6,12 @@ import { clearLocalCart, readLocalCart, type CartItem } from "@/lib/cartStore";
 
 type Locale = "en" | "ar";
 type JsonObject = Record<string, unknown>;
+type DiscountMode = "NONE" | "AUTO" | "CODE";
 
 type PromoState = {
-  code: string;
+  mode: Exclude<DiscountMode, "NONE">;
+  code: string | null;
+  title: string;
   discountJod: number;
 };
 
@@ -56,7 +59,8 @@ export default function CheckoutClient() {
   const [notes, setNotes] = useState("");
 
   const [promoInput, setPromoInput] = useState("");
-  const [promo, setPromo] = useState<PromoState | null>(null);
+  const [discountMode, setDiscountMode] = useState<DiscountMode>("NONE");
+  const [selectedPromo, setSelectedPromo] = useState<PromoState | null>(null);
   const [promoBusy, setPromoBusy] = useState(false);
   const [promoMsg, setPromoMsg] = useState<string | null>(null);
 
@@ -64,6 +68,43 @@ export default function CheckoutClient() {
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const COPY = useMemo(
+    () => ({
+      title: isAr ? "الدفع" : "Checkout",
+      subtitle: isAr ? "أكمل البيانات لتأكيد طلبك والدفع بأمان." : "Complete your details to place your order securely.",
+      empty: isAr ? "لا توجد عناصر في السلة." : "Your cart is empty.",
+      backToShop: isAr ? "العودة للمتجر" : "Back to shop",
+      editCart: isAr ? "تعديل السلة" : "Edit cart",
+      loadingProduct: isAr ? "جارٍ تحميل المنتج..." : "Loading product...",
+      required: isAr ? "الاسم والهاتف والعنوان والبريد الإلكتروني مطلوبة" : "Name, phone, address, and email are required",
+      payCard: isAr ? "الدفع بالبطاقة" : "Pay by card",
+      cod: isAr ? "الدفع عند الاستلام" : "Cash on delivery",
+      orderSummary: isAr ? "ملخص الطلب" : "Order summary",
+      subtotal: isAr ? "المجموع الفرعي" : "Subtotal",
+      originalSubtotal: isAr ? "المجموع قبل الخصم" : "Original subtotal",
+      discount: isAr ? "الخصم" : "Discount",
+      shipping: isAr ? "الشحن" : "Shipping",
+      total: isAr ? "الإجمالي" : "Total",
+      fullName: isAr ? "الاسم الكامل" : "Full name",
+      phone: isAr ? "رقم الهاتف" : "Phone",
+      email: isAr ? "البريد الإلكتروني" : "Email",
+      city: isAr ? "المدينة" : "City",
+      address: isAr ? "العنوان" : "Address",
+      notes: isAr ? "ملاحظات" : "Notes",
+      placed: isAr ? "تم إنشاء الطلب." : "Order created.",
+      promoLabel: isAr ? "كود الخصم" : "Promo code",
+      promoPlaceholder: isAr ? "أدخل الكود" : "Enter code",
+      promoApply: isAr ? "تطبيق" : "Apply",
+      promoRemove: isAr ? "إزالة" : "Remove",
+      promoApplied: isAr ? "تم تطبيق الخصم" : "Promo applied",
+      autoPromo: isAr ? "عرض تلقائي" : "Automatic promotion",
+      useAutoPromo: isAr ? "تفعيل العرض التلقائي" : "Use automatic promotion",
+      removeAutoPromo: isAr ? "إلغاء العرض التلقائي" : "Remove automatic promotion",
+      oneDiscountRule: isAr ? "يمكنك استخدام نوع خصم واحد فقط (تلقائي أو كود)." : "Only one discount type can be used (automatic OR promo code).",
+    }),
+    [isAr]
+  );
 
   useEffect(() => {
     const cart = readLocalCart();
@@ -106,52 +147,50 @@ export default function CheckoutClient() {
   }, [buyNowSlug, isAr]);
 
   useEffect(() => {
-    if (!promo) return;
-    setPromo(null);
-    setPromoMsg(isAr ? "تمت إزالة كود الخصم بعد تعديل السلة. أعد التطبيق." : "Promo code was removed after cart update. Please apply again.");
-  }, [items, isAr, promo]);
+    if (!items.length) {
+      setDiscountMode("NONE");
+      setSelectedPromo(null);
+      return;
+    }
+
+    async function loadAutoPromo() {
+      const res = await fetch("/api/promotions/validate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "AUTO", locale, items: items.map((i) => ({ slug: i.slug, qty: i.qty })) }),
+      });
+
+      const data: unknown = await res.json().catch(() => null);
+      if (!res.ok || !isObject(data) || data.ok !== true || !isObject(data.promo)) {
+        if (discountMode === "AUTO") setDiscountMode("NONE");
+        if (selectedPromo?.mode === "AUTO") setSelectedPromo(null);
+        return;
+      }
+
+      const nextAuto: PromoState = {
+        mode: "AUTO",
+        code: null,
+        title: isAr ? toStr(data.promo.titleAr || data.promo.titleEn || COPY.autoPromo) : toStr(data.promo.titleEn || data.promo.titleAr || COPY.autoPromo),
+        discountJod: toNum(data.promo.discountJod),
+      };
+
+      if (discountMode !== "CODE") {
+        setSelectedPromo(nextAuto);
+        setDiscountMode("AUTO");
+      }
+    }
+
+    void loadAutoPromo();
+  }, [items, locale, isAr, discountMode, selectedPromo?.mode, COPY.autoPromo]);
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((sum, i) => sum + Number(i.priceJod || 0) * Number(i.qty || 1), 0);
-    const discount = promo ? Number(promo.discountJod || 0) : 0;
+    const discount = selectedPromo ? Number(selectedPromo.discountJod || 0) : 0;
     const subtotalAfterDiscount = Math.max(0, subtotal - discount);
     const shipping = items.length ? 3.5 : 0;
     const total = Number((subtotalAfterDiscount + shipping).toFixed(2));
-    const qty = items.reduce((sum, i) => sum + Number(i.qty || 1), 0);
-    return { subtotal, discount, subtotalAfterDiscount, shipping, total, qty };
-  }, [items, promo]);
-
-  const COPY = useMemo(
-    () => ({
-      title: isAr ? "الدفع" : "Checkout",
-      subtitle: isAr ? "أكمل البيانات لتأكيد طلبك والدفع بأمان." : "Complete your details to place your order securely.",
-      empty: isAr ? "لا توجد عناصر في السلة." : "Your cart is empty.",
-      backToShop: isAr ? "العودة للمتجر" : "Back to shop",
-      editCart: isAr ? "تعديل السلة" : "Edit cart",
-      loadingProduct: isAr ? "جارٍ تحميل المنتج..." : "Loading product...",
-      required: isAr ? "الاسم والهاتف والعنوان والبريد الإلكتروني مطلوبة" : "Name, phone, address, and email are required",
-      payCard: isAr ? "الدفع بالبطاقة" : "Pay by card",
-      cod: isAr ? "الدفع عند الاستلام" : "Cash on delivery",
-      orderSummary: isAr ? "ملخص الطلب" : "Order summary",
-      subtotal: isAr ? "المجموع الفرعي" : "Subtotal",
-      discount: isAr ? "الخصم" : "Discount",
-      shipping: isAr ? "الشحن" : "Shipping",
-      total: isAr ? "الإجمالي" : "Total",
-      fullName: isAr ? "الاسم الكامل" : "Full name",
-      phone: isAr ? "رقم الهاتف" : "Phone",
-      email: isAr ? "البريد الإلكتروني" : "Email",
-      city: isAr ? "المدينة" : "City",
-      address: isAr ? "العنوان" : "Address",
-      notes: isAr ? "ملاحظات" : "Notes",
-      placed: isAr ? "تم إنشاء الطلب." : "Order created.",
-      promoLabel: isAr ? "كود الخصم" : "Promo code",
-      promoPlaceholder: isAr ? "أدخل الكود" : "Enter code",
-      promoApply: isAr ? "تطبيق" : "Apply",
-      promoRemove: isAr ? "إزالة" : "Remove",
-      promoApplied: isAr ? "تم تطبيق الخصم" : "Promo applied",
-    }),
-    [isAr]
-  );
+    return { subtotal, discount, subtotalAfterDiscount, shipping, total };
+  }, [items, selectedPromo]);
 
   function validate() {
     if (!items.length) {
@@ -165,7 +204,7 @@ export default function CheckoutClient() {
     return true;
   }
 
-  async function applyPromo() {
+  async function applyPromoCode() {
     const code = promoInput.trim().toUpperCase();
     if (!code) return;
     setPromoBusy(true);
@@ -175,7 +214,7 @@ export default function CheckoutClient() {
       const res = await fetch("/api/promotions/validate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ promoCode: code, locale, items: items.map((i) => ({ slug: i.slug, qty: i.qty })) }),
+        body: JSON.stringify({ mode: "CODE", promoCode: code, locale, items: items.map((i) => ({ slug: i.slug, qty: i.qty })) }),
       });
       const data: unknown = await res.json().catch(() => null);
       if (!res.ok || !isObject(data) || data.ok !== true || !isObject(data.promo)) {
@@ -183,27 +222,51 @@ export default function CheckoutClient() {
         throw new Error(message);
       }
 
-      setPromo({ code, discountJod: toNum(data.promo.discountJod) });
+      setSelectedPromo({
+        mode: "CODE",
+        code,
+        title: isAr ? toStr(data.promo.titleAr || data.promo.titleEn || code) : toStr(data.promo.titleEn || data.promo.titleAr || code),
+        discountJod: toNum(data.promo.discountJod),
+      });
+      setDiscountMode("CODE");
       setPromoMsg(COPY.promoApplied);
     } catch (error: unknown) {
-      setPromo(null);
       setPromoMsg(errMsg(error));
     } finally {
       setPromoBusy(false);
     }
   }
 
-  function removePromo() {
-    setPromo(null);
-    setPromoMsg(null);
+  function removePromoCode() {
+    if (selectedPromo?.mode === "CODE") {
+      setSelectedPromo(null);
+      setDiscountMode("NONE");
+    }
     setPromoInput("");
+    setPromoMsg(null);
+  }
+
+  function toggleAutoPromo() {
+    if (discountMode === "CODE") {
+      setPromoMsg(COPY.oneDiscountRule);
+      return;
+    }
+
+    if (discountMode === "AUTO") {
+      setDiscountMode("NONE");
+      setSelectedPromo(null);
+      return;
+    }
+
+    setDiscountMode("AUTO");
   }
 
   async function createOrder(paymentMethod: "PAYTABS" | "COD") {
     const payload = {
       locale,
       paymentMethod,
-      promoCode: promo?.code || undefined,
+      discountMode,
+      promoCode: discountMode === "CODE" ? selectedPromo?.code || undefined : undefined,
       items: items.map((i) => ({ slug: i.slug, qty: i.qty })),
       customer: { name, phone, email },
       shipping: { city, address, country: "Jordan", notes },
@@ -255,7 +318,6 @@ export default function CheckoutClient() {
       });
 
       const data: unknown = await res.json().catch(() => null);
-
       const ok = isObject(data) && data.ok === true;
       if (!res.ok || !ok) {
         const msg = isObject(data) && typeof data.error === "string" ? data.error : "";
@@ -296,24 +358,16 @@ export default function CheckoutClient() {
 
   return (
     <div style={{ padding: "1.2rem 0" }}>
-      <h1 className="title" style={{ marginTop: 0 }}>
-        {COPY.title}
-      </h1>
-      <p className="lead" style={{ marginTop: 0 }}>
-        {COPY.subtitle}
-      </p>
+      <h1 className="title" style={{ marginTop: 0 }}>{COPY.title}</h1>
+      <p className="lead" style={{ marginTop: 0 }}>{COPY.subtitle}</p>
 
       {loadingBuyNow ? <p className="muted">{COPY.loadingProduct}</p> : null}
 
       {items.length === 0 ? (
         <div className="panel">
-          <p className="muted" style={{ margin: 0 }}>
-            {COPY.empty}
-          </p>
+          <p className="muted" style={{ margin: 0 }}>{COPY.empty}</p>
           <div style={{ marginTop: 12 }}>
-            <a className="btn btn-outline" href={`/${locale}/product`}>
-              {COPY.backToShop}
-            </a>
+            <a className="btn btn-outline" href={`/${locale}/product`}>{COPY.backToShop}</a>
           </div>
         </div>
       ) : (
@@ -330,21 +384,13 @@ export default function CheckoutClient() {
             {err && <p style={{ color: err === COPY.placed ? "seagreen" : "crimson", margin: 0 }}>{err}</p>}
 
             <div className="cta-row" style={{ marginTop: 12 }}>
-              <button className="btn primary" onClick={payByCard} disabled={loading}>
-                {COPY.payCard}
-              </button>
-              <button className="btn" onClick={cashOnDelivery} disabled={loading}>
-                {COPY.cod}
-              </button>
+              <button className="btn primary" onClick={payByCard} disabled={loading}>{COPY.payCard}</button>
+              <button className="btn" onClick={cashOnDelivery} disabled={loading}>{COPY.cod}</button>
             </div>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
-              <a className="btn btn-outline" href={`/${locale}/cart`}>
-                {COPY.editCart}
-              </a>
-              <a className="btn btn-outline" href={`/${locale}/product`}>
-                {COPY.backToShop}
-              </a>
+              <a className="btn btn-outline" href={`/${locale}/cart`}>{COPY.editCart}</a>
+              <a className="btn btn-outline" href={`/${locale}/product`}>{COPY.backToShop}</a>
             </div>
           </section>
 
@@ -356,12 +402,8 @@ export default function CheckoutClient() {
                 <div key={i.slug} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                   <div style={{ flex: 1 }}>
                     <strong>{i.name}</strong>
-                    <div className="muted" style={{ marginTop: 4 }}>
-                      {i.qty} × {Number(i.priceJod || 0).toFixed(2)} JOD
-                    </div>
-                    <div className="muted" style={{ marginTop: 2 }}>
-                      {i.slug}
-                    </div>
+                    <div className="muted" style={{ marginTop: 4 }}>{i.qty} × {Number(i.priceJod || 0).toFixed(2)} JOD</div>
+                    <div className="muted" style={{ marginTop: 2 }}>{i.slug}</div>
                   </div>
                   <div style={{ minWidth: 120, textAlign: "end" }}>
                     <strong>{(Number(i.priceJod || 0) * Number(i.qty || 1)).toFixed(2)} JOD</strong>
@@ -371,9 +413,14 @@ export default function CheckoutClient() {
             </div>
 
             <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-              <label htmlFor="promo-code" className="muted" style={{ fontSize: 13 }}>
-                {COPY.promoLabel}
-              </label>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span className="muted">{COPY.autoPromo}</span>
+                <button className="btn btn-outline" type="button" onClick={toggleAutoPromo} disabled={discountMode === "CODE"}>
+                  {discountMode === "AUTO" ? COPY.removeAutoPromo : COPY.useAutoPromo}
+                </button>
+              </div>
+
+              <label htmlFor="promo-code" className="muted" style={{ fontSize: 13 }}>{COPY.promoLabel}</label>
               <div style={{ display: "flex", gap: 8 }}>
                 <input
                   id="promo-code"
@@ -381,24 +428,24 @@ export default function CheckoutClient() {
                   value={promoInput}
                   onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
                   placeholder={COPY.promoPlaceholder}
+                  disabled={discountMode === "AUTO"}
                 />
-                <button className="btn btn-outline" type="button" disabled={promoBusy || !promoInput.trim()} onClick={applyPromo}>
+                <button className="btn btn-outline" type="button" disabled={promoBusy || !promoInput.trim() || discountMode === "AUTO"} onClick={applyPromoCode}>
                   {COPY.promoApply}
                 </button>
-                {promo ? (
-                  <button className="btn" type="button" onClick={removePromo}>
-                    {COPY.promoRemove}
-                  </button>
+                {selectedPromo?.mode === "CODE" ? (
+                  <button className="btn" type="button" onClick={removePromoCode}>{COPY.promoRemove}</button>
                 ) : null}
               </div>
               {promoMsg ? <p className="muted" style={{ margin: 0 }}>{promoMsg}</p> : null}
+              {selectedPromo ? <p className="muted" style={{ margin: 0 }}>{selectedPromo.title}</p> : null}
             </div>
 
             <hr style={{ margin: "14px 0", border: "none", borderTop: "1px solid #eee" }} />
 
             <div style={{ display: "grid", gap: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span className="muted">{COPY.subtotal}</span>
+                <span className="muted">{COPY.originalSubtotal}</span>
                 <strong>{totals.subtotal.toFixed(2)} JOD</strong>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
