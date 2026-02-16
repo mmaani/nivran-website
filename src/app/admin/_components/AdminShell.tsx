@@ -90,9 +90,9 @@ export default function AdminShell({
               <T en="Store" ar="المتجر" />
             </Link>
 
-            <a className="btn" href="/api/admin/logout">
+            <Link className="btn" href="/api/admin/logout">
               <T en="Logout" ar="تسجيل الخروج" />
-            </a>
+            </Link>
           </div>
         </header>
       ) : null}

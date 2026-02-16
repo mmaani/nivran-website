@@ -1,25 +1,36 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { readLocalCart } from "@/lib/cartStore";
+import { useMemo, useState } from "react";
+import { CART_LOCAL_KEY } from "@/lib/cartStore";
 
 type Locale = "en" | "ar";
 function t(locale: Locale, en: string, ar: string) {
   return locale === "ar" ? ar : en;
 }
 
-type JsonRecord = Record<string, unknown>;
-function isRecord(v: unknown): v is JsonRecord {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
+type CartLocalItem = { slug: string; qty: number };
+function isCartLocalItem(v: unknown): v is CartLocalItem {
+  if (typeof v !== "object" || v === null) return false;
+  const o = v as Record<string, unknown>;
+  return typeof o.slug === "string" && typeof o.qty === "number" && Number.isFinite(o.qty);
 }
 
-export default function SignupPage() {
-  const params = useParams<{ locale?: string }>();
-  const router = useRouter();
+function readLocalCart(): CartLocalItem[] {
+  try {
+    const raw = localStorage.getItem(CART_LOCAL_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isCartLocalItem).map((x) => ({ slug: x.slug, qty: Math.max(0, Math.floor(x.qty)) }));
+  } catch {
+    return [];
+  }
+}
 
-  const [locale, setLocale] = useState<Locale>("en");
+type SignupResponse = { ok?: boolean; error?: string };
+
+export default function SignupPage({ params }: { params: { locale: string } }) {
+  const locale: Locale = params.locale === "ar" ? "ar" : "en";
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -32,11 +43,6 @@ export default function SignupPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const loc = params?.locale === "ar" ? "ar" : "en";
-    setLocale(loc);
-  }, [params?.locale]);
-
   const can = useMemo(
     () => !!fullName.trim() && !!email.trim() && !!phone.trim() && !!addressLine1.trim() && !!password.trim(),
     [fullName, email, phone, addressLine1, password]
@@ -44,8 +50,6 @@ export default function SignupPage() {
 
   async function syncCartIfAny() {
     const items = readLocalCart();
-    if (!items.length) return;
-
     await fetch("/api/cart/sync", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -53,10 +57,9 @@ export default function SignupPage() {
     }).catch(() => {});
   }
 
-  async function submit(e: FormEvent<HTMLFormElement>) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!can || busy) return;
-
     setBusy(true);
     setError(null);
 
@@ -74,19 +77,17 @@ export default function SignupPage() {
       }),
     });
 
-    const data: unknown = await res.json().catch(() => null);
-    const ok = isRecord(data) && data.ok === true;
+    const data: unknown = await res.json().catch(() => ({}));
+    const d = (typeof data === "object" && data !== null ? (data as SignupResponse) : {}) as SignupResponse;
 
-    if (!res.ok || !ok) {
-      const apiError = isRecord(data) ? String(data.error ?? "") : "";
+    if (!res.ok || !d.ok) {
       setBusy(false);
-      setError(apiError || t(locale, "Signup failed.", "فشل إنشاء الحساب."));
+      setError(d.error || t(locale, "Signup failed.", "فشل إنشاء الحساب."));
       return;
     }
 
     await syncCartIfAny();
-    router.push(`/${locale}/account`);
-    router.refresh();
+    window.location.href = `/${locale}/account`;
   }
 
   return (
@@ -138,7 +139,7 @@ export default function SignupPage() {
 
         <p className="muted" style={{ marginTop: 12 }}>
           {t(locale, "Already have an account?", "لديك حساب؟")}{" "}
-          <Link href={`/${locale}/account/login`}>{t(locale, "Login", "تسجيل الدخول")}</Link>
+          <a href={`/${locale}/account/login`}>{t(locale, "Login", "تسجيل الدخول")}</a>
         </p>
       </form>
     </div>

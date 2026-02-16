@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import styles from "./page.module.css";
 
 export default function ProductImageGallery({
@@ -31,7 +32,7 @@ export default function ProductImageGallery({
   return (
     <div className={styles.gallery}>
       <div className={styles.mainFrame}>
-        <img
+        <Image
           src={current}
           alt={name}
           className={styles.mainImg}
@@ -41,6 +42,8 @@ export default function ProductImageGallery({
             el.dataset.fallbackApplied = "1";
             el.src = fallbackSrc;
           }}
+          fill
+          style={{ objectFit: "contain" }}
         />
 
         {canNav ? (
@@ -79,7 +82,7 @@ export default function ProductImageGallery({
               aria-label={`Image ${i + 1}`}
               aria-current={i === safeIdx ? "true" : "false"}
             >
-              <img src={u} alt={`${name} ${i + 1}`} className={styles.thumbImg} loading="lazy" />
+              <Image src={u} alt={`${name} ${i + 1}`} className={styles.thumbImg} loading="lazy" fill style={{ objectFit: "cover" }} />
             </button>
           ))}
         </div>

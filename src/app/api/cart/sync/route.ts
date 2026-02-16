@@ -1,16 +1,36 @@
 import { NextResponse } from "next/server";
-import { ensureCartTables, normalizeCartItems, mergeCartSum, replaceCart } from "@/lib/cartStore.server";
+import {
+  ensureCartTables,
+  normalizeCartItems,
+  mergeCartSum,
+  replaceCart,
+  getCart,
+} from "@/lib/cartStore.server";
 import { getCustomerIdFromRequest } from "@/lib/customerAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type Mode = "merge" | "replace";
+
+type JsonRecord = Record<string, unknown>;
+function isRecord(v: unknown): v is JsonRecord {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function parseMode(v: unknown): Mode {
+  const s = String(v ?? "merge").toLowerCase();
+  return s === "replace" ? "replace" : "merge";
+}
+
 export async function POST(req: Request) {
   const customerId = await getCustomerIdFromRequest(req);
 
-  const body = await req.json().catch(() => ({} as any));
-  const incoming = normalizeCartItems(body?.items);
-  const mode = String(body?.mode || "merge").toLowerCase(); // merge | replace
+  const raw: unknown = await req.json().catch(() => null);
+  const body: JsonRecord = isRecord(raw) ? raw : {};
+
+  const incoming = normalizeCartItems(body.items);
+  const mode = parseMode(body.mode);
 
   // Guest: do not store in DB, but return normalized cart (still 200)
   if (!customerId) {
@@ -23,8 +43,10 @@ export async function POST(req: Request) {
   await ensureCartTables();
 
   let nextItems = incoming;
+
   if (mode !== "replace") {
-    nextItems = await mergeCartSum(customerId, incoming);
+    const current = await getCart(customerId);
+    nextItems = mergeCartSum(current.items, incoming); // ✅ pass CartItem[]
   }
 
   await replaceCart(customerId, nextItems);

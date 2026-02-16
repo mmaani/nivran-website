@@ -1,48 +1,72 @@
-import crypto from "crypto";
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 import { db } from "@/lib/db";
-import * as identity from "@/lib/identity";
+import { ensureIdentityTables } from "@/lib/identity";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-function createResetTokenFallback() {
-  return crypto.randomBytes(32).toString("hex");
+type JsonRecord = Record<string, unknown>;
+function isRecord(v: unknown): v is JsonRecord {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function toEmail(v: unknown): string {
+  const s = String(v ?? "").trim().toLowerCase();
+  // minimal email sanity (don’t over-reject valid emails)
+  return s.includes("@") ? s : "";
+}
+
+function clampTtlMinutes(v: unknown): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 60;
+  return Math.max(5, Math.min(24 * 60, Math.floor(n)));
+}
+
+async function customerExists(email: string): Promise<boolean> {
+  const r = await db.query<{ ok: number }>(
+    `select 1 as ok from customers where lower(email)=lower($1) limit 1`,
+    [email]
+  );
+  return !!r.rows[0];
+}
+
+async function createResetToken(email: string, ttlMinutes: number): Promise<{ token: string; expiresAt: string }> {
+  const token = crypto.randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000).toISOString();
+
+  await db.query(
+    `insert into password_reset_tokens (email, token, expires_at)
+     values ($1,$2,$3)`,
+    [email, token, expiresAt]
+  );
+
+  return { token, expiresAt };
 }
 
 export async function POST(req: Request) {
-  await identity.ensureIdentityTables();
-  const body = await req.json().catch(() => ({} as any));
-  const email = String(body?.email || "").trim().toLowerCase();
-  const locale = String(body?.locale || "en") === "ar" ? "ar" : "en";
+  await ensureIdentityTables();
 
-  if (!email || !email.includes("@")) {
-    return NextResponse.json({ ok: false, error: "Valid email is required" }, { status: 400 });
+  const raw: unknown = await req.json().catch(() => null);
+  const body: JsonRecord = isRecord(raw) ? raw : {};
+
+  const email = toEmail(body["email"]);
+  const ttlMinutes = clampTtlMinutes(body["ttlMinutes"]);
+
+  // Always respond with a generic success message to avoid account enumeration
+  if (!email) {
+    return NextResponse.json({ ok: true }, { status: 200 });
   }
 
-  const { rows } = await db.query<{ id: number }>(
-    `select id from customers where lower(email)=lower($1) and is_active=true limit 1`,
-    [email]
-  );
+  // Only create token if the customer exists
+  if (await customerExists(email)) {
+    const { token, expiresAt } = await createResetToken(email, ttlMinutes);
 
-  if (rows[0]?.id) {
-    const createToken = (identity as any).createPasswordResetToken as (() => string) | undefined;
-    const token = (createToken || createResetTokenFallback)();
-
-    await db.query(
-      `insert into customer_password_reset_tokens (customer_id, token, expires_at)
-       values ($1,$2, now() + interval '1 hour')`,
-      [rows[0].id, token]
-    );
-
-    const base = process.env.APP_BASE_URL || new URL(req.url).origin;
-    const resetUrl = `${base}/${locale}/account/reset-password?token=${encodeURIComponent(token)}`;
-
-    return NextResponse.json({
-      ok: true,
-      message: "If this email exists, a reset link has been generated.",
-      resetUrl: process.env.NODE_ENV === "production" ? undefined : resetUrl,
-    });
+    // If you don’t have email sending yet, exposing the token in production is unsafe.
+    if (process.env.NODE_ENV !== "production") {
+      return NextResponse.json({ ok: true, dev: { token, expiresAt } }, { status: 200 });
+    }
   }
 
-  return NextResponse.json({ ok: true, message: "If this email exists, a reset link has been generated." });
+  return NextResponse.json({ ok: true }, { status: 200 });
 }

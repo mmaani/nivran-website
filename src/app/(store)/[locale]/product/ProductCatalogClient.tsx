@@ -66,7 +66,7 @@ export default function ProductCatalogClient({ locale, initialProducts }: { loca
 
           <label>
             {isAr ? "العائلة العطرية" : "Scent family"}
-            <select className="input" value={family} onChange={(e) => setFamily(e.target.value as any)}>
+            <select className="input" value={family} onChange={(e) => setFamily(e.target.value as ScentFamily | "all")}>
               <option value="all">{isAr ? "الكل" : "All"}</option>
               <option value="fresh">{scentFamilyLabels.fresh[locale]}</option>
               <option value="citrus">{scentFamilyLabels.citrus[locale]}</option>
@@ -85,7 +85,7 @@ export default function ProductCatalogClient({ locale, initialProducts }: { loca
 
           <label>
             {isAr ? "التركيز" : "Concentration"}
-            <select className="input" value={concentration} onChange={(e) => setConcentration(e.target.value as any)}>
+            <select className="input" value={concentration} onChange={(e) => setConcentration(e.target.value as Concentration | "all")}>
               <option value="all">{isAr ? "الكل" : "All"}</option>
               <option value="EDP">{concentrationLabels.EDP[locale]}</option>
               <option value="EDT">{concentrationLabels.EDT[locale]}</option>
