@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { adminFetch, clearPersistedAdminToken } from "@/app/admin/_components/adminClient";
 
 function T({ en, ar }: { en: string; ar: string }) {
   return (
@@ -26,10 +27,11 @@ export default function AdminShell({
   const router = useRouter();
   const [lang, setLang] = useState<"en" | "ar">(initialLang);
   const [savingLang, setSavingLang] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const nav = useMemo(
     () => [
-      { href: "/admin", en: "Dashboard", ar: "لوحة المعلومات", icon: "◈" },
+      { href: "/admin", en: "Dashboard", ar: "لوحة التحكم", icon: "◈" },
       { href: "/admin/orders", en: "Orders", ar: "الطلبات", icon: "◎" },
       { href: "/admin/catalog", en: "Catalog", ar: "المنتجات", icon: "◇" },
       { href: "/admin/inbox", en: "Inbox", ar: "الوارد", icon: "✦" },
@@ -46,15 +48,27 @@ export default function AdminShell({
     setSavingLang(true);
 
     try {
-      await fetch("/api/admin/lang", {
+      await adminFetch("/api/admin/lang", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ lang: next, next: pathname }),
       });
       router.refresh();
     } finally {
       setSavingLang(false);
+    }
+  }
+
+  async function logout() {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await adminFetch("/api/admin/logout", { method: "POST" });
+    } finally {
+      clearPersistedAdminToken();
+      router.replace("/admin/login");
+      router.refresh();
+      setLoggingOut(false);
     }
   }
 
@@ -66,13 +80,19 @@ export default function AdminShell({
             <Link className="admin-logo" href={authed ? "/admin" : "/admin/login"}>
               NIVRAN
             </Link>
-            <span className="admin-subtitle">
-              <T en="Commerce Control" ar="إدارة المتجر" />
-            </span>
+            <p className="admin-subtitle">
+              <T en="Operations Console" ar="منصة تشغيل المتجر" />
+            </p>
+            <p className="admin-context">
+              <T
+                en="Unified overview for orders, catalog, support, and payment reliability."
+                ar="نظرة موحّدة للطلبات والكتالوج والدعم وموثوقية المدفوعات."
+              />
+            </p>
           </div>
 
           {authed ? (
-            <nav className="admin-nav">
+            <nav className="admin-nav" aria-label={lang === "ar" ? "التنقل الإداري" : "Admin navigation"}>
               {nav.map((item) => {
                 const active = pathname === item.href || pathname.startsWith(item.href + "/");
                 return (
@@ -87,7 +107,7 @@ export default function AdminShell({
             </nav>
           ) : (
             <div className="admin-login-chip">
-              <T en="Secure admin access" ar="وصول إدارة آمن" />
+              <T en="Secure admin session required" ar="يلزم تسجيل دخول إداري آمن" />
             </div>
           )}
 
@@ -103,13 +123,13 @@ export default function AdminShell({
             </button>
 
             <Link className="btn" href="/">
-              <T en="Store" ar="المتجر" />
+              <T en="Storefront" ar="واجهة المتجر" />
             </Link>
 
             {authed ? (
-              <Link className="btn" href="/api/admin/logout">
-                <T en="Logout" ar="تسجيل الخروج" />
-              </Link>
+              <button className="btn" type="button" onClick={logout} disabled={loggingOut}>
+                <T en={loggingOut ? "Signing out…" : "Logout"} ar={loggingOut ? "جارٍ تسجيل الخروج…" : "تسجيل الخروج"} />
+              </button>
             ) : null}
           </div>
         </div>
@@ -122,7 +142,7 @@ export default function AdminShell({
           <div className="admin-footer-brand">NIVRAN Admin</div>
           <div className="admin-footer-links">
             <Link href="/admin">
-              <T en="Dashboard" ar="لوحة المعلومات" />
+              <T en="Dashboard" ar="لوحة التحكم" />
             </Link>
             <Link href="/admin/orders">
               <T en="Orders" ar="الطلبات" />
