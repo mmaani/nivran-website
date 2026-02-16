@@ -15,7 +15,7 @@ function readCart(): CartItem[] {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .map((x: any) => ({
+      .map((x: Record<string, unknown>) => ({
         slug: String(x?.slug || "").trim(),
         name: String(x?.name || "").trim(),
         priceJod: Number(x?.priceJod || 0),
@@ -84,8 +84,8 @@ export default function LoginPage() {
       }
 
       window.location.href = `/${locale}/account`;
-    } catch (e: any) {
-      setErr(e?.message || t.error);
+    } catch (e: unknown) {
+      setErr((e as Error)?.message || t.error);
     } finally {
       setLoading(false);
     }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { CART_LOCAL_KEY } from "@/lib/cartStore";
 
 type Locale = "en" | "ar";
@@ -9,6 +9,7 @@ function t(locale: Locale, en: string, ar: string) {
 }
 
 type CartLocalItem = { slug: string; qty: number };
+
 function isCartLocalItem(v: unknown): v is CartLocalItem {
   if (typeof v !== "object" || v === null) return false;
   const o = v as Record<string, unknown>;
@@ -21,7 +22,9 @@ function readLocalCart(): CartLocalItem[] {
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isCartLocalItem).map((x) => ({ slug: x.slug, qty: Math.max(0, Math.floor(x.qty)) }));
+    return parsed
+      .filter(isCartLocalItem)
+      .map((x) => ({ slug: x.slug, qty: Math.max(0, Math.floor(x.qty)) }));
   } catch {
     return [];
   }
@@ -29,8 +32,23 @@ function readLocalCart(): CartLocalItem[] {
 
 type SignupResponse = { ok?: boolean; error?: string };
 
-export default function SignupPage({ params }: { params: { locale: string } }) {
-  const locale: Locale = params.locale === "ar" ? "ar" : "en";
+export default function SignupPage(props: { params: Promise<{ locale: string }> }) {
+  const [locale, setLocale] = useState<Locale>("en");
+
+  useEffect(() => {
+    let alive = true;
+    props.params
+      .then((p) => {
+        if (!alive) return;
+        setLocale(p?.locale === "ar" ? "ar" : "en");
+      })
+      .catch(() => {
+        // keep default "en"
+      });
+    return () => {
+      alive = false;
+    };
+  }, [props.params]);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -60,6 +78,7 @@ export default function SignupPage({ params }: { params: { locale: string } }) {
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!can || busy) return;
+
     setBusy(true);
     setError(null);
 
@@ -78,7 +97,7 @@ export default function SignupPage({ params }: { params: { locale: string } }) {
     });
 
     const data: unknown = await res.json().catch(() => ({}));
-    const d = (typeof data === "object" && data !== null ? (data as SignupResponse) : {}) as SignupResponse;
+    const d: SignupResponse = typeof data === "object" && data !== null ? (data as SignupResponse) : {};
 
     if (!res.ok || !d.ok) {
       setBusy(false);
