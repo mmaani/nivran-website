@@ -46,6 +46,13 @@
   font-weight: 900;
   letter-spacing: 0.13em;
   text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-logo img {
+  border-radius: 8px;
 }
 
 .admin-subtitle {

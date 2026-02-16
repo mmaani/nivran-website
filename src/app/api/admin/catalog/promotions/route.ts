@@ -46,6 +46,9 @@ export async function POST(req: Request) {
     const usageLimitRaw = String(form.get("usage_limit") || "").trim();
     const usageLimit = usageLimitRaw ? Number(usageLimitRaw) : null;
 
+    const minOrderRaw = String(form.get("min_order_jod") || "").trim();
+    const minOrderJod = minOrderRaw ? Number(minOrderRaw) : null;
+
     const isActive = String(form.get("is_active") || "") === "on";
     const categoryKeys = readCategoryKeys(form);
 
@@ -53,9 +56,13 @@ export async function POST(req: Request) {
       return NextResponse.redirect(new URL("/admin/catalog?error=invalid-promo", req.url));
     }
 
+    if (minOrderRaw && (!Number.isFinite(minOrderJod) || Number(minOrderJod) < 0)) {
+      return NextResponse.redirect(new URL("/admin/catalog?error=invalid-min-order", req.url));
+    }
+
     await db.query(
-      `insert into promotions (code, title_en, title_ar, discount_type, discount_value, starts_at, ends_at, usage_limit, is_active, category_keys)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      `insert into promotions (code, title_en, title_ar, discount_type, discount_value, starts_at, ends_at, usage_limit, min_order_jod, is_active, category_keys)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        on conflict (code) do update
          set title_en=excluded.title_en,
              title_ar=excluded.title_ar,
@@ -64,10 +71,11 @@ export async function POST(req: Request) {
              starts_at=excluded.starts_at,
              ends_at=excluded.ends_at,
              usage_limit=excluded.usage_limit,
+             min_order_jod=excluded.min_order_jod,
              is_active=excluded.is_active,
              category_keys=excluded.category_keys,
              updated_at=now()`,
-      [code, titleEn, titleAr, discountType, discountValue, startsAt, endsAt, usageLimit, isActive, categoryKeys]
+      [code, titleEn, titleAr, discountType, discountValue, startsAt, endsAt, usageLimit, minOrderJod, isActive, categoryKeys]
     );
   }
 

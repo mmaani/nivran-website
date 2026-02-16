@@ -49,7 +49,6 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
           signIn: "دخول",
           help: "تأكد من مطابقة ADMIN_TOKEN في البيئة وعدم وجود مسافات إضافية. ستبقى الجلسة فعالة بين صفحات الإدارة في هذا المتصفح.",
           errorPrefix: "خطأ: ",
-          redirecting: "سيتم توجيهك إلى:",
           switchLang: "التبديل إلى الإنجليزية",
         }
       : {
@@ -65,7 +64,6 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
           signIn: "Sign in",
           help: "Make sure ADMIN_TOKEN matches your environment value with no extra spaces. Your session stays active across admin sections on this browser.",
           errorPrefix: "Error: ",
-          redirecting: "You'll be redirected to:",
           switchLang: "Switch to Arabic",
         };
 
@@ -137,7 +135,7 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
         <form onSubmit={submit} className="admin-login-form" aria-busy={loading}>
           <div className="admin-row" style={{ justifyContent: "space-between" }}>
             <p className="admin-login-note" style={{ margin: 0 }}>
-              {t.redirecting} <span className="mono">{safeNext}</span>
+              {lang === "ar" ? "تسجيل دخول آمن للوصول إلى لوحة الإدارة." : "Secure sign-in for admin workspace."}
             </p>
             <button type="button" className="btn" onClick={() => setLang(lang === "en" ? "ar" : "en")} title={t.switchLang}>
               {lang === "en" ? "AR" : "EN"}

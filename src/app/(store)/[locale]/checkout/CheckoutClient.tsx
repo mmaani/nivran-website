@@ -2,20 +2,15 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
+import { clearLocalCart, readLocalCart, type CartItem } from "@/lib/cartStore";
 
 type Locale = "en" | "ar";
-
-type CartItem = {
-  slug: string;
-  name: string;
-  priceJod: number;
-  qty: number;
-};
-
-const CART_KEY = "nivran_cart_v1";
-const SHIPPING_JOD = 3.5;
-
 type JsonObject = Record<string, unknown>;
+
+type PromoState = {
+  code: string;
+  discountJod: number;
+};
 
 function isObject(v: unknown): v is JsonObject {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -38,43 +33,8 @@ function errMsg(e: unknown): string {
   return "Error";
 }
 
-function readCart(): CartItem[] {
-  try {
-    const raw = localStorage.getItem(CART_KEY);
-    if (!raw) return [];
-
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed
-      .map((x): CartItem => {
-        const o: JsonObject = isObject(x) ? x : {};
-        const slug = toStr(o.slug).trim();
-        const name = toStr(o.name).trim();
-        const priceJod = toNum(o.priceJod);
-        const qtyRaw = Math.trunc(toNum(o.qty));
-        const qty = Math.max(1, Math.min(99, qtyRaw || 1));
-
-        return {
-          slug,
-          name,
-          priceJod,
-          qty,
-        };
-      })
-      .filter((x) => x.slug.length > 0);
-  } catch {
-    return [];
-  }
-}
-
 function clearCart() {
-  try {
-    localStorage.removeItem(CART_KEY);
-    window.dispatchEvent(new Event("nivran_cart_updated"));
-  } catch {
-    // ignore
-  }
+  clearLocalCart();
 }
 
 export default function CheckoutClient() {
@@ -88,7 +48,6 @@ export default function CheckoutClient() {
   const [items, setItems] = useState<CartItem[]>([]);
   const [loadingBuyNow, setLoadingBuyNow] = useState(false);
 
-  // Customer/shipping fields
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -96,15 +55,18 @@ export default function CheckoutClient() {
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
 
-  // Order state
+  const [promoInput, setPromoInput] = useState("");
+  const [promo, setPromo] = useState<PromoState | null>(null);
+  const [promoBusy, setPromoBusy] = useState(false);
+  const [promoMsg, setPromoMsg] = useState<string | null>(null);
+
   const [cartId, setCartId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // Load cart from localStorage, or Buy Now from API if cart is empty
   useEffect(() => {
-    const cart = readCart();
+    const cart = readLocalCart();
     if (cart.length) {
       setItems(cart);
       return;
@@ -129,10 +91,7 @@ export default function CheckoutClient() {
         const slug = toStr(prod.slug).trim();
         if (!slug) return;
 
-        const prodName = isAr
-          ? toStr(prod.name_ar || prod.name_en || slug)
-          : toStr(prod.name_en || prod.name_ar || slug);
-
+        const prodName = isAr ? toStr(prod.name_ar || prod.name_en || slug) : toStr(prod.name_en || prod.name_ar || slug);
         const price = toNum(prod.price_jod);
 
         setItems([{ slug, name: prodName, priceJod: price, qty: 1 }]);
@@ -146,13 +105,21 @@ export default function CheckoutClient() {
     };
   }, [buyNowSlug, isAr]);
 
+  useEffect(() => {
+    if (!promo) return;
+    setPromo(null);
+    setPromoMsg(isAr ? "تمت إزالة كود الخصم بعد تعديل السلة. أعد التطبيق." : "Promo code was removed after cart update. Please apply again.");
+  }, [items, isAr, promo]);
+
   const totals = useMemo(() => {
     const subtotal = items.reduce((sum, i) => sum + Number(i.priceJod || 0) * Number(i.qty || 1), 0);
-    const shipping = items.length ? SHIPPING_JOD : 0;
-    const total = Number((subtotal + shipping).toFixed(2));
+    const discount = promo ? Number(promo.discountJod || 0) : 0;
+    const subtotalAfterDiscount = Math.max(0, subtotal - discount);
+    const shipping = items.length ? 3.5 : 0;
+    const total = Number((subtotalAfterDiscount + shipping).toFixed(2));
     const qty = items.reduce((sum, i) => sum + Number(i.qty || 1), 0);
-    return { subtotal, shipping, total, qty };
-  }, [items]);
+    return { subtotal, discount, subtotalAfterDiscount, shipping, total, qty };
+  }, [items, promo]);
 
   const COPY = useMemo(
     () => ({
@@ -162,13 +129,12 @@ export default function CheckoutClient() {
       backToShop: isAr ? "العودة للمتجر" : "Back to shop",
       editCart: isAr ? "تعديل السلة" : "Edit cart",
       loadingProduct: isAr ? "جارٍ تحميل المنتج..." : "Loading product...",
-      required: isAr
-        ? "الاسم والهاتف والعنوان والبريد الإلكتروني مطلوبة"
-        : "Name, phone, address, and email are required",
+      required: isAr ? "الاسم والهاتف والعنوان والبريد الإلكتروني مطلوبة" : "Name, phone, address, and email are required",
       payCard: isAr ? "الدفع بالبطاقة" : "Pay by card",
       cod: isAr ? "الدفع عند الاستلام" : "Cash on delivery",
       orderSummary: isAr ? "ملخص الطلب" : "Order summary",
       subtotal: isAr ? "المجموع الفرعي" : "Subtotal",
+      discount: isAr ? "الخصم" : "Discount",
       shipping: isAr ? "الشحن" : "Shipping",
       total: isAr ? "الإجمالي" : "Total",
       fullName: isAr ? "الاسم الكامل" : "Full name",
@@ -178,6 +144,11 @@ export default function CheckoutClient() {
       address: isAr ? "العنوان" : "Address",
       notes: isAr ? "ملاحظات" : "Notes",
       placed: isAr ? "تم إنشاء الطلب." : "Order created.",
+      promoLabel: isAr ? "كود الخصم" : "Promo code",
+      promoPlaceholder: isAr ? "أدخل الكود" : "Enter code",
+      promoApply: isAr ? "تطبيق" : "Apply",
+      promoRemove: isAr ? "إزالة" : "Remove",
+      promoApplied: isAr ? "تم تطبيق الخصم" : "Promo applied",
     }),
     [isAr]
   );
@@ -194,11 +165,46 @@ export default function CheckoutClient() {
     return true;
   }
 
+  async function applyPromo() {
+    const code = promoInput.trim().toUpperCase();
+    if (!code) return;
+    setPromoBusy(true);
+    setPromoMsg(null);
+
+    try {
+      const res = await fetch("/api/promotions/validate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ promoCode: code, locale, items: items.map((i) => ({ slug: i.slug, qty: i.qty })) }),
+      });
+      const data: unknown = await res.json().catch(() => null);
+      if (!res.ok || !isObject(data) || data.ok !== true || !isObject(data.promo)) {
+        const message = isObject(data) && typeof data.error === "string" ? data.error : isAr ? "كود غير صالح" : "Invalid code";
+        throw new Error(message);
+      }
+
+      setPromo({ code, discountJod: toNum(data.promo.discountJod) });
+      setPromoMsg(COPY.promoApplied);
+    } catch (error: unknown) {
+      setPromo(null);
+      setPromoMsg(errMsg(error));
+    } finally {
+      setPromoBusy(false);
+    }
+  }
+
+  function removePromo() {
+    setPromo(null);
+    setPromoMsg(null);
+    setPromoInput("");
+  }
+
   async function createOrder(paymentMethod: "PAYTABS" | "COD") {
     const payload = {
       locale,
       paymentMethod,
-      items: items.map((i) => ({ slug: i.slug, qty: i.qty })), // server will re-price
+      promoCode: promo?.code || undefined,
+      items: items.map((i) => ({ slug: i.slug, qty: i.qty })),
       customer: { name, phone, email },
       shipping: { city, address, country: "Jordan", notes },
     };
@@ -263,7 +269,6 @@ export default function CheckoutClient() {
 
       if (!redirectUrl) throw new Error("PayTabs redirect URL missing");
 
-      // Clear cart only once user is leaving to payment (so they don’t pay twice)
       clearCart();
       window.location.href = redirectUrl;
     } catch (e: unknown) {
@@ -365,12 +370,40 @@ export default function CheckoutClient() {
               ))}
             </div>
 
+            <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+              <label htmlFor="promo-code" className="muted" style={{ fontSize: 13 }}>
+                {COPY.promoLabel}
+              </label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  id="promo-code"
+                  className="input"
+                  value={promoInput}
+                  onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                  placeholder={COPY.promoPlaceholder}
+                />
+                <button className="btn btn-outline" type="button" disabled={promoBusy || !promoInput.trim()} onClick={applyPromo}>
+                  {COPY.promoApply}
+                </button>
+                {promo ? (
+                  <button className="btn" type="button" onClick={removePromo}>
+                    {COPY.promoRemove}
+                  </button>
+                ) : null}
+              </div>
+              {promoMsg ? <p className="muted" style={{ margin: 0 }}>{promoMsg}</p> : null}
+            </div>
+
             <hr style={{ margin: "14px 0", border: "none", borderTop: "1px solid #eee" }} />
 
             <div style={{ display: "grid", gap: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span className="muted">{COPY.subtotal}</span>
                 <strong>{totals.subtotal.toFixed(2)} JOD</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span className="muted">{COPY.discount}</span>
+                <strong>-{totals.discount.toFixed(2)} JOD</strong>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span className="muted">{COPY.shipping}</span>

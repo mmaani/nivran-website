@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { adminFetch, clearPersistedAdminToken } from "@/app/admin/_components/adminClient";
 
@@ -78,7 +79,8 @@ export default function AdminShell({
         <div className="admin-topbar-inner">
           <div className="admin-brand">
             <Link className="admin-logo" href={authed ? "/admin" : "/admin/login"}>
-              NIVRAN
+              <Image src="/brand/logo.svg" alt="NIVRAN" width={34} height={34} priority />
+              <span>NIVRAN</span>
             </Link>
             <p className="admin-subtitle">
               <T en="Operations Console" ar="منصة تشغيل المتجر" />

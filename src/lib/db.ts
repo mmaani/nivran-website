@@ -1,5 +1,5 @@
 import "server-only";
-import { Pool, QueryResult, QueryResultRow } from "pg";
+import { Pool, PoolClient, QueryResult, QueryResultRow } from "pg";
 
 let pool: Pool | null = null;
 
@@ -39,9 +39,38 @@ function getPool(): Pool {
   return pool;
 }
 
-export const db = {
+export type DbExecutor = {
+  query: <T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]) => Promise<QueryResult<T>>;
+};
+
+function toExecutor(client: PoolClient): DbExecutor {
+  return {
+    query: <T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]) => {
+      const values = params ? [...params] : undefined;
+      return client.query<T>(text, values);
+    },
+  };
+}
+
+export const db: DbExecutor & {
+  withTransaction: <T>(fn: (trx: DbExecutor) => Promise<T>) => Promise<T>;
+} = {
   query: <T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]): Promise<QueryResult<T>> => {
     const values = params ? [...params] : undefined;
     return getPool().query<T>(text, values);
+  },
+  withTransaction: async <T>(fn: (trx: DbExecutor) => Promise<T>): Promise<T> => {
+    const client = await getPool().connect();
+    try {
+      await client.query("begin");
+      const result = await fn(toExecutor(client));
+      await client.query("commit");
+      return result;
+    } catch (error: unknown) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
   },
 };

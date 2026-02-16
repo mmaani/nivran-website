@@ -1,70 +1,12 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-
-type CartItem = {
-  slug: string;
-  name: string;
-  priceJod: number;
-  qty: number;
-};
-
-const KEY = "nivran_cart_v1";
+import { useRouter } from "next/navigation";
+import { clampQty, mergeCartSum, readLocalCart, writeLocalCart, type CartItem } from "@/lib/cartStore";
 
 type JsonRecord = Record<string, unknown>;
 function isRecord(v: unknown): v is JsonRecord {
   return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-
-function toStr(v: unknown): string {
-  return typeof v === "string" ? v : v == null ? "" : String(v);
-}
-
-function toNum(v: unknown): number {
-  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
-  return Number.isFinite(n) ? n : 0;
-}
-
-function clampQty(n: unknown, min: number, max: number): number {
-  const x = Math.floor(toNum(n) || min);
-  return Math.min(max, Math.max(min, x));
-}
-
-function parseCartItems(v: unknown): CartItem[] {
-  if (!Array.isArray(v)) return [];
-  const out: CartItem[] = [];
-
-  for (const it of v) {
-    if (!isRecord(it)) continue;
-
-    const slug = toStr(it.slug).trim();
-    if (!slug) continue;
-
-    out.push({
-      slug,
-      name: toStr(it.name).trim(),
-      priceJod: toNum(it.priceJod),
-      qty: clampQty(it.qty, 1, 99),
-    });
-  }
-
-  return out;
-}
-
-function readCart(): CartItem[] {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    return parseCartItems(parsed);
-  } catch {
-    return [];
-  }
-}
-
-function writeCart(items: CartItem[]) {
-  localStorage.setItem(KEY, JSON.stringify(items));
-  window.dispatchEvent(new Event("nivran_cart_updated"));
 }
 
 function getBool(obj: JsonRecord, key: string): boolean {
@@ -84,8 +26,8 @@ async function trySyncToAccount(items: CartItem[]) {
   const j: unknown = await r.json().catch(() => null);
   if (!isRecord(j)) return;
 
-  if (j.ok === true && getBool(j, "isAuthenticated")) {
-    if (Array.isArray(j.items)) writeCart(parseCartItems(j.items));
+  if (j.ok === true && getBool(j, "isAuthenticated") && Array.isArray(j.items)) {
+    writeLocalCart(mergeCartSum([], j.items as CartItem[]));
   }
 }
 
@@ -101,6 +43,7 @@ export default function AddToCartButton({
   minQty = 1,
   maxQty = 99,
   disabled = false,
+  buyNowLabel,
 }: {
   locale: string;
   slug: string;
@@ -113,11 +56,12 @@ export default function AddToCartButton({
   minQty?: number;
   maxQty?: number;
   disabled?: boolean;
+  buyNowLabel?: string;
 }) {
   const isAr = locale === "ar";
+  const router = useRouter();
   const [qty, setQty] = useState<number>(1);
   const [status, setStatus] = useState<"" | "added" | "updated">("");
-
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const safeMin = Math.max(1, Number(minQty || 1));
@@ -127,16 +71,14 @@ export default function AddToCartButton({
   const updatedText = updatedLabel || (isAr ? "تم التحديث ✓" : "Updated ✓");
 
   useEffect(() => {
-    const items = readCart();
+    const items = readLocalCart();
     const found = items.find((i) => i.slug === slug);
     if (found?.qty) setQty(Math.min(safeMax, Math.max(safeMin, found.qty)));
     else setQty(safeMin);
   }, [slug, safeMin, safeMax]);
 
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
   }, []);
 
   const displayLabel = useMemo(() => {
@@ -145,13 +87,8 @@ export default function AddToCartButton({
     return label;
   }, [status, label, addedText, updatedText]);
 
-  function clamp(n: number) {
-    if (!Number.isFinite(n)) return safeMin;
-    return Math.min(safeMax, Math.max(safeMin, Math.floor(n)));
-  }
-
   function setQtySafe(n: number) {
-    setQty(clamp(n));
+    setQty(clampQty(n, safeMin, safeMax));
   }
 
   function flash(next: "added" | "updated") {
@@ -160,25 +97,51 @@ export default function AddToCartButton({
     timerRef.current = setTimeout(() => setStatus(""), 1200);
   }
 
-  async function onSetCart() {
-    if (disabled) return;
-
-    const items = readCart();
+  function upsertCartItem(baseItems: CartItem[]): { items: CartItem[]; wasUpdate: boolean } {
+    const items = [...baseItems];
     const idx = items.findIndex((i) => i.slug === slug);
-
-    const nextItem: CartItem = { slug, name, priceJod, qty: clamp(qty) };
+    const nextItem: CartItem = { slug, name, priceJod, qty: clampQty(qty, safeMin, safeMax) };
 
     if (idx >= 0) {
       items[idx] = nextItem;
-      writeCart(items);
-      flash("updated");
+      return { items, wasUpdate: true };
+    }
+    items.push(nextItem);
+    return { items, wasUpdate: false };
+  }
+
+  async function onSetCart() {
+    if (disabled) return;
+
+    const { items, wasUpdate } = upsertCartItem(readLocalCart());
+    writeLocalCart(items);
+    flash(wasUpdate ? "updated" : "added");
+    void trySyncToAccount(items);
+  }
+
+  async function onBuyNow() {
+    if (disabled) return;
+
+    const current = readLocalCart();
+    const idx = current.findIndex((i) => i.slug === slug);
+    const selectedQty = clampQty(qty, safeMin, safeMax);
+
+    const items = [...current];
+    if (idx >= 0) {
+      const prev = items[idx];
+      items[idx] = {
+        slug,
+        name,
+        priceJod,
+        qty: clampQty((prev?.qty || 0) + selectedQty, safeMin, safeMax),
+      };
     } else {
-      items.push(nextItem);
-      writeCart(items);
-      flash("added");
+      items.push({ slug, name, priceJod, qty: selectedQty });
     }
 
+    writeLocalCart(items);
     void trySyncToAccount(items);
+    router.push(`/${locale}/checkout`);
   }
 
   return (
@@ -203,14 +166,7 @@ export default function AddToCartButton({
           max={safeMax}
           disabled={disabled}
           aria-label={isAr ? "الكمية" : "Quantity"}
-          style={{
-            width: 64,
-            height: 40,
-            borderRadius: 10,
-            border: "1px solid #e5e7eb",
-            padding: "0 10px",
-            outline: "none",
-          }}
+          style={{ width: 64, height: 40, borderRadius: 10, border: "1px solid #e5e7eb", padding: "0 10px", outline: "none" }}
         />
 
         <button
@@ -227,6 +183,12 @@ export default function AddToCartButton({
       <button type="button" className={className} onClick={onSetCart} disabled={disabled} aria-live="polite">
         {displayLabel}
       </button>
+
+      {buyNowLabel ? (
+        <button type="button" className={className.replace("btn-outline", "").trim() || "btn"} onClick={onBuyNow} disabled={disabled}>
+          {buyNowLabel}
+        </button>
+      ) : null}
     </div>
   );
 }
