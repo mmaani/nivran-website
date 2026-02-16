@@ -14,6 +14,18 @@ type IncomingItem = {
   priceJod?: number;
 };
 
+type CustomerInput = { name?: string; phone?: string; email?: string };
+type ShippingInput = { city?: string; address?: string; notes?: string; country?: string };
+
+type ProductRow = {
+  slug: string;
+  name_en: string | null;
+  name_ar: string | null;
+  price_jod: string | number;
+  category_key: string | null;
+  is_active: boolean;
+};
+
 type OrderLine = {
   slug: string;
   name_en: string;
@@ -26,7 +38,7 @@ type OrderLine = {
 
 async function fetchProductsBySlugs(slugs: string[]) {
   await ensureCatalogTables();
-  const r = await db.query(
+  const r = await db.query<ProductRow>(
     `select slug, name_en, name_ar, price_jod, category_key, is_active
        from products
       where slug = any($1::text[])`,
@@ -35,7 +47,7 @@ async function fetchProductsBySlugs(slugs: string[]) {
   return r.rows || [];
 }
 
-function normalizeItems(items: any): { slug: string; qty: number }[] {
+function normalizeItems(items: unknown): { slug: string; qty: number }[] {
   if (!Array.isArray(items)) return [];
   return items
     .map((x: IncomingItem) => ({
@@ -53,7 +65,7 @@ export async function POST(req: NextRequest) {
 
   const customerId = await getCustomerIdFromRequest(req).catch(() => null);
 
-  const body = await req.json().catch(() => null as any);
+  const body: Record<string, unknown> | null = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
 
   const locale = body.locale === "ar" ? "ar" : "en";
@@ -61,8 +73,8 @@ export async function POST(req: NextRequest) {
   const paymentMethod: PaymentMethod =
     String(body.paymentMethod || body.mode || "").toUpperCase() === "COD" ? "COD" : "PAYTABS";
 
-  const customer = body.customer || {};
-  const shipping = body.shipping || {};
+  const customer = (body.customer || {}) as CustomerInput;
+  const shipping = (body.shipping || {}) as ShippingInput;
 
   const name = String(customer.name || "").trim();
   const phone = String(customer.phone || "").trim();
@@ -98,7 +110,7 @@ export async function POST(req: NextRequest) {
   const slugs = Array.from(new Set(items.map((i) => i.slug)));
   const products = await fetchProductsBySlugs(slugs);
 
-  const map = new Map<string, any>();
+  const map = new Map<string, ProductRow>();
   for (const p of products) map.set(String(p.slug), p);
 
   // Build order lines with server pricing
@@ -146,6 +158,8 @@ export async function POST(req: NextRequest) {
     insert into orders (
       locale,
       status,
+      amount,
+      currency,
       payment_method,
       customer_id,
       customer_name,
@@ -163,15 +177,17 @@ export async function POST(req: NextRequest) {
       total_jod
     )
     values (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
-      $12::jsonb,
-      $13,$14,$15,$16,$17
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
+      $14::jsonb,
+      $15,$16,$17,$18,$19
     )
     returning cart_id
   `,
     [
       locale,
       status,
+      totalJod,
+      "JOD",
       paymentMethod,
       customerId ? Number(customerId) : null,
       name,

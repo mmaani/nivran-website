@@ -3,6 +3,26 @@ import { db } from "@/lib/db";
 import { ensureOrdersTables } from "@/lib/orders";
 import { getPaytabsEnv } from "@/lib/paytabs";
 
+type InitiateRequest = {
+  cartId?: string;
+  locale?: string;
+};
+
+type OrderRow = {
+  cart_id: string;
+  amount: string | number | null;
+  currency: string | null;
+  customer_name: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
+  shipping_city: string | null;
+  shipping_address: string | null;
+  shipping_country: string | null;
+  customer: { email?: string; name?: string; phone?: string } | null;
+  shipping: { city?: string; address?: string; country?: string } | null;
+  status: string;
+};
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -11,7 +31,7 @@ export async function POST(req: Request) {
 
   const { profileId, serverKey, apiBase } = getPaytabsEnv();
 
-  const body = await req.json().catch(() => ({}));
+  const body = (await req.json().catch(() => ({}))) as InitiateRequest;
   const cartId = String(body?.cartId || "").trim();
   const locale = String(body?.locale || "en") === "ar" ? "ar" : "en";
 
@@ -19,16 +39,31 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Missing cartId" }, { status: 400 });
   }
 
-  const orderRes = await db.query(
-    "select cart_id, amount, currency, customer_name, customer_email, customer, shipping, status from orders where cart_id=$1 limit 1",
+  const orderRes = await db.query<OrderRow>(
+    `select cart_id,
+            amount,
+            currency,
+            customer_name,
+            customer_email,
+            customer_phone,
+            shipping_city,
+            shipping_address,
+            shipping_country,
+            customer,
+            shipping,
+            status
+       from orders
+      where cart_id=$1
+      limit 1`,
     [cartId]
   );
-  const order = orderRes.rows[0] as any;
+
+  const order = orderRes.rows[0];
   if (!order) {
     return NextResponse.json({ ok: false, error: "Order not found" }, { status: 404 });
   }
 
-  const origin = req.headers.get("origin") || "";
+  const origin = req.headers.get("origin") || process.env.APP_BASE_URL || "";
   if (!origin) {
     return NextResponse.json({ ok: false, error: "Missing origin" }, { status: 400 });
   }
@@ -37,15 +72,14 @@ export async function POST(req: Request) {
   const callbackUrl = `${origin}/api/paytabs/callback`;
 
   const customerEmail =
-    order.customer_email || (order.customer && order.customer.email) || "test@example.com";
+    order.customer_email || order.customer?.email || "test@example.com";
   const customerName =
-    order.customer_name || (order.customer && order.customer.name) || "Customer";
+    order.customer_name || order.customer?.name || "Customer";
 
-  // For MVP we keep shipping/country simple, but include what we can.
-  const shipping = order.shipping || {};
-  const city = shipping.city || "Amman";
-  const country = shipping.country || "JO";
-  const line1 = shipping.address || "Address";
+  const city = order.shipping_city || order.shipping?.city || "Amman";
+  const countryRaw = order.shipping_country || order.shipping?.country || "JO";
+  const line1 = order.shipping_address || order.shipping?.address || "Address";
+  const country = countryRaw.length === 2 ? countryRaw : "JO";
 
   const payload = {
     profile_id: profileId,
@@ -60,21 +94,21 @@ export async function POST(req: Request) {
     customer_details: {
       name: customerName,
       email: customerEmail,
-      phone: order.customer?.phone || "",
+      phone: order.customer_phone || order.customer?.phone || "",
       street1: line1,
       city,
       state: "",
-      country: country.length === 2 ? country : "JO",
+      country,
       zip: "",
     },
     shipping_details: {
       name: customerName,
       email: customerEmail,
-      phone: order.customer?.phone || "",
+      phone: order.customer_phone || order.customer?.phone || "",
       street1: line1,
       city,
       state: "",
-      country: country.length === 2 ? country : "JO",
+      country,
       zip: "",
     },
   };
@@ -89,12 +123,17 @@ export async function POST(req: Request) {
     cache: "no-store",
   });
 
-  const json = await res.json().catch(() => ({}));
+  const json = (await res.json().catch(() => ({}))) as {
+    redirect_url?: string;
+    tran_ref?: string;
+    message?: string;
+    payment_result?: { response_status?: string };
+  };
 
   if (!res.ok || !json?.redirect_url) {
     await db.query(
       "update orders set paytabs_last_payload=$2, paytabs_response_status=$3, paytabs_response_message=$4, updated_at=now() where cart_id=$1",
-      [cartId, JSON.stringify(payload), String(json?.payment_result?.response_status || ""), String(json?.message || "")] 
+      [cartId, JSON.stringify(payload), String(json?.payment_result?.response_status || ""), String(json?.message || "")]
     );
     return NextResponse.json({ ok: false, error: "PayTabs request failed", details: json }, { status: 400 });
   }

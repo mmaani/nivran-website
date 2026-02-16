@@ -66,11 +66,12 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ token }),
       });
-      const data = await res.json().catch(() => ({} as any));
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (!res.ok || !data?.ok) throw new Error(data?.error || "Login failed");
       router.replace(safeNext);
-    } catch (e: any) {
-      setErr(e?.message || "Login failed");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e || "");
+      setErr(msg || "Login failed");
     } finally {
       setLoading(false);
     }

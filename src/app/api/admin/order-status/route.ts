@@ -33,7 +33,7 @@ export async function POST(req: Request) {
   const auth = requireAdmin(req);
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: 401 });
   await ensureOrdersTables();
-  const body = await req.json().catch(() => ({} as any));
+  const body = (await req.json().catch(() => ({}))) as { id?: number | string; status?: string };
   const id = Number(body?.id);
   const nextStatus = String(body?.status || "");
 

@@ -8,7 +8,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "ADMIN_TOKEN not configured" }, { status: 500 });
   }
 
-  const body = await req.json().catch(() => ({} as any));
+  const body = (await req.json().catch(() => ({}))) as { token?: string };
   const token = String(body?.token || "");
 
   if (token !== adminToken) {

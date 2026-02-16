@@ -26,7 +26,7 @@ export default function ResetPasswordPage() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ token, password }),
     });
-    const data = await res.json().catch(() => ({} as any));
+    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
     if (!res.ok || !data?.ok) {
       setMsg(data?.error || (isAr ? "حدث خطأ" : "Something went wrong"));
       return;
