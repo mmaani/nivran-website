@@ -15,6 +15,17 @@ export const dynamic = "force-dynamic";
 // PayTabs signature header (common patterns vary by integration)
 const SIG_HEADER = "x-paytabs-signature";
 
+type PaytabsCallbackPayload = {
+  cart_id?: string;
+  cartId?: string;
+  tran_ref?: string;
+  message?: string;
+  payment_result?: {
+    response_status?: string;
+    response_message?: string;
+  };
+};
+
 async function hasPayloadColumn(): Promise<boolean> {
   const r = await db.query(
     "select 1 from information_schema.columns where table_name='paytabs_callbacks' and column_name='payload' limit 1"
@@ -32,9 +43,9 @@ export async function POST(req: Request) {
   const computed = computePaytabsSignature(rawBody, serverKey);
   const sigValid = !!sigHeader && safeEqualHex(sigHeader, computed);
 
-  let payload: any = null;
+  let payload: PaytabsCallbackPayload | null = null;
   try {
-    payload = rawBody ? JSON.parse(rawBody) : null;
+    payload = rawBody ? (JSON.parse(rawBody) as PaytabsCallbackPayload) : null;
   } catch {
     payload = null;
   }
@@ -77,13 +88,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Missing cart_id" }, { status: 400 });
   }
 
-  // Determine next order status
   const nextStatus = mapPaytabsResponseStatusToOrderStatus(respStatus);
-
-  // Update orders table safely:
-  // - keep tran_ref
-  // - store payload + signature
-  // - update status only if allowed (prevents downgrades after fulfillment)
   const allowedFrom = paymentStatusTransitionAllowedFrom(nextStatus);
 
   await db.query(

@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const input = await req.json().catch(() => ({} as any));
+  const input = (await req.json().catch(() => ({}))) as { name?: string; email?: string; phone?: string; message?: string; locale?: string };
   const name = String(input?.name || "").trim();
   const email = String(input?.email || "").trim().toLowerCase();
   const phone = String(input?.phone || "").trim() || null;

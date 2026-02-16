@@ -37,7 +37,7 @@ export async function POST(req: Request) {
   await db.query(`delete from product_images where product_id=$1`, [productId]);
 
   for (let i = 0; i < selected.length; i++) {
-    const f: any = selected[i];
+    const f = selected[i];
     const contentType = String(f?.type || "application/octet-stream");
     const filename = String(f?.name || `image-${i + 1}`);
 

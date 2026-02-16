@@ -9,6 +9,14 @@ import {
 
 export const runtime = "nodejs";
 
+type PaytabsQueryResponse = {
+  cart_id?: string;
+  tran_ref?: string;
+  payment_result?: {
+    response_status?: string;
+  };
+};
+
 function readInput(input: Record<string, unknown>) {
   const cartId = String(input?.cartId || input?.cart_id || "").trim();
   const tranRef = String(input?.tranRef || input?.tran_ref || "").trim();
@@ -35,21 +43,21 @@ async function handleQuery(input: Record<string, unknown>) {
     cache: "no-store",
   });
 
-  const data = await res.json().catch(() => ({} as Record<string, unknown>));
+  const data = (await res.json().catch(() => ({}))) as PaytabsQueryResponse;
   if (!res.ok) {
     return NextResponse.json({ ok: false, error: "PayTabs query failed", paytabs: data }, { status: 502 });
   }
 
-  const responseStatus = String((data as any)?.payment_result?.response_status || "");
+  const responseStatus = String(data?.payment_result?.response_status || "");
   const nextStatus = mapPaytabsResponseStatusToOrderStatus(responseStatus);
   const allowedFrom = paymentStatusTransitionAllowedFrom(nextStatus);
-  const resolvedCartId = String((data as any)?.cart_id || cartId || "");
-  const resolvedTranRef = String((data as any)?.tran_ref || tranRef || "");
+  const resolvedCartId = String(data?.cart_id || cartId || "");
+  const resolvedTranRef = String(data?.tran_ref || tranRef || "");
 
   let transitioned = false;
 
   if (resolvedCartId) {
-    const result = await db.query(
+    const result = await db.query<{ status: string }>(
       `update orders
           set status=case when status = any($5::text[]) then $2 else status end,
               paytabs_tran_ref=coalesce(nullif($3,''), paytabs_tran_ref),

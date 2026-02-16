@@ -1,6 +1,13 @@
-import * as siteContent from "@/lib/siteContent";
-
-type Locale = "en" | "ar";
+import {
+  benefits,
+  categoryLabels,
+  featuredProduct,
+  mainProductMessage,
+  products,
+  testimonials,
+  type Locale,
+  type Product,
+} from "@/lib/siteContent";
 
 const fallbackCategoryLabels: Record<string, Record<Locale, string>> = {
   perfume: { en: "Perfume", ar: "عطور" },
@@ -10,32 +17,19 @@ const fallbackCategoryLabels: Record<string, Record<Locale, string>> = {
   soap: { en: "Soap", ar: "صابون" },
 };
 
-function getSizeLabel(product: any) {
-  if (product?.variants?.length) {
-    return product.variants.find((v: any) => v?.isDefault)?.sizeLabel || product.variants[0]?.sizeLabel || "";
-  }
-  return product?.size || "";
-}
-
-function getPriceLabel(product: any) {
-  if (product?.variants?.length) {
-    const prices = product.variants.map((v: any) => Number(v?.priceJod || 0)).filter((n: number) => Number.isFinite(n));
-    return prices.length ? Math.min(...prices) : Number(product?.priceJod || 0);
-  }
-  return Number(product?.priceJod || 0);
-}
+type BenefitItem = { title: string; body: string };
+type TestimonialItem = { name: string; text: string };
 
 export default async function Home({ params }: { params: Promise<{ locale: string }> }) {
   const { locale: raw } = await params;
   const locale: Locale = raw === "ar" ? "ar" : "en";
   const isAr = locale === "ar";
 
-  const benefits = (siteContent as any).benefits || { en: [], ar: [] };
-  const featuredProduct = (siteContent as any).featuredProduct || null;
-  const mainProductMessage = (siteContent as any).mainProductMessage || { en: "", ar: "" };
-  const products: any[] = (siteContent as any).products || [];
-  const testimonials = (siteContent as any).testimonials || { en: [], ar: [] };
-  const categoryLabels: Record<string, Record<Locale, string>> = (siteContent as any).categoryLabels || fallbackCategoryLabels;
+  const localizedBenefits = (benefits[locale] || []) as BenefitItem[];
+  const localizedTestimonials = (testimonials[locale] || []) as TestimonialItem[];
+  const productList: Product[] = products || [];
+  const categoryLabelMap: Record<string, Record<Locale, string>> =
+    categoryLabels || fallbackCategoryLabels;
 
   const t = {
     en: {
@@ -92,7 +86,9 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
           <aside className="feature-card">
             <p className="muted" style={{ marginTop: 0 }}>{t.quick}</p>
             <div className="badge-row" style={{ marginBottom: ".6rem" }}>
-              {Object.entries(categoryLabels).map(([key, label]) => <span className="badge" key={key}>{(label as Record<Locale, string>)[locale]}</span>)}
+              {Object.entries(categoryLabelMap).map(([key, label]) => (
+                <span className="badge" key={key}>{label[locale]}</span>
+              ))}
             </div>
             <h3 style={{ margin: "0 0 .3rem" }}>{featuredProduct.name[locale]}</h3>
             <p className="muted" style={{ marginTop: 0 }}>{featuredProduct.subtitle[locale]}</p>
@@ -109,9 +105,9 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
         <h2 className="section-title">{t.categories}</h2>
         <p className="muted" style={{ marginTop: 0 }}>{mainProductMessage[locale]}</p>
         <div className="grid-3">
-          {products.slice(0, 6).map((item: any) => (
+          {productList.slice(0, 6).map((item) => (
             <article key={item.slug} className="panel">
-              <p className="muted" style={{ marginTop: 0 }}>{categoryLabels[item.category][locale]} · {item.size}</p>
+              <p className="muted" style={{ marginTop: 0 }}>{(categoryLabelMap[item.category] || fallbackCategoryLabels[item.category])[locale]} · {item.size}</p>
               <h3 style={{ margin: "0 0 .3rem" }}>{item.name[locale]}</h3>
               <p className="muted">{item.subtitle[locale]}</p>
               <p style={{ marginBottom: 0 }}><strong>{item.priceJod.toFixed(2)} JOD</strong></p>
@@ -126,7 +122,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
       <section className="section">
         <h2 className="section-title">{t.why}</h2>
         <div className="grid-3">
-          {(benefits[locale] || []).map((item: any) => (
+          {localizedBenefits.map((item) => (
             <article key={item.title} className="panel">
               <h3 style={{ marginTop: 0 }}>{item.title}</h3>
               <p style={{ marginBottom: 0 }} className="muted">{item.body}</p>
@@ -138,7 +134,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
       <section className="section grid-2">
         <article className="panel">
           <h2 className="section-title" style={{ marginTop: 0, fontSize: "1.6rem" }}>{t.proof}</h2>
-          {(testimonials[locale] || []).map((item: any) => (
+          {localizedTestimonials.map((item) => (
             <div key={item.name} className="review">
               “{item.text}”
               <div className="muted">— {item.name}</div>

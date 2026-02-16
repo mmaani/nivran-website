@@ -79,15 +79,14 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
       limit 500`
   );
 
-  const cats = categoriesRes.rows.length
+  const cats: Array<{ key: string; label: string }> = categoriesRes.rows.length
     ? categoriesRes.rows.map((c) => ({
         key: c.key,
         label: locale === "ar" ? c.name_ar : c.name_en,
       }))
-    : Object.entries(FALLBACK_CATS).map(([key, v], i) => ({
+    : Object.entries(FALLBACK_CATS).map(([key, v]) => ({
         key,
-        label: (v as any)[locale],
-        sort: i,
+        label: v[locale],
       }));
 
   const catLabel = (key: string) => {
@@ -106,7 +105,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
       </p>
 
       <div className="badge-row" style={{ marginBottom: ".8rem" }}>
-        {cats.map((c: any) => (
+        {cats.map((c) => (
           <span key={c.key} className="badge">
             {c.label}
           </span>
