@@ -150,8 +150,28 @@ export default async function FAQPage({
       <div style={{ display: "grid", gap: ".8rem" }}>
         {faqs.map(([q, a]) => (
           <article key={q} className="panel">
-            <h3 style={{ marginTop: 0 }}>{q}</h3>
-            <p style={{ marginBottom: 0 }}>{a}</p>
+            <details>
+              <summary
+                style={{
+                  cursor: "pointer",
+                  listStyle: "none",
+                  fontWeight: 700,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "12px",
+                }}
+              >
+                <span>{q}</span>
+                <span aria-hidden="true" style={{ opacity: 0.7 }}>▾</span>
+              </summary>
+
+              <div style={{ marginTop: ".65rem" }}>
+                <p style={{ marginBottom: 0 }} className="muted">
+                  {a}
+                </p>
+              </div>
+            </details>
           </article>
         ))}
       </div>
