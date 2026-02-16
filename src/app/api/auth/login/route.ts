@@ -36,8 +36,7 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json(payload, { status: 401 });
   }
 
-  // ✅ FIX: requires customerId
-  const token = await createSessionToken(c.id);
+  const token = createSessionToken();
 
   const res = isForm
     ? NextResponse.redirect(new URL(`/${locale}?login=1`, req.url))

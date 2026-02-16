@@ -23,23 +23,17 @@ export function createAdminSessionToken(): string {
  * - Supports bcrypt hashes if your old DB already stored them
  * - Also supports PBKDF2 fallback hashes: pbkdf2$iter$saltB64$hashB64
  */
-function tryBcrypt() {
+async function tryBcrypt() {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    return require("bcryptjs");
+    return await import("bcryptjs");
   } catch {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      return require("bcrypt");
-    } catch {
-      return null;
-    }
+    return null;
   }
 }
 
-export function hashPassword(password: string): string {
+export async function hashPassword(password: string): Promise<string> {
   const pwd = String(password || "");
-  const b = tryBcrypt();
+  const b = await tryBcrypt();
   if (b) return b.hashSync(pwd, 10);
 
   // PBKDF2 fallback
@@ -49,13 +43,13 @@ export function hashPassword(password: string): string {
   return `pbkdf2$${iter}$${salt.toString("base64")}$${key.toString("base64")}`;
 }
 
-export function verifyPassword(password: string, stored: string): boolean {
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const pwd = String(password || "");
   const h = String(stored || "");
 
   // bcrypt format
   if (/^\$2[aby]\$/.test(h)) {
-    const b = tryBcrypt();
+    const b = await tryBcrypt();
     if (!b) return false;
     return b.compareSync(pwd, h);
   }
@@ -195,7 +189,7 @@ export async function createCustomer(args: {
   const city = String(args.city || "").trim();
   const country = String(args.country || "").trim() || "Jordan";
 
-  const passwordHash = hashPassword(args.password);
+  const passwordHash = await hashPassword(args.password);
 
   const r = await db.query<{ id: number; email: string }>(
     `insert into customers (email, password_hash, full_name, phone, address_line1, city, country, is_active)
@@ -295,7 +289,7 @@ export async function upsertStaffUser(args: {
 
   if (args.id) {
     if (args.password) {
-      const ph = hashPassword(args.password);
+      const ph = await hashPassword(args.password);
       await db.query(
         `update staff_users
             set username=$1, full_name=$2, role=$3, is_active=$4, password_hash=$5, updated_at=now()
@@ -314,7 +308,7 @@ export async function upsertStaffUser(args: {
   }
 
   if (!args.password) throw new Error("Password required for new staff user");
-  const ph = hashPassword(args.password);
+  const ph = await hashPassword(args.password);
 
   await db.query(
     `insert into staff_users (username, password_hash, full_name, role, is_active)
