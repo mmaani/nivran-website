@@ -160,3 +160,53 @@ SIMULATE_CALLBACK=1 \
 
 This uses HMAC SHA-256 with header `x-paytabs-signature`, exactly like the server callback validator.
 
+
+
+## Why some files may not appear in one PR diff
+
+If your PR UI is showing only the latest incremental commit, earlier implementation files (for example `src/app/admin/inbox/InboxClient.tsx` or `src/app/admin/_components/AdminShell.tsx`) can be missed in that single comparison view.
+
+Use this helper to see the **full package** across the target range:
+
+```bash
+BASE_COMMIT=72d66ca HEAD_COMMIT=HEAD ./scripts/show-full-package-diff.sh
+```
+
+You can also inspect a specific file history directly:
+
+```bash
+git log --oneline -- src/app/admin/inbox/InboxClient.tsx
+git log --oneline -- src/app/admin/_components/AdminShell.tsx
+```
+
+## Pull this PR into `main` in Codespaces
+
+From your Codespace terminal:
+
+```bash
+# 1) Ensure your working tree is clean
+git status
+
+# 2) Fetch latest refs
+git fetch --all --prune
+
+# 3) Switch to main and update it
+git checkout main
+git pull origin main
+
+# 4) Merge this branch (example branch name: work)
+git merge --no-ff work
+
+# 5) Push merged main
+git push origin main
+```
+
+If you want a fast-forward only (no merge commit), use:
+
+```bash
+git checkout main
+git pull origin main
+git merge --ff-only work
+git push origin main
+```
+
