@@ -1,0 +1,2845 @@
+{
+  "generated_at": "2026-02-16T14:28:19.113Z",
+  "tables": [
+    {
+      "table_name": "batches"
+    },
+    {
+      "table_name": "categories"
+    },
+    {
+      "table_name": "coupons"
+    },
+    {
+      "table_name": "customer_cart_items"
+    },
+    {
+      "table_name": "customer_carts"
+    },
+    {
+      "table_name": "customer_sessions"
+    },
+    {
+      "table_name": "customers"
+    },
+    {
+      "table_name": "inventory"
+    },
+    {
+      "table_name": "order_items"
+    },
+    {
+      "table_name": "orders"
+    },
+    {
+      "table_name": "payments"
+    },
+    {
+      "table_name": "paytabs_callbacks"
+    },
+    {
+      "table_name": "product_images"
+    },
+    {
+      "table_name": "product_media"
+    },
+    {
+      "table_name": "products"
+    },
+    {
+      "table_name": "promotions"
+    },
+    {
+      "table_name": "shipments"
+    },
+    {
+      "table_name": "staff_users"
+    },
+    {
+      "table_name": "variants"
+    }
+  ],
+  "columns": [
+    {
+      "table_name": "batches",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('batches_id_seq'::regclass)"
+    },
+    {
+      "table_name": "batches",
+      "column_name": "variant_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "batches",
+      "column_name": "lot_code",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "batches",
+      "column_name": "mfg_date",
+      "data_type": "date",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "batches",
+      "column_name": "expiry_date",
+      "data_type": "date",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "batches",
+      "column_name": "qty_total",
+      "data_type": "integer",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_name": "batches",
+      "column_name": "qty_available",
+      "data_type": "integer",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_name": "batches",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "categories",
+      "column_name": "key",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "categories",
+      "column_name": "name_en",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "categories",
+      "column_name": "name_ar",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "categories",
+      "column_name": "sort_order",
+      "data_type": "integer",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_name": "categories",
+      "column_name": "is_active",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": "true"
+    },
+    {
+      "table_name": "categories",
+      "column_name": "is_promoted",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": "false"
+    },
+    {
+      "table_name": "categories",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "categories",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "coupons",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('coupons_id_seq'::regclass)"
+    },
+    {
+      "table_name": "coupons",
+      "column_name": "code",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "coupons",
+      "column_name": "type",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "coupons",
+      "column_name": "value",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "coupons",
+      "column_name": "active",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": "true"
+    },
+    {
+      "table_name": "coupons",
+      "column_name": "starts_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "coupons",
+      "column_name": "ends_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "coupons",
+      "column_name": "max_uses",
+      "data_type": "integer",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "coupons",
+      "column_name": "used_count",
+      "data_type": "integer",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_name": "customer_cart_items",
+      "column_name": "customer_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "customer_cart_items",
+      "column_name": "slug",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "customer_cart_items",
+      "column_name": "name",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "customer_cart_items",
+      "column_name": "price_jod",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_name": "customer_cart_items",
+      "column_name": "qty",
+      "data_type": "integer",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "customer_cart_items",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "customer_carts",
+      "column_name": "customer_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "customer_carts",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "customer_sessions",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('customer_sessions_id_seq'::regclass)"
+    },
+    {
+      "table_name": "customer_sessions",
+      "column_name": "customer_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "customer_sessions",
+      "column_name": "token",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "customer_sessions",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "customer_sessions",
+      "column_name": "expires_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "customer_sessions",
+      "column_name": "revoked_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "customers",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('customers_id_seq'::regclass)"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "email",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "customers",
+      "column_name": "password_hash",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "customers",
+      "column_name": "first_name",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "customers",
+      "column_name": "last_name",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "customers",
+      "column_name": "phone",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "customers",
+      "column_name": "locale",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": "'en'::text"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "is_active",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": "true"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "customers",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "inventory",
+      "column_name": "variant_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "inventory",
+      "column_name": "on_hand",
+      "data_type": "integer",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_name": "inventory",
+      "column_name": "reserved",
+      "data_type": "integer",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_name": "inventory",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "order_items",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('order_items_id_seq'::regclass)"
+    },
+    {
+      "table_name": "order_items",
+      "column_name": "order_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "order_items",
+      "column_name": "variant_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "order_items",
+      "column_name": "qty",
+      "data_type": "integer",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "order_items",
+      "column_name": "unit_price_jod",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "order_items",
+      "column_name": "lot_code",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "order_items",
+      "column_name": "line_total_jod",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "orders",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('orders_id_seq'::regclass)"
+    },
+    {
+      "table_name": "orders",
+      "column_name": "cart_id",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "orders",
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": "'PENDING_PAYMENT'::text"
+    },
+    {
+      "table_name": "orders",
+      "column_name": "amount",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "orders",
+      "column_name": "currency",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": "'JOD'::text"
+    },
+    {
+      "table_name": "orders",
+      "column_name": "locale",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": "'en'::text"
+    },
+    {
+      "table_name": "orders",
+      "column_name": "customer_email",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "orders",
+      "column_name": "customer_name",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "orders",
+      "column_name": "paytabs_tran_ref",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "orders",
+      "column_name": "paytabs_response_status",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "orders",
+      "column_name": "paytabs_response_message",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "orders",
+      "column_name": "paytabs_payload",
+      "data_type": "jsonb",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "orders",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "orders",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "orders",
+      "column_name": "payment_method",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": "'PAYTABS'::text"
+    },
+    {
+      "table_name": "orders",
+      "column_name": "customer",
+      "data_type": "jsonb",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "orders",
+      "column_name": "shipping",
+      "data_type": "jsonb",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "orders",
+      "column_name": "paytabs_last_payload",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "orders",
+      "column_name": "paytabs_last_signature",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "payments",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('payments_id_seq'::regclass)"
+    },
+    {
+      "table_name": "payments",
+      "column_name": "order_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "payments",
+      "column_name": "provider",
+      "data_type": "USER-DEFINED",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "payments",
+      "column_name": "status",
+      "data_type": "USER-DEFINED",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "payments",
+      "column_name": "amount_jod",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "payments",
+      "column_name": "paytabs_cart_id",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "payments",
+      "column_name": "paytabs_tran_ref",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "payments",
+      "column_name": "paytabs_tran_id",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "payments",
+      "column_name": "signature",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "payments",
+      "column_name": "callback_raw",
+      "data_type": "jsonb",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "payments",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "payments",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "paytabs_callbacks",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('paytabs_callbacks_id_seq'::regclass)"
+    },
+    {
+      "table_name": "paytabs_callbacks",
+      "column_name": "received_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "paytabs_callbacks",
+      "column_name": "payload",
+      "data_type": "jsonb",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "paytabs_callbacks",
+      "column_name": "signature",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "paytabs_callbacks",
+      "column_name": "verified",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": "false"
+    },
+    {
+      "table_name": "paytabs_callbacks",
+      "column_name": "cart_id",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "paytabs_callbacks",
+      "column_name": "tran_ref",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "paytabs_callbacks",
+      "column_name": "signature_header",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "paytabs_callbacks",
+      "column_name": "signature_computed",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "paytabs_callbacks",
+      "column_name": "signature_valid",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": "false"
+    },
+    {
+      "table_name": "paytabs_callbacks",
+      "column_name": "raw_body",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "product_images",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('product_images_id_seq'::regclass)"
+    },
+    {
+      "table_name": "product_images",
+      "column_name": "product_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "product_images",
+      "column_name": "position",
+      "data_type": "integer",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_name": "product_images",
+      "column_name": "filename",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "product_images",
+      "column_name": "content_type",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "product_images",
+      "column_name": "bytes",
+      "data_type": "bytea",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "product_images",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "product_media",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('product_media_id_seq'::regclass)"
+    },
+    {
+      "table_name": "product_media",
+      "column_name": "product_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "product_media",
+      "column_name": "url",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "product_media",
+      "column_name": "alt_en",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "product_media",
+      "column_name": "alt_ar",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "product_media",
+      "column_name": "sort",
+      "data_type": "integer",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_name": "products",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('products_id_seq'::regclass)"
+    },
+    {
+      "table_name": "products",
+      "column_name": "slug_en",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "products",
+      "column_name": "slug_ar",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "products",
+      "column_name": "name_en",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "products",
+      "column_name": "name_ar",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "products",
+      "column_name": "tagline_en",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": "'Wear the calm.'::text"
+    },
+    {
+      "table_name": "products",
+      "column_name": "tagline_ar",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": "'ارتدِ الهدوء'::text"
+    },
+    {
+      "table_name": "products",
+      "column_name": "story_en",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "products",
+      "column_name": "story_ar",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "products",
+      "column_name": "notes_json",
+      "data_type": "jsonb",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "products",
+      "column_name": "concentration",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "products",
+      "column_name": "active",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": "true"
+    },
+    {
+      "table_name": "products",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "products",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "products",
+      "column_name": "slug",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "products",
+      "column_name": "description_en",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "products",
+      "column_name": "description_ar",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "products",
+      "column_name": "price_jod",
+      "data_type": "numeric",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "products",
+      "column_name": "compare_at_price_jod",
+      "data_type": "numeric",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "products",
+      "column_name": "inventory_qty",
+      "data_type": "integer",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_name": "products",
+      "column_name": "category_key",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": "'perfume'::text"
+    },
+    {
+      "table_name": "products",
+      "column_name": "is_active",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": "true"
+    },
+    {
+      "table_name": "promotions",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('promotions_id_seq'::regclass)"
+    },
+    {
+      "table_name": "promotions",
+      "column_name": "code",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "promotions",
+      "column_name": "title_en",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "promotions",
+      "column_name": "title_ar",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "promotions",
+      "column_name": "discount_type",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "promotions",
+      "column_name": "discount_value",
+      "data_type": "numeric",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "promotions",
+      "column_name": "starts_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "promotions",
+      "column_name": "ends_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "promotions",
+      "column_name": "usage_limit",
+      "data_type": "integer",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "promotions",
+      "column_name": "is_active",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": "true"
+    },
+    {
+      "table_name": "promotions",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "promotions",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "promotions",
+      "column_name": "category_keys",
+      "data_type": "ARRAY",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "shipments",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('shipments_id_seq'::regclass)"
+    },
+    {
+      "table_name": "shipments",
+      "column_name": "order_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "shipments",
+      "column_name": "courier_name",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "shipments",
+      "column_name": "tracking_number",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "shipments",
+      "column_name": "shipped_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "shipments",
+      "column_name": "delivered_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "shipments",
+      "column_name": "cod_amount_jod",
+      "data_type": "numeric",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "shipments",
+      "column_name": "notes",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "staff_users",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('staff_users_id_seq'::regclass)"
+    },
+    {
+      "table_name": "staff_users",
+      "column_name": "email",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "staff_users",
+      "column_name": "password_hash",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "staff_users",
+      "column_name": "full_name",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "staff_users",
+      "column_name": "role",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": "'staff'::text"
+    },
+    {
+      "table_name": "staff_users",
+      "column_name": "is_active",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": "true"
+    },
+    {
+      "table_name": "staff_users",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "staff_users",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "variants",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('variants_id_seq'::regclass)"
+    },
+    {
+      "table_name": "variants",
+      "column_name": "product_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "variants",
+      "column_name": "sku",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "variants",
+      "column_name": "size_ml",
+      "data_type": "integer",
+      "is_nullable": "NO",
+      "column_default": "100"
+    },
+    {
+      "table_name": "variants",
+      "column_name": "price_jod",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "variants",
+      "column_name": "active",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": "true"
+    }
+  ],
+  "constraints": [
+    {
+      "table_name": "batches",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32890_1_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "batches",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32890_2_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "batches",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32890_3_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "batches",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32890_6_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "batches",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32890_7_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "batches",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32890_8_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "batches",
+      "constraint_type": "CHECK",
+      "constraint_name": "batches_qty_available_check",
+      "column_name": null,
+      "foreign_table_name": "batches",
+      "foreign_column_name": "qty_available"
+    },
+    {
+      "table_name": "batches",
+      "constraint_type": "CHECK",
+      "constraint_name": "batches_qty_total_check",
+      "column_name": null,
+      "foreign_table_name": "batches",
+      "foreign_column_name": "qty_total"
+    },
+    {
+      "table_name": "batches",
+      "constraint_type": "FOREIGN KEY",
+      "constraint_name": "batches_variant_id_fkey",
+      "column_name": "variant_id",
+      "foreign_table_name": "variants",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "batches",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "batches_pkey",
+      "column_name": "id",
+      "foreign_table_name": "batches",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "batches",
+      "constraint_type": "UNIQUE",
+      "constraint_name": "batches_variant_id_lot_code_key",
+      "column_name": "variant_id",
+      "foreign_table_name": "batches",
+      "foreign_column_name": "lot_code"
+    },
+    {
+      "table_name": "batches",
+      "constraint_type": "UNIQUE",
+      "constraint_name": "batches_variant_id_lot_code_key",
+      "column_name": "variant_id",
+      "foreign_table_name": "batches",
+      "foreign_column_name": "variant_id"
+    },
+    {
+      "table_name": "batches",
+      "constraint_type": "UNIQUE",
+      "constraint_name": "batches_variant_id_lot_code_key",
+      "column_name": "lot_code",
+      "foreign_table_name": "batches",
+      "foreign_column_name": "lot_code"
+    },
+    {
+      "table_name": "batches",
+      "constraint_type": "UNIQUE",
+      "constraint_name": "batches_variant_id_lot_code_key",
+      "column_name": "lot_code",
+      "foreign_table_name": "batches",
+      "foreign_column_name": "variant_id"
+    },
+    {
+      "table_name": "categories",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_81923_1_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "categories",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_81923_2_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "categories",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_81923_3_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "categories",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_81923_4_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "categories",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_81923_5_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "categories",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_81923_6_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "categories",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_81923_7_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "categories",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_81923_8_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "categories",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "categories_pkey",
+      "column_name": "key",
+      "foreign_table_name": "categories",
+      "foreign_column_name": "key"
+    },
+    {
+      "table_name": "coupons",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32911_1_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "coupons",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32911_2_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "coupons",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32911_3_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "coupons",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32911_4_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "coupons",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32911_5_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "coupons",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32911_9_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "coupons",
+      "constraint_type": "CHECK",
+      "constraint_name": "coupons_type_check",
+      "column_name": null,
+      "foreign_table_name": "coupons",
+      "foreign_column_name": "type"
+    },
+    {
+      "table_name": "coupons",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "coupons_pkey",
+      "column_name": "id",
+      "foreign_table_name": "coupons",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "coupons",
+      "constraint_type": "UNIQUE",
+      "constraint_name": "coupons_code_key",
+      "column_name": "code",
+      "foreign_table_name": "coupons",
+      "foreign_column_name": "code"
+    },
+    {
+      "table_name": "customer_cart_items",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_73739_1_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "customer_cart_items",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_73739_2_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "customer_cart_items",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_73739_3_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "customer_cart_items",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_73739_4_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "customer_cart_items",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_73739_5_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "customer_cart_items",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_73739_6_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "customer_cart_items",
+      "constraint_type": "CHECK",
+      "constraint_name": "customer_cart_items_qty_check",
+      "column_name": null,
+      "foreign_table_name": "customer_cart_items",
+      "foreign_column_name": "qty"
+    },
+    {
+      "table_name": "customer_cart_items",
+      "constraint_type": "FOREIGN KEY",
+      "constraint_name": "customer_cart_items_customer_id_fkey",
+      "column_name": "customer_id",
+      "foreign_table_name": "customer_carts",
+      "foreign_column_name": "customer_id"
+    },
+    {
+      "table_name": "customer_cart_items",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "customer_cart_items_pkey",
+      "column_name": "customer_id",
+      "foreign_table_name": "customer_cart_items",
+      "foreign_column_name": "slug"
+    },
+    {
+      "table_name": "customer_cart_items",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "customer_cart_items_pkey",
+      "column_name": "customer_id",
+      "foreign_table_name": "customer_cart_items",
+      "foreign_column_name": "customer_id"
+    },
+    {
+      "table_name": "customer_cart_items",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "customer_cart_items_pkey",
+      "column_name": "slug",
+      "foreign_table_name": "customer_cart_items",
+      "foreign_column_name": "customer_id"
+    },
+    {
+      "table_name": "customer_cart_items",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "customer_cart_items_pkey",
+      "column_name": "slug",
+      "foreign_table_name": "customer_cart_items",
+      "foreign_column_name": "slug"
+    },
+    {
+      "table_name": "customer_carts",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_73728_1_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "customer_carts",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_73728_2_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "customer_carts",
+      "constraint_type": "FOREIGN KEY",
+      "constraint_name": "customer_carts_customer_id_fkey",
+      "column_name": "customer_id",
+      "foreign_table_name": "customers",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "customer_carts",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "customer_carts_pkey",
+      "column_name": "customer_id",
+      "foreign_table_name": "customer_carts",
+      "foreign_column_name": "customer_id"
+    },
+    {
+      "table_name": "customer_sessions",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_65567_1_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "customer_sessions",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_65567_2_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "customer_sessions",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_65567_3_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "customer_sessions",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_65567_4_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "customer_sessions",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_65567_5_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "customer_sessions",
+      "constraint_type": "FOREIGN KEY",
+      "constraint_name": "customer_sessions_customer_id_fkey",
+      "column_name": "customer_id",
+      "foreign_table_name": "customers",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "customer_sessions",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "customer_sessions_pkey",
+      "column_name": "id",
+      "foreign_table_name": "customer_sessions",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "customer_sessions",
+      "constraint_type": "UNIQUE",
+      "constraint_name": "customer_sessions_token_key",
+      "column_name": "token",
+      "foreign_table_name": "customer_sessions",
+      "foreign_column_name": "token"
+    },
+    {
+      "table_name": "customers",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_65552_10_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "customers",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_65552_1_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "customers",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_65552_2_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "customers",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_65552_3_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "customers",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_65552_7_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "customers",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_65552_8_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "customers",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_65552_9_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "customers",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "customers_pkey",
+      "column_name": "id",
+      "foreign_table_name": "customers",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "customers",
+      "constraint_type": "UNIQUE",
+      "constraint_name": "customers_email_key",
+      "column_name": "email",
+      "foreign_table_name": "customers",
+      "foreign_column_name": "email"
+    },
+    {
+      "table_name": "inventory",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32874_1_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "inventory",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32874_2_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "inventory",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32874_3_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "inventory",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32874_4_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "inventory",
+      "constraint_type": "CHECK",
+      "constraint_name": "inventory_on_hand_check",
+      "column_name": null,
+      "foreign_table_name": "inventory",
+      "foreign_column_name": "on_hand"
+    },
+    {
+      "table_name": "inventory",
+      "constraint_type": "CHECK",
+      "constraint_name": "inventory_reserved_check",
+      "column_name": null,
+      "foreign_table_name": "inventory",
+      "foreign_column_name": "reserved"
+    },
+    {
+      "table_name": "inventory",
+      "constraint_type": "FOREIGN KEY",
+      "constraint_name": "inventory_variant_id_fkey",
+      "column_name": "variant_id",
+      "foreign_table_name": "variants",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "inventory",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "inventory_pkey",
+      "column_name": "variant_id",
+      "foreign_table_name": "inventory",
+      "foreign_column_name": "variant_id"
+    },
+    {
+      "table_name": "order_items",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32925_1_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "order_items",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32925_2_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "order_items",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32925_3_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "order_items",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32925_4_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "order_items",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32925_5_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "order_items",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32925_7_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "order_items",
+      "constraint_type": "CHECK",
+      "constraint_name": "order_items_qty_check",
+      "column_name": null,
+      "foreign_table_name": "order_items",
+      "foreign_column_name": "qty"
+    },
+    {
+      "table_name": "order_items",
+      "constraint_type": "FOREIGN KEY",
+      "constraint_name": "order_items_order_id_fkey",
+      "column_name": "order_id",
+      "foreign_table_name": "orders",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "order_items",
+      "constraint_type": "FOREIGN KEY",
+      "constraint_name": "order_items_variant_id_fkey",
+      "column_name": "variant_id",
+      "foreign_table_name": "variants",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "order_items",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "order_items_pkey",
+      "column_name": "id",
+      "foreign_table_name": "order_items",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "orders",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_24577_13_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_24577_14_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_24577_15_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_24577_1_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_24577_2_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_24577_3_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_24577_4_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_24577_5_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_24577_6_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "orders",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "orders_pkey",
+      "column_name": "id",
+      "foreign_table_name": "orders",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "orders",
+      "constraint_type": "UNIQUE",
+      "constraint_name": "orders_cart_id_key",
+      "column_name": "cart_id",
+      "foreign_table_name": "orders",
+      "foreign_column_name": "cart_id"
+    },
+    {
+      "table_name": "payments",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32945_11_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "payments",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32945_12_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "payments",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32945_1_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "payments",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32945_2_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "payments",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32945_3_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "payments",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32945_4_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "payments",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32945_5_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "payments",
+      "constraint_type": "FOREIGN KEY",
+      "constraint_name": "payments_order_id_fkey",
+      "column_name": "order_id",
+      "foreign_table_name": "orders",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "payments",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "payments_pkey",
+      "column_name": "id",
+      "foreign_table_name": "payments",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "payments",
+      "constraint_type": "UNIQUE",
+      "constraint_name": "payments_paytabs_tran_ref_key",
+      "column_name": "paytabs_tran_ref",
+      "foreign_table_name": "payments",
+      "foreign_column_name": "paytabs_tran_ref"
+    },
+    {
+      "table_name": "paytabs_callbacks",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32769_10_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "paytabs_callbacks",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32769_11_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "paytabs_callbacks",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32769_1_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "paytabs_callbacks",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32769_5_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "paytabs_callbacks",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32769_9_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "paytabs_callbacks",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "paytabs_callbacks_pkey",
+      "column_name": "id",
+      "foreign_table_name": "paytabs_callbacks",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "product_images",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_81948_1_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "product_images",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_81948_2_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "product_images",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_81948_3_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "product_images",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_81948_5_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "product_images",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_81948_6_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "product_images",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_81948_7_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "product_images",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "product_images_pkey",
+      "column_name": "id",
+      "foreign_table_name": "product_images",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "product_media",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32842_1_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "product_media",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32842_2_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "product_media",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32842_3_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "product_media",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32842_6_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "product_media",
+      "constraint_type": "FOREIGN KEY",
+      "constraint_name": "product_media_product_id_fkey",
+      "column_name": "product_id",
+      "foreign_table_name": "products",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "product_media",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "product_media_pkey",
+      "column_name": "id",
+      "foreign_table_name": "product_media",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "products",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32824_12_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "products",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32824_13_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "products",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32824_14_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "products",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32824_15_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "products",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32824_1_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "products",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32824_20_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "products",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32824_22_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "products",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32824_2_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "products",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32824_3_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "products",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32824_4_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "products",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32824_5_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "products",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32824_6_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "products",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32824_7_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "products",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "products_pkey",
+      "column_name": "id",
+      "foreign_table_name": "products",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "products",
+      "constraint_type": "UNIQUE",
+      "constraint_name": "products_slug_ar_key",
+      "column_name": "slug_ar",
+      "foreign_table_name": "products",
+      "foreign_column_name": "slug_ar"
+    },
+    {
+      "table_name": "products",
+      "constraint_type": "UNIQUE",
+      "constraint_name": "products_slug_en_key",
+      "column_name": "slug_en",
+      "foreign_table_name": "products",
+      "foreign_column_name": "slug_en"
+    },
+    {
+      "table_name": "promotions",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_81936_10_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "promotions",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_81936_11_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "promotions",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_81936_12_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "promotions",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_81936_1_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "promotions",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "promotions_pkey",
+      "column_name": "id",
+      "foreign_table_name": "promotions",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "shipments",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32963_1_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "shipments",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32963_2_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "shipments",
+      "constraint_type": "FOREIGN KEY",
+      "constraint_name": "shipments_order_id_fkey",
+      "column_name": "order_id",
+      "foreign_table_name": "orders",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "shipments",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "shipments_pkey",
+      "column_name": "id",
+      "foreign_table_name": "shipments",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "staff_users",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_65584_1_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "staff_users",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_65584_2_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "staff_users",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_65584_3_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "staff_users",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_65584_5_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "staff_users",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_65584_6_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "staff_users",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_65584_7_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "staff_users",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_65584_8_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "staff_users",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "staff_users_pkey",
+      "column_name": "id",
+      "foreign_table_name": "staff_users",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "staff_users",
+      "constraint_type": "UNIQUE",
+      "constraint_name": "staff_users_email_key",
+      "column_name": "email",
+      "foreign_table_name": "staff_users",
+      "foreign_column_name": "email"
+    },
+    {
+      "table_name": "variants",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32857_1_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "variants",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32857_2_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "variants",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32857_3_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "variants",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32857_4_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "variants",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32857_5_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "variants",
+      "constraint_type": "CHECK",
+      "constraint_name": "2200_32857_6_not_null",
+      "column_name": null,
+      "foreign_table_name": null,
+      "foreign_column_name": null
+    },
+    {
+      "table_name": "variants",
+      "constraint_type": "FOREIGN KEY",
+      "constraint_name": "variants_product_id_fkey",
+      "column_name": "product_id",
+      "foreign_table_name": "products",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "variants",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "variants_pkey",
+      "column_name": "id",
+      "foreign_table_name": "variants",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "variants",
+      "constraint_type": "UNIQUE",
+      "constraint_name": "variants_sku_key",
+      "column_name": "sku",
+      "foreign_table_name": "variants",
+      "foreign_column_name": "sku"
+    }
+  ],
+  "indexes": [
+    {
+      "tablename": "batches",
+      "indexname": "batches_pkey",
+      "indexdef": "CREATE UNIQUE INDEX batches_pkey ON public.batches USING btree (id)"
+    },
+    {
+      "tablename": "batches",
+      "indexname": "batches_variant_id_lot_code_key",
+      "indexdef": "CREATE UNIQUE INDEX batches_variant_id_lot_code_key ON public.batches USING btree (variant_id, lot_code)"
+    },
+    {
+      "tablename": "categories",
+      "indexname": "categories_pkey",
+      "indexdef": "CREATE UNIQUE INDEX categories_pkey ON public.categories USING btree (key)"
+    },
+    {
+      "tablename": "categories",
+      "indexname": "idx_categories_active",
+      "indexdef": "CREATE INDEX idx_categories_active ON public.categories USING btree (is_active)"
+    },
+    {
+      "tablename": "categories",
+      "indexname": "idx_categories_key_unique",
+      "indexdef": "CREATE UNIQUE INDEX idx_categories_key_unique ON public.categories USING btree (key)"
+    },
+    {
+      "tablename": "categories",
+      "indexname": "idx_categories_sort",
+      "indexdef": "CREATE INDEX idx_categories_sort ON public.categories USING btree (sort_order)"
+    },
+    {
+      "tablename": "coupons",
+      "indexname": "coupons_code_key",
+      "indexdef": "CREATE UNIQUE INDEX coupons_code_key ON public.coupons USING btree (code)"
+    },
+    {
+      "tablename": "coupons",
+      "indexname": "coupons_pkey",
+      "indexdef": "CREATE UNIQUE INDEX coupons_pkey ON public.coupons USING btree (id)"
+    },
+    {
+      "tablename": "customer_cart_items",
+      "indexname": "customer_cart_items_pkey",
+      "indexdef": "CREATE UNIQUE INDEX customer_cart_items_pkey ON public.customer_cart_items USING btree (customer_id, slug)"
+    },
+    {
+      "tablename": "customer_cart_items",
+      "indexname": "idx_customer_cart_items_customer",
+      "indexdef": "CREATE INDEX idx_customer_cart_items_customer ON public.customer_cart_items USING btree (customer_id)"
+    },
+    {
+      "tablename": "customer_carts",
+      "indexname": "customer_carts_pkey",
+      "indexdef": "CREATE UNIQUE INDEX customer_carts_pkey ON public.customer_carts USING btree (customer_id)"
+    },
+    {
+      "tablename": "customer_sessions",
+      "indexname": "customer_sessions_pkey",
+      "indexdef": "CREATE UNIQUE INDEX customer_sessions_pkey ON public.customer_sessions USING btree (id)"
+    },
+    {
+      "tablename": "customer_sessions",
+      "indexname": "customer_sessions_token_key",
+      "indexdef": "CREATE UNIQUE INDEX customer_sessions_token_key ON public.customer_sessions USING btree (token)"
+    },
+    {
+      "tablename": "customer_sessions",
+      "indexname": "idx_customer_sessions_customer_id",
+      "indexdef": "CREATE INDEX idx_customer_sessions_customer_id ON public.customer_sessions USING btree (customer_id)"
+    },
+    {
+      "tablename": "customer_sessions",
+      "indexname": "idx_customer_sessions_token",
+      "indexdef": "CREATE INDEX idx_customer_sessions_token ON public.customer_sessions USING btree (token)"
+    },
+    {
+      "tablename": "customers",
+      "indexname": "customers_email_key",
+      "indexdef": "CREATE UNIQUE INDEX customers_email_key ON public.customers USING btree (email)"
+    },
+    {
+      "tablename": "customers",
+      "indexname": "customers_pkey",
+      "indexdef": "CREATE UNIQUE INDEX customers_pkey ON public.customers USING btree (id)"
+    },
+    {
+      "tablename": "inventory",
+      "indexname": "inventory_pkey",
+      "indexdef": "CREATE UNIQUE INDEX inventory_pkey ON public.inventory USING btree (variant_id)"
+    },
+    {
+      "tablename": "order_items",
+      "indexname": "order_items_pkey",
+      "indexdef": "CREATE UNIQUE INDEX order_items_pkey ON public.order_items USING btree (id)"
+    },
+    {
+      "tablename": "orders",
+      "indexname": "idx_orders_created",
+      "indexdef": "CREATE INDEX idx_orders_created ON public.orders USING btree (created_at)"
+    },
+    {
+      "tablename": "orders",
+      "indexname": "idx_orders_created_at",
+      "indexdef": "CREATE INDEX idx_orders_created_at ON public.orders USING btree (created_at DESC)"
+    },
+    {
+      "tablename": "orders",
+      "indexname": "idx_orders_status",
+      "indexdef": "CREATE INDEX idx_orders_status ON public.orders USING btree (status)"
+    },
+    {
+      "tablename": "orders",
+      "indexname": "orders_cart_id_key",
+      "indexdef": "CREATE UNIQUE INDEX orders_cart_id_key ON public.orders USING btree (cart_id)"
+    },
+    {
+      "tablename": "orders",
+      "indexname": "orders_pkey",
+      "indexdef": "CREATE UNIQUE INDEX orders_pkey ON public.orders USING btree (id)"
+    },
+    {
+      "tablename": "payments",
+      "indexname": "payments_paytabs_tran_ref_key",
+      "indexdef": "CREATE UNIQUE INDEX payments_paytabs_tran_ref_key ON public.payments USING btree (paytabs_tran_ref)"
+    },
+    {
+      "tablename": "payments",
+      "indexname": "payments_pkey",
+      "indexdef": "CREATE UNIQUE INDEX payments_pkey ON public.payments USING btree (id)"
+    },
+    {
+      "tablename": "paytabs_callbacks",
+      "indexname": "idx_paytabs_callbacks_cart_id",
+      "indexdef": "CREATE INDEX idx_paytabs_callbacks_cart_id ON public.paytabs_callbacks USING btree (cart_id)"
+    },
+    {
+      "tablename": "paytabs_callbacks",
+      "indexname": "idx_paytabs_callbacks_received_at",
+      "indexdef": "CREATE INDEX idx_paytabs_callbacks_received_at ON public.paytabs_callbacks USING btree (received_at DESC)"
+    },
+    {
+      "tablename": "paytabs_callbacks",
+      "indexname": "idx_paytabs_callbacks_tran_ref",
+      "indexdef": "CREATE INDEX idx_paytabs_callbacks_tran_ref ON public.paytabs_callbacks USING btree (tran_ref)"
+    },
+    {
+      "tablename": "paytabs_callbacks",
+      "indexname": "paytabs_callbacks_pkey",
+      "indexdef": "CREATE UNIQUE INDEX paytabs_callbacks_pkey ON public.paytabs_callbacks USING btree (id)"
+    },
+    {
+      "tablename": "product_images",
+      "indexname": "idx_product_images_product",
+      "indexdef": "CREATE INDEX idx_product_images_product ON public.product_images USING btree (product_id, \"position\")"
+    },
+    {
+      "tablename": "product_images",
+      "indexname": "product_images_pkey",
+      "indexdef": "CREATE UNIQUE INDEX product_images_pkey ON public.product_images USING btree (id)"
+    },
+    {
+      "tablename": "product_media",
+      "indexname": "product_media_pkey",
+      "indexdef": "CREATE UNIQUE INDEX product_media_pkey ON public.product_media USING btree (id)"
+    },
+    {
+      "tablename": "products",
+      "indexname": "idx_products_active",
+      "indexdef": "CREATE INDEX idx_products_active ON public.products USING btree (is_active)"
+    },
+    {
+      "tablename": "products",
+      "indexname": "idx_products_category",
+      "indexdef": "CREATE INDEX idx_products_category ON public.products USING btree (category_key)"
+    },
+    {
+      "tablename": "products",
+      "indexname": "idx_products_created_at",
+      "indexdef": "CREATE INDEX idx_products_created_at ON public.products USING btree (created_at DESC)"
+    },
+    {
+      "tablename": "products",
+      "indexname": "idx_products_slug_unique",
+      "indexdef": "CREATE UNIQUE INDEX idx_products_slug_unique ON public.products USING btree (slug)"
+    },
+    {
+      "tablename": "products",
+      "indexname": "products_pkey",
+      "indexdef": "CREATE UNIQUE INDEX products_pkey ON public.products USING btree (id)"
+    },
+    {
+      "tablename": "products",
+      "indexname": "products_slug_ar_key",
+      "indexdef": "CREATE UNIQUE INDEX products_slug_ar_key ON public.products USING btree (slug_ar)"
+    },
+    {
+      "tablename": "products",
+      "indexname": "products_slug_en_key",
+      "indexdef": "CREATE UNIQUE INDEX products_slug_en_key ON public.products USING btree (slug_en)"
+    },
+    {
+      "tablename": "promotions",
+      "indexname": "idx_promotions_active",
+      "indexdef": "CREATE INDEX idx_promotions_active ON public.promotions USING btree (is_active)"
+    },
+    {
+      "tablename": "promotions",
+      "indexname": "idx_promotions_code_unique",
+      "indexdef": "CREATE UNIQUE INDEX idx_promotions_code_unique ON public.promotions USING btree (code)"
+    },
+    {
+      "tablename": "promotions",
+      "indexname": "idx_promotions_created_at",
+      "indexdef": "CREATE INDEX idx_promotions_created_at ON public.promotions USING btree (created_at DESC)"
+    },
+    {
+      "tablename": "promotions",
+      "indexname": "promotions_pkey",
+      "indexdef": "CREATE UNIQUE INDEX promotions_pkey ON public.promotions USING btree (id)"
+    },
+    {
+      "tablename": "shipments",
+      "indexname": "shipments_pkey",
+      "indexdef": "CREATE UNIQUE INDEX shipments_pkey ON public.shipments USING btree (id)"
+    },
+    {
+      "tablename": "staff_users",
+      "indexname": "staff_users_email_key",
+      "indexdef": "CREATE UNIQUE INDEX staff_users_email_key ON public.staff_users USING btree (email)"
+    },
+    {
+      "tablename": "staff_users",
+      "indexname": "staff_users_pkey",
+      "indexdef": "CREATE UNIQUE INDEX staff_users_pkey ON public.staff_users USING btree (id)"
+    },
+    {
+      "tablename": "variants",
+      "indexname": "variants_pkey",
+      "indexdef": "CREATE UNIQUE INDEX variants_pkey ON public.variants USING btree (id)"
+    },
+    {
+      "tablename": "variants",
+      "indexname": "variants_sku_key",
+      "indexdef": "CREATE UNIQUE INDEX variants_sku_key ON public.variants USING btree (sku)"
+    }
+  ]
+}

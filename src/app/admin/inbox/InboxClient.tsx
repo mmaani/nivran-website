@@ -6,7 +6,9 @@ type Lang = "en" | "ar";
 
 function getCookie(name: string) {
   if (typeof document === "undefined") return "";
-  const m = document.cookie.match(new RegExp(`(?:^|; )${name.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&")}=([^;]*)`));
+  const m = document.cookie.match(
+    new RegExp(`(?:^|; )${name.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&")}=([^;]*)`)
+  );
   return m ? decodeURIComponent(m[1]) : "";
 }
 
@@ -24,6 +26,12 @@ type ContactRow = {
   name: string;
   email: string;
   phone: string | null;
+
+  // New fields (updated contact form)
+  topic: string | null;
+  subject: string | null;
+  order_ref: string | null;
+
   message: string;
   locale: string;
   created_at: string;
@@ -40,8 +48,9 @@ type CallbackRow = {
   id: number;
   cart_id: string | null;
   tran_ref: string | null;
+  verified: boolean;
   signature_valid: boolean;
-  created_at: string;
+  received_at: string;
   raw_preview: string | null;
 };
 
@@ -83,6 +92,9 @@ export default function InboxClient() {
           subsTitle: "مشتركو النشرة",
           cbTitle: "إشعارات PayTabs",
           thFrom: "المرسل",
+          thTopic: "التصنيف",
+          thSubject: "العنوان",
+          thOrder: "رقم الطلب",
           thMsg: "الرسالة",
           thMeta: "بيانات",
           thEmail: "البريد",
@@ -111,6 +123,9 @@ export default function InboxClient() {
           subsTitle: "Newsletter subscribers",
           cbTitle: "PayTabs callbacks",
           thFrom: "From",
+          thTopic: "Topic",
+          thSubject: "Subject",
+          thOrder: "Order #",
           thMsg: "Message",
           thMeta: "Meta",
           thEmail: "Email",
@@ -220,6 +235,9 @@ export default function InboxClient() {
             <thead>
               <tr>
                 <th>{t.thFrom}</th>
+                <th>{t.thTopic}</th>
+                <th>{t.thSubject}</th>
+                <th>{t.thOrder}</th>
                 <th>{t.thMsg}</th>
                 <th>{t.thMeta}</th>
               </tr>
@@ -227,7 +245,7 @@ export default function InboxClient() {
             <tbody>
               {data.contact.length === 0 ? (
                 <tr>
-                  <td colSpan={3} style={{ padding: 12, color: "rgba(0,0,0,.6)" }}>
+                  <td colSpan={6} style={{ padding: 12, color: "rgba(0,0,0,.6)" }}>
                     {t.emptyContact}
                   </td>
                 </tr>
@@ -241,6 +259,9 @@ export default function InboxClient() {
                       <br />
                       <span className="ltr">{r.phone || "—"}</span>
                     </td>
+                    <td>{r.topic || "—"}</td>
+                    <td>{r.subject || "—"}</td>
+                    <td className="mono">{r.order_ref || "—"}</td>
                     <td style={{ whiteSpace: "pre-wrap" }}>{clamp(r.message, 1200)}</td>
                     <td>
                       {r.locale}
@@ -319,7 +340,7 @@ export default function InboxClient() {
                     <td>
                       <span className="badge">{c.signature_valid ? t.valid : t.invalid}</span>
                     </td>
-                    <td>{fmt(c.created_at)}</td>
+                    <td>{fmt(c.received_at)}</td>
                     <td style={{ whiteSpace: "pre-wrap", maxWidth: 520 }}>{c.raw_preview || "—"}</td>
                   </tr>
                 ))

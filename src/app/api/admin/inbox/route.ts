@@ -11,6 +11,12 @@ type ContactRow = {
   name: string;
   email: string;
   phone: string | null;
+
+  // NEW (from updated contact form)
+  topic: string | null;
+  subject: string | null;
+  order_ref: string | null;
+
   message: string;
   locale: string;
   created_at: string;
@@ -27,18 +33,26 @@ type CallbackRow = {
   id: number;
   cart_id: string | null;
   tran_ref: string | null;
+
+  // in your real schema
+  verified: boolean;
   signature_valid: boolean;
-  created_at: string;
+
+  received_at: string;
   raw_preview: string | null;
 };
 
 async function ensureInboxTables() {
+  // Create missing tables (your DB does NOT have these yet)
   await db.query(`
     create table if not exists contact_submissions (
       id bigserial primary key,
       name text not null,
       email text not null,
       phone text,
+      topic text,
+      subject text,
+      order_ref text,
       message text not null,
       locale text not null default 'en',
       created_at timestamptz not null default now()
@@ -50,24 +64,17 @@ async function ensureInboxTables() {
       locale text not null default 'en',
       created_at timestamptz not null default now()
     );
-
-    create table if not exists paytabs_callbacks (
-      id bigserial primary key,
-      cart_id text,
-      tran_ref text,
-      signature_valid boolean not null default false,
-      payload_json jsonb,
-      created_at timestamptz not null default now()
-    );
   `);
 
-  // Optional columns / safe migrations
-  await db.query(`alter table newsletter_subscribers add column if not exists created_at timestamptz not null default now();`);
-  await db.query(`alter table paytabs_callbacks add column if not exists payload_json jsonb;`);
+  // Safe migrations if table already exists but columns don’t
+  await db.query(`alter table contact_submissions add column if not exists topic text;`);
+  await db.query(`alter table contact_submissions add column if not exists subject text;`);
+  await db.query(`alter table contact_submissions add column if not exists order_ref text;`);
 
-  await db.query(`create index if not exists idx_contact_created_at on contact_submissions(created_at);`);
-  await db.query(`create index if not exists idx_newsletter_created_at on newsletter_subscribers(created_at);`);
-  await db.query(`create index if not exists idx_paytabs_callbacks_created_at on paytabs_callbacks(created_at);`);
+  // Indexes
+  await db.query(`create index if not exists idx_contact_created_at on contact_submissions(created_at desc);`);
+  await db.query(`create index if not exists idx_contact_topic on contact_submissions(topic);`);
+  await db.query(`create index if not exists idx_newsletter_created_at on newsletter_subscribers(created_at desc);`);
 }
 
 export async function GET(req: Request): Promise<Response> {
@@ -83,7 +90,17 @@ export async function GET(req: Request): Promise<Response> {
 
   const [contact, subs, callbacks] = await Promise.all([
     db.query<ContactRow>(
-      `select id, name, email, phone, message, locale, created_at::text
+      `select
+         id,
+         name,
+         email,
+         phone,
+         topic,
+         subject,
+         order_ref,
+         message,
+         locale,
+         created_at::text
        from contact_submissions
        order by created_at desc
        limit $1`,
@@ -96,15 +113,18 @@ export async function GET(req: Request): Promise<Response> {
        limit $1`,
       [limit]
     ),
+    // IMPORTANT: match YOUR DB schema exactly
     db.query<CallbackRow>(
-      `select id,
-              cart_id,
-              tran_ref,
-              signature_valid,
-              created_at::text,
-              left(coalesce(payload_json::text,''), 500) as raw_preview
+      `select
+         id,
+         cart_id,
+         tran_ref,
+         verified,
+         signature_valid,
+         received_at::text,
+         left(coalesce(payload::text, ''), 500) as raw_preview
        from paytabs_callbacks
-       order by created_at desc
+       order by received_at desc
        limit $1`,
       [limit]
     ),

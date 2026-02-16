@@ -12,7 +12,15 @@ export default async function ContactPage({ params }: { params: Promise<{ locale
         <section className="panel">
           <h3 style={{ marginTop: 0 }}>{isAr ? "الدعم" : "Support"}</h3>
           <p>{isAr ? "فريقنا يرد خلال يوم عمل واحد." : "Our team responds within one business day."}</p>
-          <p style={{ marginBottom: 0 }}>hello@nivran.com<br />+962791752686</p>
+          <p style={{ marginBottom: 0 }}>
+            <a href="mailto:hello@nivran.com">hello@nivran.com</a>
+            <br />
+            <a href="tel:+962791752686">+962791752686</a>
+            <br />
+            <a href="https://wa.me/962791752686" target="_blank" rel="noreferrer">
+              {isAr ? "راسلنا على واتساب" : "Message us on WhatsApp"}
+            </a>
+          </p>
         </section>
         <section className="panel">
           <ContactForm locale={locale} />

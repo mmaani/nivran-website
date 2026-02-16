@@ -142,39 +142,48 @@ export default async function FAQPage({
           "Yes—contact us for wholesale, corporate gifting, or bulk orders and we’ll propose the right option.",
         ],
       ];
+return (
+  <div style={{ padding: "1.2rem 0" }}>
+    <h1 className="title">{isAr ? "الأسئلة الشائعة" : "Frequently asked questions"}</h1>
 
-  return (
-    <div style={{ padding: "1.2rem 0" }}>
-      <h1 className="title">{isAr ? "الأسئلة الشائعة" : "Frequently asked questions"}</h1>
+    {/* tiny behavior-only styling for the chevron */}
+    <style>{`
+      details > summary { list-style: none; }
+      details > summary::-webkit-details-marker { display: none; }
+      .faq-chevron { transition: transform 150ms ease; opacity: .7; }
+      details[open] > summary .faq-chevron { transform: rotate(180deg); }
+    `}</style>
 
-      <div style={{ display: "grid", gap: ".8rem" }}>
-        {faqs.map(([q, a]) => (
-          <article key={q} className="panel">
-            <details>
-              <summary
-                style={{
-                  cursor: "pointer",
-                  listStyle: "none",
-                  fontWeight: 700,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "12px",
-                }}
-              >
-                <span>{q}</span>
-                <span aria-hidden="true" style={{ opacity: 0.7 }}>▾</span>
-              </summary>
+    <div style={{ display: "grid", gap: ".8rem" }}>
+      {faqs.map(([q, a]) => (
+        <article key={q} className="panel">
+          {/* same name => exclusive accordion */}
+          <details name="nivran-faq">
+            <summary
+              style={{
+                cursor: "pointer",
+                listStyle: "none",
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "12px",
+              }}
+            >
+              <span>{q}</span>
+              <span className="faq-chevron" aria-hidden="true">▾</span>
+            </summary>
 
-              <div style={{ marginTop: ".65rem" }}>
-                <p style={{ marginBottom: 0 }} className="muted">
-                  {a}
-                </p>
-              </div>
-            </details>
-          </article>
-        ))}
-      </div>
+            <div style={{ marginTop: ".65rem" }}>
+              <p style={{ marginBottom: 0 }} className="muted">
+                {a}
+              </p>
+            </div>
+          </details>
+        </article>
+      ))}
     </div>
-  );
+  </div>
+);
+
 }
