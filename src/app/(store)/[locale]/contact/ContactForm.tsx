@@ -41,7 +41,9 @@ export default function ContactForm({ locale }: { locale: "en" | "ar" }) {
   ];
 
   const whatsappNumber = "962791752686"; // no "+"
-  const whatsappText = encodeURIComponent(isAr ? "مرحبًا، أحتاج مساعدة من نيفـران." : "Hi NIVRAN, I need help.");
+  const whatsappText = encodeURIComponent(
+    isAr ? "مرحبًا، أحتاج مساعدة من نيفـران." : "Hi NIVRAN, I need help."
+  );
   const whatsappHref = `https://wa.me/${whatsappNumber}?text=${whatsappText}`;
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -49,7 +51,7 @@ export default function ContactForm({ locale }: { locale: "en" | "ar" }) {
     setLoading(true);
     setMsg("");
 
-    // FIX: keep a stable reference for reset()
+    // IMPORTANT: keep a stable reference; avoids the null reset() issue
     const form = e.currentTarget;
 
     const fd = new FormData(form);
@@ -76,16 +78,12 @@ export default function ContactForm({ locale }: { locale: "en" | "ar" }) {
       }
 
       if (!res.ok || !data?.ok) {
-        const errMsg =
-          (data?.error || data?.message) ||
-          (text ? text.slice(0, 600) : "") ||
-          `HTTP ${res.status}`;
-        setMsg(errMsg);
+        setMsg((data?.error || data?.message) || (text ? text.slice(0, 600) : "") || `HTTP ${res.status}`);
         return;
       }
 
       setMsg(isAr ? "تم الإرسال بنجاح." : "Message sent successfully.");
-      form.reset();
+      form.reset(); // safe: HTMLFormElement.reset() :contentReference[oaicite:1]{index=1}
     } catch (err: unknown) {
       setMsg(err instanceof Error ? err.message : (isAr ? "حدث خطأ في الشبكة." : "Network error."));
     } finally {
@@ -95,7 +93,7 @@ export default function ContactForm({ locale }: { locale: "en" | "ar" }) {
 
   return (
     <form onSubmit={onSubmit} style={{ display: "grid", gap: ".6rem" }}>
-      {/* NEW: quick contact actions */}
+      {/* Quick contact options */}
       <div style={{ display: "flex", gap: ".5rem", flexWrap: "wrap" }}>
         <a className="btn" href="mailto:hello@nivran.com">
           {isAr ? "راسلنا عبر البريد" : "Email us"}
