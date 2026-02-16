@@ -22,6 +22,16 @@ function readCategoryKeys(form: FormData): string[] | null {
   return Array.from(new Set(raw));
 }
 
+
+function readProductSlugs(raw: string): string[] | null {
+  const values = raw
+    .split(",")
+    .map((v) => v.trim().toLowerCase())
+    .filter(Boolean);
+  if (!values.length) return null;
+  return Array.from(new Set(values));
+}
+
 export async function POST(req: Request) {
   const auth = requireAdmin(req);
   if (!auth.ok) return unauthorized(req, auth.status, auth.error);
@@ -47,6 +57,10 @@ export async function POST(req: Request) {
     const minOrderRaw = String(form.get("min_order_jod") || "").trim();
     const minOrderJod = minOrderRaw ? Number(minOrderRaw) : null;
 
+    const priority = Number(form.get("priority") || 0);
+    const productSlugsRaw = String(form.get("product_slugs") || "").trim();
+    const productSlugs = readProductSlugs(productSlugsRaw);
+
     const isActive = String(form.get("is_active") || "") === "on";
     const categoryKeys = readCategoryKeys(form);
 
@@ -64,9 +78,9 @@ export async function POST(req: Request) {
 
     await db.query(
       `insert into promotions
-        (promo_kind, code, title_en, title_ar, discount_type, discount_value, starts_at, ends_at, usage_limit, min_order_jod, is_active, category_keys)
+        (promo_kind, code, title_en, title_ar, discount_type, discount_value, starts_at, ends_at, usage_limit, min_order_jod, priority, product_slugs, is_active, category_keys)
        values
-        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        on conflict (code) where promo_kind='CODE'
        do update
          set promo_kind=excluded.promo_kind,
@@ -78,10 +92,12 @@ export async function POST(req: Request) {
              ends_at=excluded.ends_at,
              usage_limit=excluded.usage_limit,
              min_order_jod=excluded.min_order_jod,
+             priority=excluded.priority,
+             product_slugs=excluded.product_slugs,
              is_active=excluded.is_active,
              category_keys=excluded.category_keys,
              updated_at=now()`,
-      [promoKind, code, titleEn, titleAr, discountType, discountValue, startsAt, endsAt, usageLimit, minOrderJod, isActive, categoryKeys]
+      [promoKind, code, titleEn, titleAr, discountType, discountValue, startsAt, endsAt, usageLimit, minOrderJod, Number.isFinite(priority) ? Math.trunc(priority) : 0, productSlugs, isActive, categoryKeys]
     );
   }
 

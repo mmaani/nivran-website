@@ -41,6 +41,8 @@ type PromoRow = {
   usage_limit: number | null;
   used_count: number | null;
   min_order_jod: string | null;
+  priority: number | null;
+  product_slugs: string[] | null;
 };
 
 function labelCategory(lang: "en" | "ar", c: CategoryRow) {
@@ -81,7 +83,7 @@ export default async function AdminCatalogPage() {
 
   const promosRes = await db.query<PromoRow>(
     `select id, promo_kind, code, title_en, title_ar, discount_type, discount_value::text,
-            is_active, category_keys, usage_limit, used_count, min_order_jod::text
+            is_active, category_keys, usage_limit, used_count, min_order_jod::text, priority, product_slugs
        from promotions
       order by created_at desc`
   );
@@ -112,6 +114,8 @@ export default async function AdminCatalogPage() {
         promoCats: "فئات العرض",
         promoUsage: "الاستخدام",
         promoMin: "حد أدنى للطلب",
+        promoPriority: "الأولوية",
+        promoProducts: "منتجات محددة (Slug)",
         promoType: "نوع الخصم",
         autoPromo: "تلقائي",
         codePromo: "كوبون",
@@ -141,6 +145,8 @@ export default async function AdminCatalogPage() {
         promoCats: "Promo categories",
         promoUsage: "Usage",
         promoMin: "Min order",
+        promoPriority: "Priority",
+        promoProducts: "Target product slugs",
         promoType: "Type",
         autoPromo: "Automatic",
         codePromo: "Promo code",
@@ -256,7 +262,8 @@ export default async function AdminCatalogPage() {
             <input name="discount_value" type="number" min="0" step="0.01" required placeholder="Discount value" className={`${styles.adminInput} ${styles.ltr}`} />
             <input name="usage_limit" type="number" min="1" placeholder="Usage limit" className={`${styles.adminInput} ${styles.ltr}`} />
             <input name="min_order_jod" type="number" min="0" step="0.01" placeholder="Min order (JOD)" className={`${styles.adminInput} ${styles.ltr}`} />
-            <span />
+            <input name="priority" type="number" defaultValue={0} placeholder={L.promoPriority} className={`${styles.adminInput} ${styles.ltr}`} />
+            <input name="product_slugs" placeholder={L.promoProducts} className={`${styles.adminInput} ${styles.ltr}`} style={{ gridColumn: "1 / -1" }} />
             <input name="title_en" required placeholder="Promotion title (EN)" className={styles.adminInput} />
             <input name="title_ar" required placeholder="عنوان العرض (AR)" className={styles.adminInput} />
             <input name="starts_at" type="datetime-local" className={`${styles.adminInput} ${styles.ltr}`} />
@@ -297,8 +304,11 @@ export default async function AdminCatalogPage() {
               <div style={{ fontSize: 12, opacity: 0.82, marginTop: 4 }}>
                 {L.promoCats}: {!r.category_keys || r.category_keys.length === 0 ? L.allCats : r.category_keys.join(", ")}
               </div>
+              <div style={{ fontSize: 12, opacity: 0.82, marginTop: 2 }}>
+                {L.promoProducts}: {!r.product_slugs || r.product_slugs.length === 0 ? L.allCats : r.product_slugs.join(", ")}
+              </div>
               <div style={{ fontSize: 12, opacity: 0.82 }}>
-                {L.promoType}: {String(r.promo_kind || "CODE").toUpperCase() === "AUTO" ? L.autoPromo : L.codePromo} • {L.promoUsage}: {r.used_count || 0}{r.usage_limit ? ` / ${r.usage_limit}` : ""} • {L.promoMin}: {r.min_order_jod || "0"} JOD
+                {L.promoType}: {String(r.promo_kind || "CODE").toUpperCase() === "AUTO" ? L.autoPromo : L.codePromo} • {L.promoPriority}: {r.priority || 0} • {L.promoUsage}: {r.used_count || 0}{r.usage_limit ? ` / ${r.usage_limit}` : ""} • {L.promoMin}: {r.min_order_jod || "0"} JOD
               </div>
               <form action="/api/admin/catalog/promotions" method="post" style={{ marginTop: 8 }}>
                 <input type="hidden" name="action" value="toggle" />

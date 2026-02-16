@@ -148,6 +148,13 @@ export async function ensureIdentityTables() {
   `);
 
   await db.query(`alter table staff_users add column if not exists full_name text;`);
+
+  await db.query(`create index if not exists idx_customers_created_at on customers(created_at desc)`);
+  await db.query(`create index if not exists idx_customers_email_lower on customers(lower(email))`);
+  await db.query(`create index if not exists idx_customer_sessions_customer_id on customer_sessions(customer_id)`);
+  await db.query(`create index if not exists idx_customer_sessions_expires_at on customer_sessions(expires_at)`);
+
+  await db.query(`create index if not exists idx_orders_customer_id_created_at on orders(customer_id, created_at desc)`);
 }
 
 /** Customers */

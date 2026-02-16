@@ -127,14 +127,27 @@ export async function ensureCatalogTables() {
   await db.query(`alter table promotions add column if not exists ends_at timestamptz;`);
   await db.query(`alter table promotions add column if not exists usage_limit integer;`);
   await db.query(`alter table promotions add column if not exists min_order_jod numeric(10,2);`);
+  await db.query(`alter table promotions add column if not exists priority integer not null default 0;`);
   await db.query(`alter table promotions add column if not exists used_count integer not null default 0;`);
   await db.query(`alter table promotions add column if not exists is_active boolean not null default true;`);
   await db.query(`alter table promotions add column if not exists created_at timestamptz not null default now();`);
   await db.query(`alter table promotions add column if not exists updated_at timestamptz not null default now();`);
 
-  // NEW: target promotions to one or more categories (null/empty => all)
+  // NEW: target promotions to categories and specific product slugs (optional)
   await db.query(`alter table promotions add column if not exists category_keys text[];`);
+  await db.query(`alter table promotions add column if not exists product_slugs text[];`);
 
+
+  await db.query(`
+    do $$
+    begin
+      begin
+        alter table promotions alter column code drop not null;
+      exception when others then
+        null;
+      end;
+    end $$;
+  `);
   // Deduplicate promo codes (prevents unique index failure)
   await db.query(`
     with d as (
@@ -201,6 +214,7 @@ export async function ensureCatalogTables() {
   await db.query(`create index if not exists idx_promotions_kind on promotions(promo_kind);`);
   await db.query(`create index if not exists idx_promotions_created_at on promotions(created_at desc);`);
   await db.query(`create index if not exists idx_promotions_usage on promotions(usage_limit, used_count);`);
+  await db.query(`create index if not exists idx_promotions_priority on promotions(priority desc);`);
 
   await db.query(`create index if not exists idx_product_images_product on product_images(product_id, "position");`);
 }

@@ -14,6 +14,13 @@ function fallbackFromSlug(slug: string) {
   return `/products/${family}-1.svg`;
 }
 
+function promoBadgeText(locale: "en" | "ar", promoType: "PERCENT" | "FIXED", promoValue: number): string {
+  if (promoType === "PERCENT") {
+    return locale === "ar" ? `خصم ${promoValue}%` : `-${promoValue}%`;
+  }
+  return locale === "ar" ? `وفر ${promoValue.toFixed(2)} د.أ` : `Save ${promoValue.toFixed(2)} JOD`;
+}
+
 type ProductRow = {
   id: number;
   slug: string;
@@ -26,6 +33,9 @@ type ProductRow = {
   inventory_qty: number;
   category_key: string;
   is_active: boolean;
+  promo_type: "PERCENT" | "FIXED" | null;
+  promo_value: string | null;
+  discounted_price_jod: string | null;
 };
 
 type CategoryRow = { key: string; name_en: string; name_ar: string };
@@ -42,12 +52,48 @@ export default async function ProductDetailPage({
   await ensureCatalogTables();
 
   const pr = await db.query<ProductRow>(
-    `select id, slug, name_en, name_ar, description_en, description_ar,
-            price_jod::text as price_jod,
-            compare_at_price_jod::text as compare_at_price_jod,
-            inventory_qty, category_key, is_active
-       from products
-      where slug=$1
+    `select p.id,
+            p.slug,
+            p.name_en,
+            p.name_ar,
+            p.description_en,
+            p.description_ar,
+            p.price_jod::text as price_jod,
+            p.compare_at_price_jod::text as compare_at_price_jod,
+            p.inventory_qty,
+            p.category_key,
+            p.is_active,
+            bp.discount_type as promo_type,
+            bp.discount_value::text as promo_value,
+            (
+              case
+                when bp.id is null then null
+                when bp.discount_type='PERCENT' then greatest(0, p.price_jod - (p.price_jod * (bp.discount_value / 100)))
+                when bp.discount_type='FIXED' then greatest(0, p.price_jod - bp.discount_value)
+                else null
+              end
+            )::text as discounted_price_jod
+       from products p
+       left join lateral (
+         select pr.id, pr.discount_type, pr.discount_value, pr.priority
+         from promotions pr
+         where pr.promo_kind='AUTO'
+           and pr.is_active=true
+           and (pr.starts_at is null or pr.starts_at <= now())
+           and (pr.ends_at is null or pr.ends_at >= now())
+           and (pr.category_keys is null or array_length(pr.category_keys, 1) is null or p.category_key = any(pr.category_keys))
+           and (pr.product_slugs is null or array_length(pr.product_slugs, 1) is null or p.slug = any(pr.product_slugs))
+           and (pr.min_order_jod is null or pr.min_order_jod <= p.price_jod)
+         order by pr.priority desc,
+                  case
+                    when pr.discount_type='PERCENT' then (p.price_jod * (pr.discount_value / 100))
+                    when pr.discount_type='FIXED' then pr.discount_value
+                    else 0
+                  end desc,
+                  pr.created_at desc
+         limit 1
+       ) bp on true
+      where p.slug=$1
       limit 1`,
     [slug]
   );
@@ -78,6 +124,10 @@ export default async function ProductDetailPage({
 
   const price = Number(product.price_jod || 0);
   const compareAt = product.compare_at_price_jod ? Number(product.compare_at_price_jod) : null;
+  const discounted = product.discounted_price_jod ? Number(product.discounted_price_jod) : null;
+  const promoType = product.promo_type;
+  const promoValue = Number(product.promo_value || 0);
+  const hasPromo = discounted != null && discounted < price && (promoType === "PERCENT" || promoType === "FIXED");
   const outOfStock = Number(product.inventory_qty || 0) <= 0;
 
   const imageUrls = imgs.rows.map((img) => `/api/catalog/product-image/${img.id}`);
@@ -90,8 +140,26 @@ export default async function ProductDetailPage({
       </p>
 
       <div className={styles.grid2} style={{ alignItems: "start" }}>
-        <div>
+        <div style={{ position: "relative" }}>
           <ProductImageGallery name={name} images={imageUrls} fallbackSrc={fallbackSrc} />
+          {hasPromo ? (
+            <div
+              style={{
+                position: "absolute",
+                top: 12,
+                insetInlineStart: 12,
+                background: "linear-gradient(135deg, #141414, #2a2622)",
+                color: "#fff",
+                fontSize: 12,
+                fontWeight: 700,
+                padding: "6px 10px",
+                borderRadius: 999,
+                zIndex: 3,
+              }}
+            >
+              {promoBadgeText(locale, promoType, promoValue)}
+            </div>
+          ) : null}
         </div>
 
         <div>
@@ -100,7 +168,14 @@ export default async function ProductDetailPage({
           </h1>
 
           <p style={{ marginTop: 0 }}>
-            {compareAt && compareAt > price ? (
+            {hasPromo ? (
+              <>
+                <span style={{ textDecoration: "line-through", opacity: 0.7, marginInlineEnd: 10 }}>
+                  {price.toFixed(2)} JOD
+                </span>
+                <strong>{discounted.toFixed(2)} JOD</strong>
+              </>
+            ) : compareAt && compareAt > price ? (
               <>
                 <span style={{ textDecoration: "line-through", opacity: 0.7, marginInlineEnd: 10 }}>
                   {compareAt.toFixed(2)} JOD
@@ -112,9 +187,7 @@ export default async function ProductDetailPage({
             )}
           </p>
 
-          {outOfStock ? (
-            <p className="muted">{isAr ? "غير متوفر حالياً." : "Currently out of stock."}</p>
-          ) : null}
+          {outOfStock ? <p className="muted">{isAr ? "غير متوفر حالياً." : "Currently out of stock."}</p> : null}
 
           {desc ? <p className="muted">{desc}</p> : null}
 
@@ -123,7 +196,7 @@ export default async function ProductDetailPage({
               locale={locale}
               slug={product.slug}
               name={name}
-              priceJod={price}
+              priceJod={hasPromo ? discounted ?? price : price}
               label={outOfStock ? (isAr ? "غير متوفر" : "Out of stock") : (isAr ? "أضف إلى السلة" : "Add to cart")}
               addedLabel={isAr ? "تمت الإضافة ✓" : "Added ✓"}
               updatedLabel={isAr ? "تم التحديث ✓" : "Updated ✓"}

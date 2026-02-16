@@ -1,63 +1,31 @@
-import { db } from "@/lib/db";
-import { hasColumn } from "@/lib/dbSchema";
-import { ensureIdentityTables } from "@/lib/identity";
+import Link from "next/link";
 import { getAdminLang } from "@/lib/admin-lang";
+import { fetchAdminCustomers } from "@/lib/adminCustomers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Row = {
-  id: number;
-  email: string;
-  full_name: string | null;
-  phone: string | null;
-  address_line1: string | null;
-  city: string | null;
-  country: string | null;
-  created_at: string;
-  orders_count: number;
-  total_spent: string;
-  last_order_at: string | null;
-};
+function toInt(v: string | undefined, fallback: number): number {
+  const n = Number(v || fallback);
+  return Number.isFinite(n) ? Math.trunc(n) : fallback;
+}
 
-export default async function AdminCustomersPage() {
-  await ensureIdentityTables();
+export default async function AdminCustomersPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const lang = await getAdminLang();
-  const hasTotalJod = await hasColumn("orders", "total_jod");
-  const hasFullName = await hasColumn("customers", "full_name");
-  const hasAddressLine1 = await hasColumn("customers", "address_line1");
-  const hasCity = await hasColumn("customers", "city");
-  const hasCountry = await hasColumn("customers", "country");
+  const query = (await searchParams) || {};
 
-  const r = await db.query<Row>(
-    `
-    select
-      c.id,
-      c.email,
-      ${hasFullName ? "c.full_name" : "trim(concat_ws(' ', c.first_name, c.last_name))"} as full_name,
-      c.phone,
-      ${hasAddressLine1 ? "c.address_line1" : "null::text"} as address_line1,
-      ${hasCity ? "c.city" : "null::text"} as city,
-      ${hasCountry ? "c.country" : "null::text"} as country,
-      c.created_at::text as created_at,
-      coalesce(o.orders_count, 0)::int as orders_count,
-      coalesce(o.total_spent, 0)::text as total_spent,
-      o.last_order_at::text as last_order_at
-    from customers c
-    left join (
-      select
-        customer_id,
-        count(*) as orders_count,
-        sum(${hasTotalJod ? "coalesce(total_jod, amount)" : "amount"}) as total_spent,
-        max(created_at) as last_order_at
-      from orders
-      where customer_id is not null
-      group by customer_id
-    ) o on o.customer_id = c.id
-    order by o.last_order_at desc nulls last, c.created_at desc
-    limit 500
-    `
-  );
+  const pageRaw = Array.isArray(query.page) ? query.page[0] : query.page;
+  const pageSizeRaw = Array.isArray(query.pageSize) ? query.pageSize[0] : query.pageSize;
+
+  const page = Math.max(1, toInt(pageRaw, 1));
+  const pageSize = [25, 50, 100].includes(toInt(pageSizeRaw, 25)) ? toInt(pageSizeRaw, 25) : 25;
+
+  const data = await fetchAdminCustomers(page, pageSize);
+  const totalPages = Math.max(1, Math.ceil(data.total / data.pageSize));
 
   const L =
     lang === "ar"
@@ -74,6 +42,11 @@ export default async function AdminCustomersPage() {
           thLast: "آخر طلب",
           thCreated: "تاريخ الإنشاء",
           na: "—",
+          prev: "السابق",
+          next: "التالي",
+          export: "تصدير Excel",
+          pageSize: "عدد الصفوف",
+          page: "الصفحة",
         }
       : {
           title: "Customers",
@@ -88,13 +61,37 @@ export default async function AdminCustomersPage() {
           thLast: "Last Order",
           thCreated: "Created",
           na: "—",
+          prev: "Previous",
+          next: "Next",
+          export: "Export Excel",
+          pageSize: "Rows",
+          page: "Page",
         };
 
   return (
     <div className="admin-grid">
-      <div>
+      <div className="admin-card">
         <h1 className="admin-h1">{L.title}</h1>
         <p className="admin-muted">{L.sub}</p>
+
+        <div className="admin-row" style={{ justifyContent: "space-between", marginTop: 12 }}>
+          <form method="get" className="admin-row">
+            <input type="hidden" name="page" value="1" />
+            <label htmlFor="pageSize" className="admin-muted" style={{ fontSize: 13 }}>
+              {L.pageSize}
+            </label>
+            <select id="pageSize" name="pageSize" className="admin-select" defaultValue={String(data.pageSize)} style={{ width: 120 }}>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+            <button className="btn" type="submit">Apply</button>
+          </form>
+
+          <a className="btn" href={`/api/admin/customers/export?scope=page&page=${data.page}&pageSize=${data.pageSize}`}>
+            {L.export}
+          </a>
+        </div>
       </div>
 
       <div className="admin-table-wrap">
@@ -113,7 +110,7 @@ export default async function AdminCustomersPage() {
             </tr>
           </thead>
           <tbody>
-            {r.rows.map((x) => (
+            {data.rows.map((x) => (
               <tr key={x.id}>
                 <td className="ltr">{x.id}</td>
                 <td className="ltr">{x.email}</td>
@@ -128,6 +125,27 @@ export default async function AdminCustomersPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="admin-row" style={{ justifyContent: "space-between" }}>
+        <span className="admin-muted">{L.page} {data.page} / {totalPages}</span>
+        <div className="admin-row">
+          {data.page > 1 ? (
+            <Link className="btn" href={`/admin/customers?page=${data.page - 1}&pageSize=${data.pageSize}`}>
+              {L.prev}
+            </Link>
+          ) : (
+            <button className="btn" type="button" disabled>{L.prev}</button>
+          )}
+
+          {data.page < totalPages ? (
+            <Link className="btn" href={`/admin/customers?page=${data.page + 1}&pageSize=${data.pageSize}`}>
+              {L.next}
+            </Link>
+          ) : (
+            <button className="btn" type="button" disabled>{L.next}</button>
+          )}
+        </div>
       </div>
     </div>
   );
