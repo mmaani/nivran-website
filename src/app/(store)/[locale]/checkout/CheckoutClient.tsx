@@ -244,7 +244,7 @@ export default function CheckoutClient() {
       const res = await fetch("/api/paytabs/initiate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ cartId: cid }),
+        body: JSON.stringify({ cartId: cid, locale }),
       });
 
       const data: unknown = await res.json().catch(() => null);

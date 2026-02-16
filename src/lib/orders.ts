@@ -29,9 +29,19 @@ export async function ensureOrdersTables() {
   await db.query(`alter table orders add column if not exists locale text not null default 'en'`);
   await db.query(`alter table orders add column if not exists customer jsonb`);
   await db.query(`alter table orders add column if not exists shipping jsonb`);
-  await db.query(`alter table orders add column if not exists items jsonb`); // MVP line items (single-SKU orders supported)
+  await db.query(`alter table orders add column if not exists items jsonb`);
   await db.query(`alter table orders add column if not exists customer_name text`);
+  await db.query(`alter table orders add column if not exists customer_phone text`);
   await db.query(`alter table orders add column if not exists customer_email text`);
+  await db.query(`alter table orders add column if not exists shipping_city text`);
+  await db.query(`alter table orders add column if not exists shipping_address text`);
+  await db.query(`alter table orders add column if not exists shipping_country text`);
+  await db.query(`alter table orders add column if not exists notes text`);
+  await db.query(`alter table orders add column if not exists subtotal_before_discount_jod numeric(10,2)`);
+  await db.query(`alter table orders add column if not exists discount_jod numeric(10,2)`);
+  await db.query(`alter table orders add column if not exists subtotal_after_discount_jod numeric(10,2)`);
+  await db.query(`alter table orders add column if not exists shipping_jod numeric(10,2)`);
+  await db.query(`alter table orders add column if not exists total_jod numeric(10,2)`);
   await db.query(`alter table orders add column if not exists payment_method text not null default 'PAYTABS'`);
   await db.query(`alter table orders add column if not exists customer_id bigint`);
   await db.query(`alter table orders add column if not exists paytabs_tran_ref text`);
@@ -39,6 +49,20 @@ export async function ensureOrdersTables() {
   await db.query(`alter table orders add column if not exists paytabs_last_signature text`);
   await db.query(`alter table orders add column if not exists paytabs_response_status text`);
   await db.query(`alter table orders add column if not exists paytabs_response_message text`);
+
+  // Keep amount/currency in sync for legacy readers.
+  await db.query(`
+    update orders
+       set amount = coalesce(total_jod, amount)
+     where total_jod is not null
+       and (amount is null or amount <> total_jod)
+  `);
+
+  await db.query(`
+    update orders
+       set currency = coalesce(nullif(currency,''), 'JOD')
+     where currency is null or currency = ''
+  `);
 
   // timestamps
   await db.query(`alter table orders add column if not exists created_at timestamptz not null default now()`);

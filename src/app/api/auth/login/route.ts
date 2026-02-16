@@ -18,10 +18,11 @@ export async function POST(req: Request): Promise<Response> {
   const ct = req.headers.get("content-type") || "";
   const isForm = ct.includes("application/x-www-form-urlencoded") || ct.includes("multipart/form-data");
   const body = isForm ? Object.fromEntries((await req.formData()).entries()) : await req.json().catch(() => ({}));
+  const input = body as Record<string, unknown>;
 
-  const email = String((body as any)?.email || "").trim().toLowerCase();
-  const password = String((body as any)?.password || "").trim();
-  const locale = String((body as any)?.locale || "en") === "ar" ? "ar" : "en";
+  const email = String(input?.email || "").trim().toLowerCase();
+  const password = String(input?.password || "").trim();
+  const locale = String(input?.locale || "en") === "ar" ? "ar" : "en";
 
   const c = await getCustomerByEmail(email);
   if (!c || !c.is_active) {

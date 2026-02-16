@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   let next = "";
 
   if (ct.includes("application/json")) {
-    const body = (await req.json().catch(() => ({}))) as any;
+    const body = (await req.json().catch(() => ({}))) as { lang?: string; next?: string };
     lang = String(body?.lang || "en");
     next = String(body?.next || "");
   } else {

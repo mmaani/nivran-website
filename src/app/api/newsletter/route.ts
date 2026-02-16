@@ -42,7 +42,7 @@ async function ensureNewsletterTable() {
   );
 }
 
-function normalizeEmail(v: any) {
+function normalizeEmail(v: unknown) {
   return String(v || "").trim().toLowerCase();
 }
 
@@ -50,14 +50,14 @@ function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-async function readBody(req: Request): Promise<Record<string, any>> {
+async function readBody(req: Request): Promise<Record<string, unknown>> {
   const ct = (req.headers.get("content-type") || "").toLowerCase();
   const isForm =
     ct.includes("application/x-www-form-urlencoded") || ct.includes("multipart/form-data");
 
   if (isForm) {
     const fd = await req.formData();
-    const out: Record<string, any> = {};
+    const out: Record<string, unknown> = {};
     for (const [k, v] of fd.entries()) out[k] = typeof v === "string" ? v : v.name;
     return out;
   }
@@ -107,10 +107,11 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ ok: true }, { status: 200 });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("newsletter POST failed", e);
+    const detail = e instanceof Error ? e.message : String(e);
     return NextResponse.json(
-      { ok: false, error: "Server error", detail: e?.message || String(e) },
+      { ok: false, error: "Server error", detail },
       { status: 500 }
     );
   }

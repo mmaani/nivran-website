@@ -1,33 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { adminMiddleware } from "@/middleware";
 
 export function middleware(req: NextRequest) {
-  const path = req.nextUrl.pathname;
-
-  const adminToken = process.env.ADMIN_TOKEN || "";
-  const cookieToken = req.cookies.get("admin_token")?.value || "";
-
-  const isAdminRoute = path.startsWith("/admin");
-  const isAdminApi = path.startsWith("/api/admin");
-
-  if (!isAdminRoute && !isAdminApi) return NextResponse.next();
-
-  // If ADMIN_TOKEN isn't set, lock down admin completely
-  if (!adminToken) {
-    return isAdminApi
-      ? NextResponse.json({ ok: false, error: "ADMIN_TOKEN not configured" }, { status: 500 })
-      : NextResponse.redirect(new URL("/admin/login", req.url));
-  }
-
-  if (cookieToken !== adminToken) {
-    if (isAdminApi) {
-      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-    }
-    const url = new URL("/admin/login", req.url);
-    url.searchParams.set("next", path);
-    return NextResponse.redirect(url);
-  }
-
-  return NextResponse.next();
+  return adminMiddleware(req);
 }
 
 export const config = {

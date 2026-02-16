@@ -167,8 +167,9 @@ export default function InboxClient() {
         subscribers: Array.isArray(json.subscribers) ? json.subscribers : [],
         callbacks: Array.isArray(json.callbacks) ? json.callbacks : [],
       });
-    } catch (e: any) {
-      setErr(e?.message || "Failed to load inbox");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e || "");
+      setErr(msg || "Failed to load inbox");
     } finally {
       setLoading(false);
     }
