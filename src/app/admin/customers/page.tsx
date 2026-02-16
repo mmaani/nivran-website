@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { hasColumn } from "@/lib/dbSchema";
 import { ensureIdentityTables } from "@/lib/identity";
 
 export const runtime = "nodejs";
@@ -20,17 +21,22 @@ type Row = {
 
 export default async function AdminCustomersPage() {
   await ensureIdentityTables();
+  const hasTotalJod = await hasColumn("orders", "total_jod");
+  const hasFullName = await hasColumn("customers", "full_name");
+  const hasAddressLine1 = await hasColumn("customers", "address_line1");
+  const hasCity = await hasColumn("customers", "city");
+  const hasCountry = await hasColumn("customers", "country");
 
   const r = await db.query<Row>(
     `
     select
       c.id,
       c.email,
-      c.full_name,
+      ${hasFullName ? "c.full_name" : "trim(concat_ws(' ', c.first_name, c.last_name))"} as full_name,
       c.phone,
-      c.address_line1,
-      c.city,
-      c.country,
+      ${hasAddressLine1 ? "c.address_line1" : "null::text"} as address_line1,
+      ${hasCity ? "c.city" : "null::text"} as city,
+      ${hasCountry ? "c.country" : "null::text"} as country,
       c.created_at::text as created_at,
       coalesce(o.orders_count, 0)::int as orders_count,
       coalesce(o.total_spent, 0)::text as total_spent,
@@ -40,7 +46,7 @@ export default async function AdminCustomersPage() {
       select
         customer_id,
         count(*) as orders_count,
-        sum(amount_jod) as total_spent,
+        sum(${hasTotalJod ? "coalesce(total_jod, amount)" : "amount"}) as total_spent,
         max(created_at) as last_order_at
       from orders
       where customer_id is not null

@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { db } from "@/lib/db";
+import { hasColumn } from "@/lib/dbSchema";
 
 /** Cookies */
 export const CUSTOMER_SESSION_COOKIE = "nivran_customer_session";
@@ -99,6 +100,12 @@ export async function ensureIdentityTables() {
   `);
   await db.query(`create index if not exists customer_sessions_token_hash_idx on customer_sessions(token_hash);`);
 
+  await db.query(`alter table customer_sessions add column if not exists token text`);
+  await db.query(`alter table customer_sessions add column if not exists token_hash text`);
+  await db.query(`alter table customer_sessions add column if not exists expires_at timestamptz`);
+  await db.query(`alter table customer_sessions add column if not exists revoked_at timestamptz`);
+  await db.query(`update customer_sessions set expires_at = now() + interval '30 days' where expires_at is null`);
+
   await db.query(`
     create table if not exists password_reset_tokens (
       id bigserial primary key,
@@ -161,8 +168,19 @@ export async function getCustomerByEmail(email: string): Promise<CustomerRow | n
   const e = String(email || "").trim().toLowerCase();
   if (!e) return null;
 
+  const hasFullName = await hasColumn("customers", "full_name");
+  const hasAddressLine1 = await hasColumn("customers", "address_line1");
+  const hasCity = await hasColumn("customers", "city");
+  const hasCountry = await hasColumn("customers", "country");
+
   const r = await db.query<CustomerRow>(
-    `select id, email, password_hash, full_name, phone, address_line1, city, country, is_active, created_at::text as created_at
+    `select id, email, password_hash,
+            ${hasFullName ? "full_name" : "trim(concat_ws(' ', first_name, last_name))"} as full_name,
+            phone,
+            ${hasAddressLine1 ? "address_line1" : "null::text"} as address_line1,
+            ${hasCity ? "city" : "null::text"} as city,
+            ${hasCountry ? "country" : "null::text"} as country,
+            is_active, created_at::text as created_at
        from customers
       where lower(email)=lower($1)
       limit 1`,
@@ -191,9 +209,31 @@ export async function createCustomer(args: {
 
   const passwordHash = await hashPassword(args.password);
 
+  const hasFullName = await hasColumn("customers", "full_name");
+  const hasAddressLine1 = await hasColumn("customers", "address_line1");
+  const hasCity = await hasColumn("customers", "city");
+  const hasCountry = await hasColumn("customers", "country");
+
   const r = await db.query<{ id: number; email: string }>(
-    `insert into customers (email, password_hash, full_name, phone, address_line1, city, country, is_active)
-     values ($1,$2,$3,$4,$5,$6,$7,true)
+    `insert into customers (
+        email,
+        password_hash,
+        ${hasFullName ? "full_name" : "first_name, last_name"},
+        phone,
+        ${hasAddressLine1 ? "address_line1," : ""}
+        ${hasCity ? "city," : ""}
+        ${hasCountry ? "country," : ""}
+        is_active
+      )
+     values (
+       $1,$2,
+       ${hasFullName ? "$3" : "$3, null"},
+       $4,
+       ${hasAddressLine1 ? "$5," : ""}
+       ${hasCity ? "$6," : ""}
+       ${hasCountry ? "$7," : ""}
+       true
+     )
      returning id, email`,
     [email, passwordHash, fullName, phone, addressLine1, city, country]
   );
@@ -205,10 +245,20 @@ export async function createCustomerSession(customerId: number, token: string) {
   const tokenHash = sha256Hex(token);
   // 30 days
   const expiresAt = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
+  const hasTokenHash = await hasColumn("customer_sessions", "token_hash");
+  if (hasTokenHash) {
+    await db.query(
+      `insert into customer_sessions (customer_id, token, token_hash, expires_at)
+       values ($1,$2,$3,$4)`,
+      [customerId, token, tokenHash, expiresAt]
+    );
+    return;
+  }
+
   await db.query(
-    `insert into customer_sessions (customer_id, token_hash, expires_at)
+    `insert into customer_sessions (customer_id, token, expires_at)
      values ($1,$2,$3)`,
-    [customerId, tokenHash, expiresAt]
+    [customerId, token, expiresAt]
   );
 }
 
@@ -229,15 +279,26 @@ export async function getCustomerIdFromRequest(req: Request): Promise<number | n
   if (!token) return null;
 
   const tokenHash = sha256Hex(token);
-  const r = await db.query<{ customer_id: number }>(
-    `select customer_id
-       from customer_sessions
-      where token_hash=$1
-        and revoked_at is null
-        and expires_at > now()
-      limit 1`,
-    [tokenHash]
-  );
+  const hasTokenHash = await hasColumn("customer_sessions", "token_hash");
+  const r = hasTokenHash
+    ? await db.query<{ customer_id: number }>(
+        `select customer_id
+           from customer_sessions
+          where (token_hash=$1 or token=$2)
+            and revoked_at is null
+            and expires_at > now()
+          limit 1`,
+        [tokenHash, token]
+      )
+    : await db.query<{ customer_id: number }>(
+        `select customer_id
+           from customer_sessions
+          where token=$1
+            and revoked_at is null
+            and expires_at > now()
+          limit 1`,
+        [token]
+      );
   return r.rows[0]?.customer_id ?? null;
 }
 
@@ -254,8 +315,12 @@ export type StaffUser = {
 
 export async function listStaffUsers(): Promise<StaffUser[]> {
   await ensureIdentityTables();
+
+  const hasUsername = await hasColumn("staff_users", "username");
   const r = await db.query<StaffUser>(
-    `select id, username, full_name, role, is_active,
+    `select id,
+            ${hasUsername ? "username" : "email"} as username,
+            full_name, role, is_active,
             created_at::text as created_at, updated_at::text as updated_at
        from staff_users
       order by created_at desc
@@ -284,6 +349,8 @@ export async function upsertStaffUser(args: {
 
   const role = String(args.role || "admin").trim();
   const isActive = !!args.is_active;
+  const hasUsername = await hasColumn("staff_users", "username");
+  const loginColumn = hasUsername ? "username" : "email";
 
   if (!username) throw new Error("Missing username");
 
@@ -292,14 +359,14 @@ export async function upsertStaffUser(args: {
       const ph = await hashPassword(args.password);
       await db.query(
         `update staff_users
-            set username=$1, full_name=$2, role=$3, is_active=$4, password_hash=$5, updated_at=now()
+            set ${loginColumn}=$1, full_name=$2, role=$3, is_active=$4, password_hash=$5, updated_at=now()
           where id=$6`,
         [username, fullName, role, isActive, ph, args.id]
       );
     } else {
       await db.query(
         `update staff_users
-            set username=$1, full_name=$2, role=$3, is_active=$4, updated_at=now()
+            set ${loginColumn}=$1, full_name=$2, role=$3, is_active=$4, updated_at=now()
           where id=$5`,
         [username, fullName, role, isActive, args.id]
       );
@@ -311,9 +378,9 @@ export async function upsertStaffUser(args: {
   const ph = await hashPassword(args.password);
 
   await db.query(
-    `insert into staff_users (username, password_hash, full_name, role, is_active)
+    `insert into staff_users (${loginColumn}, password_hash, full_name, role, is_active)
      values ($1,$2,$3,$4,$5)
-     on conflict (username) do update
+     on conflict (${loginColumn}) do update
         set password_hash=excluded.password_hash,
             full_name=excluded.full_name,
             role=excluded.role,

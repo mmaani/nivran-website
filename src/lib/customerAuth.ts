@@ -1,6 +1,7 @@
 import "server-only";
 import crypto from "crypto";
 import { db } from "@/lib/db";
+import { hasColumn } from "@/lib/dbSchema";
 
 function parseCookie(header: string | null): Record<string, string> {
   const out: Record<string, string> = {};
@@ -40,19 +41,33 @@ export async function getCustomerIdFromRequest(req: Request): Promise<number | n
 
   if (!candidates.length) return null;
 
+  const hasTokenHash = await hasColumn("customer_sessions", "token_hash");
+
   // Try direct match first
   for (const tok of candidates) {
-    const r = await db.query<{ customer_id: number }>(
-      `select customer_id
-         from customer_sessions
-        where revoked_at is null
-          and expires_at > now()
-          and (token=$1 or token_hash=$1)
-        limit 1`,
-      [tok]
-    );
+    const r = hasTokenHash
+      ? await db.query<{ customer_id: number }>(
+          `select customer_id
+             from customer_sessions
+            where revoked_at is null
+              and expires_at > now()
+              and (token=$1 or token_hash=$1)
+            limit 1`,
+          [tok]
+        )
+      : await db.query<{ customer_id: number }>(
+          `select customer_id
+             from customer_sessions
+            where revoked_at is null
+              and expires_at > now()
+              and token=$1
+            limit 1`,
+          [tok]
+        );
     if (r.rows[0]?.customer_id) return Number(r.rows[0].customer_id);
   }
+
+  if (!hasTokenHash) return null;
 
   // Try hashed token match (in case only token_hash is stored)
   for (const tok of candidates) {

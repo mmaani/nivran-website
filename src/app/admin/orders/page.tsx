@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { ensureOrdersTables } from "@/lib/orders";
 import OrdersClient from "./ui";
+import type { Row } from "./ui";
 import { adminT, getAdminLang } from "@/lib/admin-lang";
 
 
@@ -72,7 +73,7 @@ export default async function AdminOrdersPage() {
         <p className="admin-muted">{hint}</p>
       </div>
 
-      <OrdersClient initialRows={rows as OrdersRow[]} lang={lang} />
+      <OrdersClient initialRows={rows as Row[]} lang={lang} />
     </div>
   );
 }

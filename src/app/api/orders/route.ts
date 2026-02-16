@@ -1,5 +1,7 @@
+import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { hasAllColumns, hasColumn } from "@/lib/dbSchema";
 import { ensureOrdersTables } from "@/lib/orders";
 import { ensureCatalogTables } from "@/lib/catalog";
 import { getCustomerIdFromRequest } from "@/lib/identity";
@@ -153,58 +155,116 @@ export async function POST(req: NextRequest) {
     line_total_jod: l.line_total_jod,
   }));
 
-  const r = await db.query<{ cart_id: string }>(
-    `
-    insert into orders (
-      locale,
-      status,
-      amount,
-      currency,
-      payment_method,
-      customer_id,
-      customer_name,
-      customer_phone,
-      customer_email,
-      shipping_city,
-      shipping_address,
-      shipping_country,
-      notes,
-      items,
-      subtotal_before_discount_jod,
-      discount_jod,
-      subtotal_after_discount_jod,
-      shipping_jod,
-      total_jod
-    )
-    values (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
-      $14::jsonb,
-      $15,$16,$17,$18,$19
-    )
-    returning cart_id
-  `,
-    [
-      locale,
-      status,
-      totalJod,
-      "JOD",
-      paymentMethod,
-      customerId ? Number(customerId) : null,
-      name,
-      phone,
-      email,
-      city || null,
-      address,
-      country,
-      notes || null,
-      JSON.stringify(itemsJson),
-      subtotalBeforeDiscount,
-      discount,
-      subtotalAfterDiscount,
-      shippingJod,
-      totalJod,
-    ]
-  );
+  const generatedCartId = `NIV-${Date.now()}-${randomUUID().slice(0, 8)}`;
+
+  const hasExtendedOrderColumns = await hasAllColumns("orders", [
+    "customer_phone",
+    "shipping_city",
+    "shipping_address",
+    "shipping_country",
+    "notes",
+    "items",
+    "subtotal_before_discount_jod",
+    "discount_jod",
+    "subtotal_after_discount_jod",
+    "shipping_jod",
+    "total_jod",
+  ]);
+  const hasCustomerId = await hasColumn("orders", "customer_id");
+
+  const r = hasExtendedOrderColumns
+    ? await db.query<{ cart_id: string }>(
+        `
+        insert into orders (
+          cart_id,
+          locale,
+          status,
+          amount,
+          currency,
+          payment_method,
+          ${hasCustomerId ? "customer_id," : ""}
+          customer_name,
+          customer_phone,
+          customer_email,
+          shipping_city,
+          shipping_address,
+          shipping_country,
+          notes,
+          items,
+          subtotal_before_discount_jod,
+          discount_jod,
+          subtotal_after_discount_jod,
+          shipping_jod,
+          total_jod
+        )
+        values (
+          $1,$2,$3,$4,$5,$6,
+          ${hasCustomerId ? "$7," : ""}
+          $8,$9,$10,$11,$12,$13,$14,
+          $15::jsonb,
+          $16,$17,$18,$19,$20
+        )
+        returning cart_id
+      `,
+        [
+          generatedCartId,
+          locale,
+          status,
+          totalJod,
+          "JOD",
+          paymentMethod,
+          ...(hasCustomerId ? [customerId ? Number(customerId) : null] : []),
+          name,
+          phone,
+          email,
+          city || null,
+          address,
+          country,
+          notes || null,
+          JSON.stringify(itemsJson),
+          subtotalBeforeDiscount,
+          discount,
+          subtotalAfterDiscount,
+          shippingJod,
+          totalJod,
+        ]
+      )
+    : await db.query<{ cart_id: string }>(
+        `
+        insert into orders (
+          cart_id,
+          locale,
+          status,
+          amount,
+          currency,
+          payment_method,
+          ${hasCustomerId ? "customer_id," : ""}
+          customer_name,
+          customer_email,
+          customer,
+          shipping
+        )
+        values (
+          $1,$2,$3,$4,$5,$6,
+          ${hasCustomerId ? "$7," : ""}
+          $8,$9,$10::jsonb,$11::jsonb
+        )
+        returning cart_id
+      `,
+        [
+          generatedCartId,
+          locale,
+          status,
+          totalJod,
+          "JOD",
+          paymentMethod,
+          ...(hasCustomerId ? [customerId ? Number(customerId) : null] : []),
+          name,
+          email,
+          JSON.stringify({ name, phone, email }),
+          JSON.stringify({ city, address, country, notes, items: itemsJson }),
+        ]
+      );
 
   const cartId = r.rows?.[0]?.cart_id;
   return NextResponse.json({ ok: true, cartId, status }, { status: 200 });

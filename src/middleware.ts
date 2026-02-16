@@ -8,8 +8,11 @@ export function adminMiddleware(req: NextRequest) {
 
   const isAdminRoute = path.startsWith("/admin");
   const isAdminApi = path.startsWith("/api/admin");
+  const isAdminLoginPage = path === "/admin/login";
+  const isAdminLoginApi = path === "/api/admin/login";
 
   if (!isAdminRoute && !isAdminApi) return NextResponse.next();
+  if (isAdminLoginPage || isAdminLoginApi) return NextResponse.next();
 
   if (!adminToken) {
     return isAdminApi
