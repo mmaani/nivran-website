@@ -30,6 +30,7 @@ export default async function TermsPage({
             ],
             bullets: [
               "العلامة: نيفـران (NIVRAN) – الأردن.",
+              "الكيان القانوني: Nivran Fragrance.",
               "القناة: طلبات إلكترونية للتوصيل داخل الأردن (المرحلة ١).",
             ],
           },
@@ -50,7 +51,8 @@ export default async function TermsPage({
             title: "المنتجات ووصف النفحات",
             paragraphs: [
               "نقدّم الوصف والنفحات والصور لمساعدتك على الاختيار—وقد تظهر فروقات بسيطة بسبب اختلاف الدُفعات أو الإضاءة أو إعدادات الشاشة.",
-              "عطور نيفـران منتجات تجميلية مخصّصة للرائحة فقط ولا نقدم ادعاءات طبية أو علاجية.",
+              "تشمل هذه الشروط منتجات نيفـران، بما في ذلك العطور ومنتجات العناية الشخصية المشابهة مثل الكريمات والصابون.",
+              "منتجات نيفـران تجميلية مخصّصة للعناية الشخصية أو الرائحة فقط ولا نقدم ادعاءات طبية أو علاجية.",
             ],
             bullets: [
               "إن كانت بشرتك حساسة، يُفضّل اختبار المنتج على مساحة صغيرة أولًا وإيقاف الاستخدام عند حدوث تهيّج.",
@@ -97,7 +99,7 @@ export default async function TermsPage({
             id: "returns",
             title: "الاستبدال/الاسترجاع",
             paragraphs: [
-              "لأسباب تتعلق بالسلامة والنظافة، العطور المفتوحة أو المستخدمة غالبًا لا تُسترجع.",
+              "لأسباب تتعلق بالسلامة والنظافة، العطور ومنتجات العناية الشخصية/التجميلية المفتوحة أو المستخدمة غالبًا لا تُسترجع.",
               "إذا وصل المنتج تالفًا أو غير مطابق، تواصل معنا خلال 48 ساعة مع صور واضحة لنعالج الحالة.",
             ],
             bullets: [
@@ -152,7 +154,7 @@ export default async function TermsPage({
               "These Terms govern your use of the NIVRAN online store and any purchase made through it.",
               "By placing an order, you confirm you have read and accepted these Terms.",
             ],
-            bullets: ["Brand: NIVRAN (Jordan).", "Channel: Online orders for delivery within Jordan (Phase 1)."],
+            bullets: ["Brand: NIVRAN (Jordan).", "Legal entity: Nivran Fragrance.", "Channel: Online orders for delivery within Jordan (Phase 1)."],
           },
           {
             id: "eligibility",
@@ -171,7 +173,8 @@ export default async function TermsPage({
             title: "Products & fragrance notes",
             paragraphs: [
               "Product descriptions, notes, and imagery are provided to help you choose—minor variations can occur due to batch, lighting, and display settings.",
-              "Perfumes are cosmetic products intended for scent only. We do not make medical or therapeutic claims.",
+              "These Terms apply to NIVRAN products, including perfumes and other personal care items such as creams, soaps, and similar cosmetic products.",
+              "NIVRAN products are cosmetic/personal care products intended for scent or routine care only. We do not make medical or therapeutic claims.",
             ],
             bullets: [
               "Patch-test if you have sensitive skin, and discontinue use if irritation occurs.",
@@ -209,7 +212,7 @@ export default async function TermsPage({
             id: "returns",
             title: "Returns & exchanges",
             paragraphs: [
-              "For hygiene and safety, opened or used perfumes are typically not returnable.",
+              "For hygiene and safety, opened or used perfumes and personal care/cosmetic items are typically not returnable.",
               "If your item arrives damaged, defective, or incorrect, contact us within 48 hours with clear photos so we can resolve it.",
             ],
             bullets: [
@@ -257,6 +260,9 @@ export default async function TermsPage({
       <div className="panel" style={{ padding: "1.1rem" }}>
         <p className="muted" style={{ marginTop: 0, marginBottom: ".35rem" }}>
           {isAr ? "NIVRAN / نيفـران" : "NIVRAN"}
+        </p>
+        <p className="muted" style={{ marginTop: 0, marginBottom: ".5rem", fontSize: 13 }}>
+          {isAr ? "الكيان القانوني: Nivran Fragrance" : "Legal entity: Nivran Fragrance"}
         </p>
         <h1 className="title" style={{ marginTop: 0 }}>{content.title}</h1>
         <p className="muted" style={{ marginTop: ".4rem" }}>{content.intro}</p>

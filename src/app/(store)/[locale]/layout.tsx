@@ -3,6 +3,7 @@ import Image from "next/image";
 import CartHeaderIcon from "@/components/CartHeaderIcon";
 import CartHydrator from "@/components/CartHydrator";
 import LocaleSwitchLink from "@/components/site/LocaleSwitchLink";
+import Footer from "@/components/site/Footer";
 const LINKS = {
   en: { home: "Home", story: "Story", product: "Shop", faq: "FAQ", contact: "Contact", checkout: "Checkout", account: "Account", admin: "Admin", menu: "Menu", lang: "العربية" },
   ar: { home: "الرئيسية", story: "قصتنا", product: "المتجر", faq: "الأسئلة", contact: "تواصل", checkout: "الدفع", account: "حسابي", admin: "الإدارة", menu: "القائمة", lang: "English" },
@@ -14,6 +15,8 @@ export default async function StoreLocaleLayout({ children, params }: { children
   const isAr = locale === "ar";
   const t = LINKS[locale];
   const href = (p: string) => `/${locale}${p}`;
+
+
 
   return (
     <div lang={locale} dir={isAr ? "rtl" : "ltr"}>
@@ -62,12 +65,7 @@ export default async function StoreLocaleLayout({ children, params }: { children
 
       <main className="shell">{children}</main>
 
-      <footer className="site-footer">
-        <div className="shell" style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
-          <div>© {new Date().getFullYear()} NIVRAN · Jordan</div>
-          <div style={{ marginInlineStart: "auto" }}>{isAr ? "صياغة آمنة بدون ادعاءات علاجية." : "Claim-safe wording. No therapeutic claims."}</div>
-        </div>
-      </footer>
+      <Footer locale={locale} />
     </div>
   );
 }
