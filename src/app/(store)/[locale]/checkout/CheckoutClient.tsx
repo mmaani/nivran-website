@@ -157,6 +157,7 @@ export default function CheckoutClient() {
   const COPY = useMemo(
     () => ({
       title: isAr ? "الدفع" : "Checkout",
+      subtitle: isAr ? "أكمل البيانات لتأكيد طلبك والدفع بأمان." : "Complete your details to place your order securely.",
       empty: isAr ? "لا توجد عناصر في السلة." : "Your cart is empty.",
       backToShop: isAr ? "العودة للمتجر" : "Back to shop",
       editCart: isAr ? "تعديل السلة" : "Edit cart",
@@ -293,6 +294,9 @@ export default function CheckoutClient() {
       <h1 className="title" style={{ marginTop: 0 }}>
         {COPY.title}
       </h1>
+      <p className="lead" style={{ marginTop: 0 }}>
+        {COPY.subtitle}
+      </p>
 
       {loadingBuyNow ? <p className="muted">{COPY.loadingProduct}</p> : null}
 
@@ -308,8 +312,9 @@ export default function CheckoutClient() {
           </div>
         </div>
       ) : (
-        <div className="grid-2">
-          <section className="panel" style={{ display: "grid", gap: ".55rem" }}>
+        <div className="grid-2 checkout-grid">
+          <section className="panel checkout-form-panel" style={{ display: "grid", gap: ".55rem" }}>
+            <h3 style={{ margin: "0 0 6px" }}>{isAr ? "بيانات التوصيل" : "Delivery details"}</h3>
             <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={COPY.fullName} />
             <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={COPY.phone} />
             <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={COPY.email} />
@@ -319,7 +324,7 @@ export default function CheckoutClient() {
 
             {err && <p style={{ color: err === COPY.placed ? "seagreen" : "crimson", margin: 0 }}>{err}</p>}
 
-            <div className="cta-row">
+            <div className="cta-row" style={{ marginTop: 12 }}>
               <button className="btn primary" onClick={payByCard} disabled={loading}>
                 {COPY.payCard}
               </button>
@@ -338,7 +343,7 @@ export default function CheckoutClient() {
             </div>
           </section>
 
-          <aside className="panel">
+          <aside className="panel checkout-summary-panel">
             <h3 style={{ marginTop: 0 }}>{COPY.orderSummary}</h3>
 
             <div style={{ display: "grid", gap: 10 }}>

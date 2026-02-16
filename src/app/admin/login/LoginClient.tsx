@@ -28,31 +28,42 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
     lang === "ar"
       ? {
           title: "تسجيل دخول الإدارة",
-          desc: "أدخل رمز الإدارة للوصول إلى لوحة التحكم. يتم ضبط الرمز في Vercel باسم ADMIN_TOKEN.",
+          desc: "دخول آمن للوصول إلى لوحة التحكم وإدارة الطلبات والمحتوى.",
+          sideTitle: "NIVRAN Admin",
+          points: ["وصول آمن للطلبات والعملاء", "جلسة محمية عبر ملفات تعريف الارتباط", "دعم ثنائي اللغة داخل لوحة التحكم"],
           tokenLabel: "رمز الإدارة",
           tokenPlaceholder: "ADMIN_TOKEN",
+          show: "إظهار",
+          hide: "إخفاء",
           signingIn: "جارٍ تسجيل الدخول…",
           signIn: "دخول",
+          help: "تأكد من مطابقة ADMIN_TOKEN في البيئة وعدم وجود مسافات إضافية.",
           errorPrefix: "خطأ: ",
         }
       : {
           title: "Admin Login",
-          desc: "Enter the admin token to access the dashboard. Token value is set in Vercel as ADMIN_TOKEN.",
-          tokenLabel: "ADMIN_TOKEN",
+          desc: "Secure access to manage orders, catalog, and operations.",
+          sideTitle: "NIVRAN Admin",
+          points: ["Protected access for orders and customer operations", "Cookie-based secure admin session", "Bilingual admin workflow support"],
+          tokenLabel: "Admin token",
           tokenPlaceholder: "ADMIN_TOKEN",
+          show: "Show",
+          hide: "Hide",
           signingIn: "Signing in…",
           signIn: "Sign in",
+          help: "Make sure ADMIN_TOKEN matches your environment value with no extra spaces.",
           errorPrefix: "Error: ",
         };
 
   const [token, setToken] = useState("");
+  const [reveal, setReveal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
   const safeNext = useMemo(() => {
-    if (!nextPath || typeof nextPath !== "string") return "/admin/orders";
-    if (!nextPath.startsWith("/")) return "/admin/orders";
-    if (nextPath.startsWith("//")) return "/admin/orders";
+    if (!nextPath || typeof nextPath !== "string") return "/admin";
+    if (!nextPath.startsWith("/")) return "/admin";
+    if (nextPath.startsWith("//")) return "/admin";
     return nextPath;
   }, [nextPath]);
 
@@ -78,41 +89,64 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
   }
 
   return (
-    <div className="admin-shell" dir={lang === "ar" ? "rtl" : "ltr"}>
-      <div className="admin-content">
-        <div className="admin-card admin-grid" style={{ maxWidth: 560, margin: "0 auto" }}>
-          <h1 className="admin-h1">{t.title}</h1>
+    <div className="admin-card admin-login-card">
+      <div className="admin-login-layout">
+        <aside className="admin-login-side">
+              <p className="admin-muted" style={{ textTransform: "uppercase", letterSpacing: ".12em", fontWeight: 700 }}>
+                {t.sideTitle}
+              </p>
+              <h1 className="admin-h1" style={{ marginTop: 12 }}>
+                {t.title}
+              </h1>
+              <p className="admin-muted">{t.desc}</p>
+              <ul>
+                {t.points.map((point) => (
+                  <li key={point}>{point}</li>
+                ))}
+              </ul>
+            </aside>
 
-          <p className="admin-muted">{t.desc}</p>
+            <form onSubmit={submit} className="admin-login-form">
+              <div>
+                <div className="admin-label" style={{ marginBottom: 6 }}>
+                  {t.tokenLabel}
+                </div>
 
-          <form onSubmit={submit} className="admin-grid">
-            <div>
-              <div className="admin-label" style={{ marginBottom: 6 }}>
-                {t.tokenLabel}
+                <div style={{ position: "relative" }}>
+                  <input
+                    className="admin-input"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    placeholder={t.tokenPlaceholder}
+                    autoComplete="off"
+                    spellCheck={false}
+                    type={reveal ? "text" : "password"}
+                    style={{ width: "100%", paddingInlineEnd: 80, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}
+                  />
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => setReveal((v) => !v)}
+                    style={{ position: "absolute", top: 6, insetInlineEnd: 6, padding: ".35rem .65rem" }}
+                  >
+                    {reveal ? t.hide : t.show}
+                  </button>
+                </div>
               </div>
-              <input
-                className="admin-input"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder={t.tokenPlaceholder}
-                autoComplete="off"
-                spellCheck={false}
-                style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}
-              />
-            </div>
 
-            <button className="btn btn-primary" type="submit" disabled={loading || !token.trim()}>
-              {loading ? t.signingIn : t.signIn}
-            </button>
+              <button className="btn btn-primary" type="submit" disabled={loading || !token.trim()}>
+                {loading ? t.signingIn : t.signIn}
+              </button>
 
-            {err ? (
-              <div style={{ color: "crimson" }}>
-                {t.errorPrefix}
-                {err}
-              </div>
-            ) : null}
-          </form>
-        </div>
+              <p className="admin-login-note">{t.help}</p>
+
+              {err ? (
+                <div style={{ color: "#ff8f8f" }}>
+                  {t.errorPrefix}
+                  {err}
+                </div>
+              ) : null}
+            </form>
       </div>
     </div>
   );

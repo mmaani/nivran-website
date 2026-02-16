@@ -10,13 +10,13 @@ import {
 
 export const runtime = "nodejs";
 
-function cookieOpts() {
+function cookieOpts(rememberMe: boolean) {
   return {
     httpOnly: true,
     secure: true,
     sameSite: "lax" as const,
     path: "/",
-    maxAge: 60 * 60 * 24 * 30,
+    ...(rememberMe ? { maxAge: 60 * 60 * 24 * 30 } : {}),
   };
 }
 
@@ -28,6 +28,7 @@ export async function POST(req: Request): Promise<Response> {
 
   const email = String(input?.email || "").trim().toLowerCase();
   const password = String(input?.password || "").trim();
+  const rememberMe = Boolean(input?.rememberMe);
   const locale = String(input?.locale || "en") === "ar" ? "ar" : "en";
 
   const c = await getCustomerByEmail(email);
@@ -51,6 +52,6 @@ export async function POST(req: Request): Promise<Response> {
     ? NextResponse.redirect(new URL(`/${locale}?login=1`, req.url))
     : NextResponse.json({ ok: true });
 
-  res.cookies.set(CUSTOMER_SESSION_COOKIE, token, cookieOpts());
+  res.cookies.set(CUSTOMER_SESSION_COOKIE, token, cookieOpts(rememberMe));
   return res;
 }

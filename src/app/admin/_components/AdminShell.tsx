@@ -1,4 +1,3 @@
-// src/app/admin/_components/AdminShell.tsx
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -37,11 +36,12 @@ export default function AdminShell({
 
   const nav = useMemo(
     () => [
-      { href: "/admin/orders", en: "Orders", ar: "الطلبات" },
-      { href: "/admin/catalog", en: "Catalog", ar: "المنتجات" },
-      { href: "/admin/inbox", en: "Inbox", ar: "الوارد" },
-      { href: "/admin/customers", en: "Customers", ar: "العملاء" },
-      { href: "/admin/staff", en: "Staff", ar: "الموظفون" },
+      { href: "/admin", en: "Dashboard", ar: "لوحة المعلومات", icon: "◈" },
+      { href: "/admin/orders", en: "Orders", ar: "الطلبات", icon: "◎" },
+      { href: "/admin/catalog", en: "Catalog", ar: "المنتجات", icon: "◇" },
+      { href: "/admin/inbox", en: "Inbox", ar: "الوارد", icon: "✦" },
+      { href: "/admin/customers", en: "Customers", ar: "العملاء", icon: "◉" },
+      { href: "/admin/staff", en: "Staff", ar: "الموظفون", icon: "◌" },
     ],
     []
   );
@@ -50,32 +50,36 @@ export default function AdminShell({
 
   return (
     <div className="admin-shell" data-lang={lang} dir={lang === "ar" ? "rtl" : "ltr"} lang={lang}>
-      {authed ? (
-        <header className="admin-topbar">
+      <header className="admin-topbar">
+        <div className="admin-topbar-inner">
           <div className="admin-brand">
-            <Link className="admin-logo" href="/admin/orders">
+            <Link className="admin-logo" href={authed ? "/admin" : "/admin/login"}>
               NIVRAN
             </Link>
             <span className="admin-subtitle">
-              <T en="Admin" ar="لوحة التحكم" />
+              <T en="Commerce Control" ar="إدارة المتجر" />
             </span>
           </div>
 
-          <nav className="admin-nav">
-            {nav.map((item) => {
-              const active =
-                pathname === item.href || pathname.startsWith(item.href + "/");
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`nav-link ${active ? "active" : ""}`}
-                >
-                  <T en={item.en} ar={item.ar} />
-                </Link>
-              );
-            })}
-          </nav>
+          {authed ? (
+            <nav className="admin-nav">
+              {nav.map((item) => {
+                const active = pathname === item.href || pathname.startsWith(item.href + "/");
+                return (
+                  <Link key={item.href} href={item.href} className={`nav-link ${active ? "active" : ""}`}>
+                    <span className="nav-icon" aria-hidden>
+                      {item.icon}
+                    </span>
+                    <T en={item.en} ar={item.ar} />
+                  </Link>
+                );
+              })}
+            </nav>
+          ) : (
+            <div className="admin-login-chip">
+              <T en="Secure admin access" ar="وصول إدارة آمن" />
+            </div>
+          )}
 
           <div className="admin-actions">
             <button
@@ -91,14 +95,27 @@ export default function AdminShell({
               <T en="Store" ar="المتجر" />
             </Link>
 
-            <Link className="btn" href="/api/admin/logout">
-              <T en="Logout" ar="تسجيل الخروج" />
-            </Link>
+            {authed ? (
+              <Link className="btn" href="/api/admin/logout">
+                <T en="Logout" ar="تسجيل الخروج" />
+              </Link>
+            ) : null}
           </div>
-        </header>
-      ) : null}
+        </div>
+      </header>
 
       <div className="admin-content">{children}</div>
+
+      <footer className="admin-footer">
+        <div className="admin-footer-inner">
+          <div className="admin-footer-brand">NIVRAN Admin</div>
+          <div className="admin-footer-links">
+            <Link href="/admin">Dashboard</Link>
+            <Link href="/admin/orders">Orders</Link>
+            <Link href="/admin/inbox">Inbox</Link>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

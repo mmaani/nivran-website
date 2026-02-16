@@ -5,6 +5,7 @@ export const runtime = "nodejs";
 function buildResponse(req: Request) {
   const res = NextResponse.redirect(new URL("/admin/login", req.url));
   res.cookies.set("admin_token", "", { path: "/", maxAge: 0 });
+  res.cookies.set("nivran_admin_token", "", { path: "/", maxAge: 0 });
   return res;
 }
 

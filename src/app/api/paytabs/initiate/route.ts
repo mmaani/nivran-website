@@ -29,7 +29,18 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   await ensureOrdersTables();
 
-  const { profileId, serverKey, apiBase } = getPaytabsEnv();
+  let profileId = "";
+  let serverKey = "";
+  let apiBase = "";
+  try {
+    const env = getPaytabsEnv();
+    profileId = env.profileId;
+    serverKey = env.serverKey;
+    apiBase = env.apiBase;
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "PayTabs not configured";
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
 
   const body = (await req.json().catch(() => ({}))) as InitiateRequest;
   const cartId = String(body?.cartId || "").trim();
@@ -63,7 +74,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Order not found" }, { status: 404 });
   }
 
-  const origin = req.headers.get("origin") || process.env.APP_BASE_URL || "";
+  const forwardedProto = req.headers.get("x-forwarded-proto") || "https";
+  const forwardedHost = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
+  const fallbackOrigin = forwardedHost ? `${forwardedProto}://${forwardedHost}` : "";
+  const origin = req.headers.get("origin") || process.env.APP_BASE_URL || fallbackOrigin;
   if (!origin) {
     return NextResponse.json({ ok: false, error: "Missing origin" }, { status: 400 });
   }
