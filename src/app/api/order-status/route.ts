@@ -10,7 +10,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: "Missing cart_id" }, { status: 400 });
   }
 
-  const pool = db();
+  const pool = db;
   const { rows } = await pool.query(
     `select cart_id, status, amount, currency,
             paytabs_tran_ref, paytabs_response_status, paytabs_response_message,

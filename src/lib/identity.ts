@@ -20,15 +20,30 @@ export function createAdminSessionToken(): string {
 
 /**
  * Password hashing:
- * - Supports bcrypt hashes if your old DB uses them ($2a/$2b/$2y…)
- * - Otherwise uses PBKDF2 with a self-describing format: pbkdf2$iter$saltB64$hashB64
+ * - Supports bcrypt hashes if your old DB already stored them
+ * - Also supports PBKDF2 fallback hashes: pbkdf2$iter$saltB64$hashB64
  */
+function tryBcrypt() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require("bcryptjs");
+  } catch {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      return require("bcrypt");
+    } catch {
+      return null;
+    }
+  }
+}
+
 export function hashPassword(password: string): string {
   const pwd = String(password || "");
-  const bcrypt = tryBcrypt();
-  if (bcrypt) return bcrypt.hashSync(pwd, 10);
+  const b = tryBcrypt();
+  if (b) return b.hashSync(pwd, 10);
 
-  const iter = 210_000;
+  // PBKDF2 fallback
+  const iter = 150_000;
   const salt = crypto.randomBytes(16);
   const key = crypto.pbkdf2Sync(pwd, salt, iter, 32, "sha256");
   return `pbkdf2$${iter}$${salt.toString("base64")}$${key.toString("base64")}`;
@@ -38,12 +53,14 @@ export function verifyPassword(password: string, stored: string): boolean {
   const pwd = String(password || "");
   const h = String(stored || "");
 
+  // bcrypt format
   if (/^\$2[aby]\$/.test(h)) {
-    const bcrypt = tryBcrypt();
-    if (!bcrypt) throw new Error("bcrypt hash detected but bcrypt module not installed");
-    return bcrypt.compareSync(pwd, h);
+    const b = tryBcrypt();
+    if (!b) return false;
+    return b.compareSync(pwd, h);
   }
 
+  // pbkdf2 format
   if (h.startsWith("pbkdf2$")) {
     const parts = h.split("$");
     if (parts.length !== 4) return false;
@@ -55,19 +72,6 @@ export function verifyPassword(password: string, stored: string): boolean {
   }
 
   return false;
-}
-
-function tryBcrypt(): any | null {
-  try {
-    // prefer bcryptjs in serverless builds
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    return require("bcryptjs");
-  } catch {}
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    return require("bcrypt");
-  } catch {}
-  return null;
 }
 
 /** Tables */
@@ -117,12 +121,31 @@ export async function ensureIdentityTables() {
       id bigserial primary key,
       username text unique not null,
       password_hash text not null,
+      full_name text,
       role text not null default 'admin',
       is_active boolean not null default true,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
     );
   `);
+
+  // Backwards-compatible migrations (safe to run repeatedly)
+  await db.query(`
+    do $$
+    begin
+      if exists (
+        select 1 from information_schema.columns
+        where table_schema='public' and table_name='staff_users' and column_name='email'
+      ) and not exists (
+        select 1 from information_schema.columns
+        where table_schema='public' and table_name='staff_users' and column_name='username'
+      ) then
+        alter table staff_users rename column email to username;
+      end if;
+    end $$;
+  `);
+
+  await db.query(`alter table staff_users add column if not exists full_name text;`);
 }
 
 /** Customers */
@@ -143,6 +166,7 @@ export async function getCustomerByEmail(email: string): Promise<CustomerRow | n
   await ensureIdentityTables();
   const e = String(email || "").trim().toLowerCase();
   if (!e) return null;
+
   const r = await db.query<CustomerRow>(
     `select id, email, password_hash, full_name, phone, address_line1, city, country, is_active, created_at::text as created_at
        from customers
@@ -194,6 +218,16 @@ export async function createCustomerSession(customerId: number, token: string) {
   );
 }
 
+function readCookie(cookieHeader: string, name: string) {
+  const parts = cookieHeader.split(";").map((p) => p.trim());
+  for (const p of parts) {
+    if (p.toLowerCase().startsWith(name.toLowerCase() + "=")) {
+      return decodeURIComponent(p.slice(name.length + 1));
+    }
+  }
+  return "";
+}
+
 export async function getCustomerIdFromRequest(req: Request): Promise<number | null> {
   await ensureIdentityTables();
   const cookie = req.headers.get("cookie") || "";
@@ -213,24 +247,11 @@ export async function getCustomerIdFromRequest(req: Request): Promise<number | n
   return r.rows[0]?.customer_id ?? null;
 }
 
-function readCookie(cookieHeader: string, name: string): string | null {
-  const parts = String(cookieHeader || "").split(";").map((s) => s.trim());
-  for (const p of parts) {
-    if (!p) continue;
-    const eq = p.indexOf("=");
-    if (eq < 0) continue;
-    const k = p.slice(0, eq).trim();
-    const v = p.slice(eq + 1).trim();
-    if (k === name) return decodeURIComponent(v);
-  }
-  return null;
-}
-
 /** Staff */
 export type StaffUser = {
   id: number;
   username: string;
-  password_hash: string;
+  full_name: string | null;
   role: string;
   is_active: boolean;
   created_at: string;
@@ -240,7 +261,7 @@ export type StaffUser = {
 export async function listStaffUsers(): Promise<StaffUser[]> {
   await ensureIdentityTables();
   const r = await db.query<StaffUser>(
-    `select id, username, password_hash, role, is_active,
+    `select id, username, full_name, role, is_active,
             created_at::text as created_at, updated_at::text as updated_at
        from staff_users
       order by created_at desc
@@ -252,6 +273,7 @@ export async function listStaffUsers(): Promise<StaffUser[]> {
 export async function upsertStaffUser(args: {
   id?: number;
   username: string;
+  full_name?: string | null;
   password?: string;
   role: string;
   is_active: boolean;
@@ -259,6 +281,13 @@ export async function upsertStaffUser(args: {
   await ensureIdentityTables();
 
   const username = String(args.username || "").trim().toLowerCase();
+  const fullName =
+    args.full_name === undefined
+      ? null
+      : args.full_name === null
+        ? null
+        : String(args.full_name || "").trim() || null;
+
   const role = String(args.role || "admin").trim();
   const isActive = !!args.is_active;
 
@@ -269,16 +298,16 @@ export async function upsertStaffUser(args: {
       const ph = hashPassword(args.password);
       await db.query(
         `update staff_users
-            set username=$1, role=$2, is_active=$3, password_hash=$4, updated_at=now()
-          where id=$5`,
-        [username, role, isActive, ph, args.id]
+            set username=$1, full_name=$2, role=$3, is_active=$4, password_hash=$5, updated_at=now()
+          where id=$6`,
+        [username, fullName, role, isActive, ph, args.id]
       );
     } else {
       await db.query(
         `update staff_users
-            set username=$1, role=$2, is_active=$3, updated_at=now()
-          where id=$4`,
-        [username, role, isActive, args.id]
+            set username=$1, full_name=$2, role=$3, is_active=$4, updated_at=now()
+          where id=$5`,
+        [username, fullName, role, isActive, args.id]
       );
     }
     return;
@@ -286,9 +315,18 @@ export async function upsertStaffUser(args: {
 
   if (!args.password) throw new Error("Password required for new staff user");
   const ph = hashPassword(args.password);
+
   await db.query(
-    `insert into staff_users (username, password_hash, role, is_active)
-     values ($1,$2,$3,$4)`,
-    [username, ph, role, isActive]
+    `insert into staff_users (username, password_hash, full_name, role, is_active)
+     values ($1,$2,$3,$4,$5)
+     on conflict (username) do update
+        set password_hash=excluded.password_hash,
+            full_name=excluded.full_name,
+            role=excluded.role,
+            is_active=excluded.is_active,
+            updated_at=now()`,
+    [username, ph, fullName, role, isActive]
   );
 }
+
+export { listStaffUsers as listStaff, upsertStaffUser as upsertStaff };

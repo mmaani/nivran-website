@@ -1,20 +1,12 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-const KEY = "nivran_cart_v1";
+import { CART_KEY, cartQty, readLocalCart } from "@/lib/cartStore";
 
 function readCount(): number {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return 0;
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return 0;
-    return arr.reduce((sum: number, x: any) => sum + Math.max(0, Number(x?.qty || 0)), 0);
-  } catch {
-    return 0;
-  }
+  return cartQty(readLocalCart());
 }
 
 function inferLocaleFromPath(pathname: string): "en" | "ar" {
@@ -33,21 +25,22 @@ export default function CartHeaderIcon({ locale }: { locale?: "en" | "ar" }) {
     setCount(readCount());
 
     const onStorage = (e: StorageEvent) => {
-      if (!e.key || e.key === KEY) setCount(readCount());
+      if (!e.key || e.key === CART_KEY) setCount(readCount());
     };
-    const onCustom = () => setCount(readCount());
+
+    const onCustom: EventListener = () => setCount(readCount());
 
     window.addEventListener("storage", onStorage);
-    window.addEventListener("nivran_cart_updated", onCustom as any);
+    window.addEventListener("nivran_cart_updated", onCustom);
 
     return () => {
       window.removeEventListener("storage", onStorage);
-      window.removeEventListener("nivran_cart_updated", onCustom as any);
+      window.removeEventListener("nivran_cart_updated", onCustom);
     };
   }, []);
 
   return (
-    <a
+    <Link
       href={`/${loc}/cart`}
       aria-label={isAr ? "السلة" : "Cart"}
       title={isAr ? "السلة" : "Cart"}
@@ -92,6 +85,6 @@ export default function CartHeaderIcon({ locale }: { locale?: "en" | "ar" }) {
       >
         {count}
       </span>
-    </a>
+    </Link>
   );
 }

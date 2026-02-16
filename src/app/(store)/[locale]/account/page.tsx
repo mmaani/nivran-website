@@ -13,7 +13,8 @@ export default async function AccountPage({ params }: { params: Promise<{ locale
 
   await ensureIdentityTables();
 
-  const token = cookies().get(CUSTOMER_SESSION_COOKIE)?.value || "";
+  const cookieStore = await cookies();
+  const token = cookieStore.get(CUSTOMER_SESSION_COOKIE)?.value || "";
   if (!token) redirect(`/${locale}/account/login`);
 
   const tokenHash = sha256Hex(token);

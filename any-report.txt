@@ -1,0 +1,139 @@
+src/app/admin/orders/ui.tsx
+15:  customer: any;
+16:  shipping: any;
+108:    } catch (e: any) {
+
+src/app/admin/orders/page.tsx
+73:      <OrdersClient initialRows={rows as any} lang={lang} />
+
+src/app/admin/orders/[id]/page.tsx
+1:export default function AdminOrder(props: any) {
+
+src/app/admin/inbox/InboxClient.tsx
+170:    } catch (e: any) {
+
+src/app/admin/login/page.tsx
+5:export default function AdminLoginPage({ searchParams }: any) {
+
+src/app/admin/login/LoginClient.tsx
+69:      const data = await res.json().catch(() => ({} as any));
+72:    } catch (e: any) {
+
+src/app/api/catalog/product-image/[id]/route.ts
+7:export async function GET(_: Request, { params }: any) {
+21:  const row = r.rows[0] as any;
+
+src/app/api/catalog/product/route.ts
+12:function computeDiscountedPrice(base: number, promo: any | null): number {
+45:  const product = pr.rows[0] as any;
+67:          or $1 = any(category_keys)
+74:  const promo = (promoRes.rows[0] as any) || null;
+93:      images: imgRes.rows.map((r: any) => ({
+
+src/app/api/contact/route.ts
+7:  const input = await req.json().catch(() => ({} as any));
+
+src/app/api/admin/catalog/product-images/route.ts
+40:    const f: any = selected[i];
+
+src/app/api/admin/order-status/route.ts
+36:  const body = await req.json().catch(() => ({} as any));
+
+src/app/api/admin/login/route.ts
+11:  const body = await req.json().catch(() => ({} as any));
+
+src/app/api/admin/lang/route.ts
+12:    const body = (await req.json().catch(() => ({}))) as any;
+
+src/app/(store)/en/checkout/result/page.tsx
+1:export default async function ResultPage({ searchParams }: any) {
+
+src/app/(store)/[locale]/page.tsx
+13:function getSizeLabel(product: any) {
+15:    return product.variants.find((v: any) => v?.isDefault)?.sizeLabel || product.variants[0]?.sizeLabel || "";
+20:function getPriceLabel(product: any) {
+22:    const prices = product.variants.map((v: any) => Number(v?.priceJod || 0)).filter((n: number) => Number.isFinite(n));
+33:  const benefits = (siteContent as any).benefits || { en: [], ar: [] };
+34:  const featuredProduct = (siteContent as any).featuredProduct || null;
+35:  const mainProductMessage = (siteContent as any).mainProductMessage || { en: "", ar: "" };
+36:  const products: any[] = (siteContent as any).products || [];
+37:  const testimonials = (siteContent as any).testimonials || { en: [], ar: [] };
+38:  const categoryLabels: Record<string, Record<Locale, string>> = (siteContent as any).categoryLabels || fallbackCategoryLabels;
+112:          {products.slice(0, 6).map((item: any) => (
+129:          {(benefits[locale] || []).map((item: any) => (
+141:          {(testimonials[locale] || []).map((item: any) => (
+
+src/app/(store)/[locale]/cart/CartClient.tsx
+23:      .map((x: any) => ({
+62:    window.addEventListener("nivran_cart_updated", onCustom as any);
+63:    return () => window.removeEventListener("nivran_cart_updated", onCustom as any);
+
+src/app/(store)/[locale]/checkout/result/page.tsx
+52:  const [data, setData] = useState<any | null>(null);
+57:    let timer: any;
+66:      } catch (e: any) {
+
+src/app/(store)/[locale]/product/page.tsx
+89:        label: (v as any)[locale],
+109:        {cats.map((c: any) => (
+
+src/app/(store)/[locale]/product/ProductCatalogClient.tsx
+69:            <select className="input" value={family} onChange={(e) => setFamily(e.target.value as any)}>
+88:            <select className="input" value={concentration} onChange={(e) => setConcentration(e.target.value as any)}>
+
+src/app/(store)/[locale]/account/reset-password/page.tsx
+29:    const data = await res.json().catch(() => ({} as any));
+
+src/app/(store)/[locale]/account/forgot-password/page.tsx
+21:    const data = await res.json().catch(() => ({} as any));
+
+src/app/(store)/[locale]/account/login/page.tsx
+18:      .map((x: any) => ({
+87:    } catch (e: any) {
+
+src/lib/catalog.ts
+69:  // Deduplicate any existing duplicate slugs (make them unique using id suffix)
+
+src/lib/db.ts
+16:  query: <T extends QueryResultRow = any>(text: string, params?: any[]): Promise<QueryResult<T>> =>
+
+src/app/api/newsletter/route.ts
+31:  // Deduplicate any legacy duplicates (keep oldest row per email)
+45:function normalizeEmail(v: any) {
+53:async function readBody(req: Request): Promise<Record<string, any>> {
+60:    const out: Record<string, any> = {};
+110:  } catch (e: any) {
+
+src/app/api/paytabs/query/route.ts
+43:  const responseStatus = String((data as any)?.payment_result?.response_status || "");
+46:  const resolvedCartId = String((data as any)?.cart_id || cartId || "");
+47:  const resolvedTranRef = String((data as any)?.tran_ref || tranRef || "");
+54:          set status=case when status = any($5::text[]) then $2 else status end,
+
+src/app/api/paytabs/initiate/route.ts
+26:  const order = orderRes.rows[0] as any;
+
+src/app/api/paytabs/callback/route.ts
+35:  let payload: any = null;
+96:            status = case when status = any($7) then $8 else status end,
+
+src/app/api/orders/route.ts
+32:      where slug = any($1::text[])`,
+38:function normalizeItems(items: any): { slug: string; qty: number }[] {
+56:  const body = await req.json().catch(() => null as any);
+101:  const map = new Map<string, any>();
+
+src/app/api/cart/sync/route.ts
+11:  const body = await req.json().catch(() => ({} as any));
+
+src/app/api/auth/reset-password/route.ts
+9:  const body = await req.json().catch(() => ({} as any));
+
+src/app/api/auth/forgot-password/route.ts
+14:  const body = await req.json().catch(() => ({} as any));
+28:    const createToken = (identity as any).createPasswordResetToken as (() => string) | undefined;
+
+src/app/api/auth/login/route.ts
+22:  const email = String((body as any)?.email || "").trim().toLowerCase();
+23:  const password = String((body as any)?.password || "").trim();
+24:  const locale = String((body as any)?.locale || "en") === "ar" ? "ar" : "en";

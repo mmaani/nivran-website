@@ -1,37 +1,18 @@
+import "server-only";
 import { Pool, QueryResult, QueryResultRow } from "pg";
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __nivranPool: Pool | undefined;
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error("DATABASE_URL env var is required");
 }
 
-function getPool(): Pool {
-  const cs = process.env.DATABASE_URL;
-  if (!cs) throw new Error("Missing DATABASE_URL");
+// Neon/Vercel typically requires SSL. This keeps current behavior.
+const pool = new Pool({
+  connectionString,
+  ssl: connectionString.includes("localhost") ? undefined : { rejectUnauthorized: false },
+});
 
-  if (!global.__nivranPool) {
-    global.__nivranPool = new Pool({
-      connectionString: cs,
-      ssl: cs.includes("localhost") ? undefined : { rejectUnauthorized: false },
-    });
-  }
-  return global.__nivranPool;
-}
-
-type DB = {
-  (): Pool;
-  query<T extends QueryResultRow = any>(
-    text: string,
-    params?: any[]
-  ): Promise<QueryResult<T>>;
+export const db = {
+  query: <T extends QueryResultRow = any>(text: string, params?: any[]): Promise<QueryResult<T>> =>
+    pool.query(text, params),
 };
-
-// db() -> Pool
-// db.query(...) -> convenience wrapper
-export const db: DB = Object.assign(
-  (() => getPool()) as any,
-  {
-    query: <T extends QueryResultRow = any>(text: string, params?: any[]) =>
-      getPool().query<T>(text, params),
-  }
-);

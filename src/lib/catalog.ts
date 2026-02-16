@@ -1,3 +1,4 @@
+import "server-only";
 // src/lib/catalog.ts
 import { db } from "@/lib/db";
 

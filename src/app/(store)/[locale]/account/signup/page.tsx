@@ -1,25 +1,25 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
-import { CART_LOCAL_KEY } from "@/lib/cartStore";
+
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { readLocalCart } from "@/lib/cartStore";
 
 type Locale = "en" | "ar";
 function t(locale: Locale, en: string, ar: string) {
   return locale === "ar" ? ar : en;
 }
 
-function readLocalCart() {
-  try {
-    const raw = localStorage.getItem(CART_LOCAL_KEY);
-    const items = raw ? JSON.parse(raw) : [];
-    return Array.isArray(items) ? items : [];
-  } catch {
-    return [];
-  }
+type JsonRecord = Record<string, unknown>;
+function isRecord(v: unknown): v is JsonRecord {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-export default function SignupPage({ params }: { params: Promise<{ locale: string }> }) {
+export default function SignupPage() {
+  const params = useParams<{ locale?: string }>();
+  const router = useRouter();
+
   const [locale, setLocale] = useState<Locale>("en");
-  const isAr = locale === "ar";
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -33,8 +33,9 @@ export default function SignupPage({ params }: { params: Promise<{ locale: strin
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    params.then((p) => setLocale(p.locale === "ar" ? "ar" : "en"));
-  }, [params]);
+    const loc = params?.locale === "ar" ? "ar" : "en";
+    setLocale(loc);
+  }, [params?.locale]);
 
   const can = useMemo(
     () => !!fullName.trim() && !!email.trim() && !!phone.trim() && !!addressLine1.trim() && !!password.trim(),
@@ -43,6 +44,8 @@ export default function SignupPage({ params }: { params: Promise<{ locale: strin
 
   async function syncCartIfAny() {
     const items = readLocalCart();
+    if (!items.length) return;
+
     await fetch("/api/cart/sync", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -50,9 +53,10 @@ export default function SignupPage({ params }: { params: Promise<{ locale: strin
     }).catch(() => {});
   }
 
-  async function submit(e: any) {
+  async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!can || busy) return;
+
     setBusy(true);
     setError(null);
 
@@ -70,15 +74,19 @@ export default function SignupPage({ params }: { params: Promise<{ locale: strin
       }),
     });
 
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data?.ok) {
+    const data: unknown = await res.json().catch(() => null);
+    const ok = isRecord(data) && data.ok === true;
+
+    if (!res.ok || !ok) {
+      const apiError = isRecord(data) ? String(data.error ?? "") : "";
       setBusy(false);
-      setError(data?.error || t(locale, "Signup failed.", "فشل إنشاء الحساب."));
+      setError(apiError || t(locale, "Signup failed.", "فشل إنشاء الحساب."));
       return;
     }
 
     await syncCartIfAny();
-    window.location.href = `/${locale}/account`;
+    router.push(`/${locale}/account`);
+    router.refresh();
   }
 
   return (
@@ -130,7 +138,7 @@ export default function SignupPage({ params }: { params: Promise<{ locale: strin
 
         <p className="muted" style={{ marginTop: 12 }}>
           {t(locale, "Already have an account?", "لديك حساب؟")}{" "}
-          <a href={`/${locale}/account/login`}>{t(locale, "Login", "تسجيل الدخول")}</a>
+          <Link href={`/${locale}/account/login`}>{t(locale, "Login", "تسجيل الدخول")}</Link>
         </p>
       </form>
     </div>

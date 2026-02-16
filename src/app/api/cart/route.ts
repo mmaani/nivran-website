@@ -1,27 +1,20 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getCustomerIdFromRequest } from "@/lib/identity";
-import { ensureCartTables, getCart } from "@/lib/cartStore";
+import { NextResponse } from "next/server";
+import { ensureCartTables, getCart } from "@/lib/cartStore.server";
+import { getCustomerIdFromRequest } from "@/lib/customerAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
-  try {
-    const customerId = await getCustomerIdFromRequest(req);
+export async function GET(req: Request) {
+  const customerId = await getCustomerIdFromRequest(req);
 
-    // ✅ Guest-safe: never 401 here (prevents Vercel log spam)
-    if (!customerId) {
-      return NextResponse.json({ ok: true, customerId: null, items: [] }, { status: 200 });
-    }
-
-    await ensureCartTables();
-    const cart = await getCart(Number(customerId));
-
-    return NextResponse.json(
-      { ok: true, customerId: Number(customerId), items: cart.items, updatedAt: cart.updatedAt },
-      { status: 200 }
-    );
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || "Cart fetch failed" }, { status: 500 });
+  // Guest: return 200 (no 401 spam), but mark as not authenticated
+  if (!customerId) {
+    return NextResponse.json({ ok: true, isAuthenticated: false, customerId: null, items: [] }, { status: 200 });
   }
+
+  await ensureCartTables();
+  const items = await getCart(customerId);
+
+  return NextResponse.json({ ok: true, isAuthenticated: true, customerId, items }, { status: 200 });
 }

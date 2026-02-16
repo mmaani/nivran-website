@@ -11,20 +11,52 @@ type CartItem = {
 
 const KEY = "nivran_cart_v1";
 
+type JsonRecord = Record<string, unknown>;
+function isRecord(v: unknown): v is JsonRecord {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function toStr(v: unknown): string {
+  return typeof v === "string" ? v : v == null ? "" : String(v);
+}
+
+function toNum(v: unknown): number {
+  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+  return Number.isFinite(n) ? n : 0;
+}
+
+function clampQty(n: unknown, min: number, max: number): number {
+  const x = Math.floor(toNum(n) || min);
+  return Math.min(max, Math.max(min, x));
+}
+
+function parseCartItems(v: unknown): CartItem[] {
+  if (!Array.isArray(v)) return [];
+  const out: CartItem[] = [];
+
+  for (const it of v) {
+    if (!isRecord(it)) continue;
+
+    const slug = toStr(it.slug).trim();
+    if (!slug) continue;
+
+    out.push({
+      slug,
+      name: toStr(it.name).trim(),
+      priceJod: toNum(it.priceJod),
+      qty: clampQty(it.qty, 1, 99),
+    });
+  }
+
+  return out;
+}
+
 function readCart(): CartItem[] {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((x: any) => ({
-        slug: String(x?.slug || ""),
-        name: String(x?.name || ""),
-        priceJod: Number(x?.priceJod || 0),
-        qty: Math.max(1, Math.min(99, Number(x?.qty || 1))),
-      }))
-      .filter((x: CartItem) => !!x.slug);
+    const parsed: unknown = JSON.parse(raw);
+    return parseCartItems(parsed);
   } catch {
     return [];
   }
@@ -35,8 +67,11 @@ function writeCart(items: CartItem[]) {
   window.dispatchEvent(new Event("nivran_cart_updated"));
 }
 
+function getBool(obj: JsonRecord, key: string): boolean {
+  return obj[key] === true;
+}
+
 async function trySyncToAccount(items: CartItem[]) {
-  // If not logged in, endpoint returns 401 — we ignore.
   const r = await fetch("/api/cart/sync", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -46,9 +81,11 @@ async function trySyncToAccount(items: CartItem[]) {
 
   if (!r || !r.ok) return;
 
-  const j = await r.json().catch(() => null);
-  if (j?.ok && Array.isArray(j.items)) {
-    writeCart(j.items);
+  const j: unknown = await r.json().catch(() => null);
+  if (!isRecord(j)) return;
+
+  if (j.ok === true && getBool(j, "isAuthenticated")) {
+    if (Array.isArray(j.items)) writeCart(parseCartItems(j.items));
   }
 }
 
@@ -80,7 +117,8 @@ export default function AddToCartButton({
   const isAr = locale === "ar";
   const [qty, setQty] = useState<number>(1);
   const [status, setStatus] = useState<"" | "added" | "updated">("");
-  const timerRef = useRef<any>(null);
+
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const safeMin = Math.max(1, Number(minQty || 1));
   const safeMax = Math.max(safeMin, Number(maxQty || 99));
@@ -89,16 +127,11 @@ export default function AddToCartButton({
   const updatedText = updatedLabel || (isAr ? "تم التحديث ✓" : "Updated ✓");
 
   useEffect(() => {
-    try {
-      const items = readCart();
-      const found = items.find((i) => i.slug === slug);
-      if (found?.qty) setQty(Math.min(safeMax, Math.max(safeMin, found.qty)));
-      else setQty(safeMin);
-    } catch {
-      setQty(safeMin);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug]);
+    const items = readCart();
+    const found = items.find((i) => i.slug === slug);
+    if (found?.qty) setQty(Math.min(safeMax, Math.max(safeMin, found.qty)));
+    else setQty(safeMin);
+  }, [slug, safeMin, safeMax]);
 
   useEffect(() => {
     return () => {
@@ -145,7 +178,6 @@ export default function AddToCartButton({
       flash("added");
     }
 
-    // ✅ Persist to account if logged in
     void trySyncToAccount(items);
   }
 

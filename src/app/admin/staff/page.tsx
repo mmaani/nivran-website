@@ -1,4 +1,3 @@
-// src/app/admin/staff/page.tsx
 import { db } from "@/lib/db";
 import { ensureIdentityTables } from "@/lib/identity";
 import { getAdminLang } from "@/lib/admin-lang";
@@ -8,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 type StaffRow = {
   id: number;
-  email: string;
+  username: string;
   full_name: string | null;
   role: string;
   is_active: boolean;
@@ -47,9 +46,6 @@ export default async function AdminStaffPage() {
           th_created: "تاريخ الإنشاء",
           inactive: "غير نشط",
           noStaff: "لا يوجد موظفون بعد.",
-          roleStaff: "موظف",
-          roleOps: "عمليات",
-          roleAdmin: "مدير",
         }
       : {
           title: "Staff Management",
@@ -71,13 +67,10 @@ export default async function AdminStaffPage() {
           th_created: "Created",
           inactive: "Inactive",
           noStaff: "No staff users yet.",
-          roleStaff: "Staff",
-          roleOps: "Operations",
-          roleAdmin: "Admin",
         };
 
   const { rows } = await db.query<StaffRow>(
-    `select id, email, full_name, role, is_active, created_at::text
+    `select id, username, full_name, role, is_active, created_at::text
      from staff_users
      order by created_at desc
      limit 200`
@@ -90,7 +83,6 @@ export default async function AdminStaffPage() {
         <p className="admin-muted">{L.subtitle}</p>
       </div>
 
-      {/* Create staff */}
       <section className="admin-card admin-grid">
         <h2 style={{ margin: 0 }}>{L.createTitle}</h2>
 
@@ -121,14 +113,7 @@ export default async function AdminStaffPage() {
 
           <div className="admin-grid" style={{ gap: 8 }}>
             <label style={{ fontSize: 13, opacity: 0.8 }}>{L.password}</label>
-            <input
-              className="admin-input"
-              name="password"
-              type="password"
-              required
-              minLength={8}
-              placeholder={L.password}
-            />
+            <input className="admin-input" name="password" type="password" required minLength={8} placeholder={L.password} />
           </div>
 
           <label style={{ display: "flex", gap: 10, alignItems: "center", gridColumn: "1 / -1" }}>
@@ -145,7 +130,6 @@ export default async function AdminStaffPage() {
         </form>
       </section>
 
-      {/* Staff list */}
       <section className="admin-card admin-grid">
         <h2 style={{ margin: 0 }}>{L.staffList}</h2>
 
@@ -172,7 +156,7 @@ export default async function AdminStaffPage() {
                   <tr key={r.id}>
                     <td className="ltr">{r.id}</td>
                     <td>{r.full_name || "—"}</td>
-                    <td className="ltr">{r.email}</td>
+                    <td className="ltr">{r.username}</td>
                     <td>
                       <b className="ltr">{roleKey}</b>
                       <div style={{ fontSize: 12, opacity: 0.75, marginTop: 2 }}>{roleText}</div>

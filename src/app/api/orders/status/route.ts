@@ -10,7 +10,7 @@ export async function GET(req: Request) {
   const cartId = String(url.searchParams.get("cartId") || "");
   if (!cartId) return NextResponse.json({ ok: false, error: "cartId is required" }, { status: 400 });
 
-  const pool = db();
+  const pool = db;
   const { rows } = await pool.query(
     `select cart_id, status, amount, currency, locale, payment_method, updated_at
      from orders where cart_id=$1 limit 1`,

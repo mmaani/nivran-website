@@ -41,7 +41,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "id and status are required" }, { status: 400 });
   }
 
-  const pool = db();
+  const pool = db;
   const { rows } = await pool.query(
     `select id, status, payment_method from orders where id=$1`,
     [id]

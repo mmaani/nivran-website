@@ -10,7 +10,7 @@ export async function GET(req: Request) {
   const auth = requireAdmin(req);
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: 401 });
 
-  const pool = db();
+  const pool = db;
   const { rows } = await pool.query(
     `select id, cart_id, status, amount, currency, locale,
             customer_name, customer_email,
