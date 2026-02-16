@@ -16,8 +16,6 @@ export default async function StoreLocaleLayout({ children, params }: { children
   const t = LINKS[locale];
   const href = (p: string) => `/${locale}${p}`;
 
-
-
   return (
     <div lang={locale} dir={isAr ? "rtl" : "ltr"}>
       <CartHydrator />
@@ -58,10 +56,10 @@ export default async function StoreLocaleLayout({ children, params }: { children
             </div>
           </details>
         </div>
-              <div style={{ position: "absolute", top: 10, insetInlineEnd: 12 }}>
+        <div style={{ position: "absolute", top: 10, insetInlineEnd: 12 }}>
           <CartHeaderIcon />
         </div>
-</header>
+      </header>
 
       <main className="shell">{children}</main>
 
