@@ -1,0 +1,413 @@
+Neon Audit Report
+Generated: 2026-02-16T04:53:08.008Z
+
+
+===== TABLES_EXISTENCE =====
+[
+  {
+    "table_name": "customer_sessions"
+  },
+  {
+    "table_name": "customers"
+  },
+  {
+    "table_name": "orders"
+  },
+  {
+    "table_name": "paytabs_callbacks"
+  },
+  {
+    "table_name": "staff_users"
+  }
+]
+
+
+===== COLUMNS_AUDIT =====
+[
+  {
+    "table_name": "customer_sessions",
+    "column_name": "id",
+    "data_type": "bigint",
+    "is_nullable": "NO",
+    "column_default": "nextval('customer_sessions_id_seq'::regclass)"
+  },
+  {
+    "table_name": "customer_sessions",
+    "column_name": "customer_id",
+    "data_type": "bigint",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "customer_sessions",
+    "column_name": "token",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "customer_sessions",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "customer_sessions",
+    "column_name": "expires_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "customer_sessions",
+    "column_name": "revoked_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "customers",
+    "column_name": "id",
+    "data_type": "bigint",
+    "is_nullable": "NO",
+    "column_default": "nextval('customers_id_seq'::regclass)"
+  },
+  {
+    "table_name": "customers",
+    "column_name": "email",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "customers",
+    "column_name": "password_hash",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "customers",
+    "column_name": "first_name",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "customers",
+    "column_name": "last_name",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "customers",
+    "column_name": "phone",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "customers",
+    "column_name": "locale",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": "'en'::text"
+  },
+  {
+    "table_name": "customers",
+    "column_name": "is_active",
+    "data_type": "boolean",
+    "is_nullable": "NO",
+    "column_default": "true"
+  },
+  {
+    "table_name": "customers",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "customers",
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "orders",
+    "column_name": "id",
+    "data_type": "bigint",
+    "is_nullable": "NO",
+    "column_default": "nextval('orders_id_seq'::regclass)"
+  },
+  {
+    "table_name": "orders",
+    "column_name": "cart_id",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "orders",
+    "column_name": "status",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": "'PENDING_PAYMENT'::text"
+  },
+  {
+    "table_name": "orders",
+    "column_name": "amount",
+    "data_type": "numeric",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "orders",
+    "column_name": "currency",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": "'JOD'::text"
+  },
+  {
+    "table_name": "orders",
+    "column_name": "locale",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": "'en'::text"
+  },
+  {
+    "table_name": "orders",
+    "column_name": "customer_email",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "orders",
+    "column_name": "customer_name",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "orders",
+    "column_name": "paytabs_tran_ref",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "orders",
+    "column_name": "paytabs_response_status",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "orders",
+    "column_name": "paytabs_response_message",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "orders",
+    "column_name": "paytabs_payload",
+    "data_type": "jsonb",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "orders",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "orders",
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "orders",
+    "column_name": "payment_method",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": "'PAYTABS'::text"
+  },
+  {
+    "table_name": "orders",
+    "column_name": "customer",
+    "data_type": "jsonb",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "orders",
+    "column_name": "shipping",
+    "data_type": "jsonb",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "orders",
+    "column_name": "paytabs_last_payload",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "orders",
+    "column_name": "paytabs_last_signature",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "paytabs_callbacks",
+    "column_name": "id",
+    "data_type": "bigint",
+    "is_nullable": "NO",
+    "column_default": "nextval('paytabs_callbacks_id_seq'::regclass)"
+  },
+  {
+    "table_name": "paytabs_callbacks",
+    "column_name": "received_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "YES",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "paytabs_callbacks",
+    "column_name": "payload",
+    "data_type": "jsonb",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "paytabs_callbacks",
+    "column_name": "signature",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "paytabs_callbacks",
+    "column_name": "verified",
+    "data_type": "boolean",
+    "is_nullable": "NO",
+    "column_default": "false"
+  },
+  {
+    "table_name": "paytabs_callbacks",
+    "column_name": "cart_id",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "paytabs_callbacks",
+    "column_name": "tran_ref",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "paytabs_callbacks",
+    "column_name": "signature_header",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "paytabs_callbacks",
+    "column_name": "signature_computed",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "paytabs_callbacks",
+    "column_name": "signature_valid",
+    "data_type": "boolean",
+    "is_nullable": "NO",
+    "column_default": "false"
+  },
+  {
+    "table_name": "paytabs_callbacks",
+    "column_name": "raw_body",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "staff_users",
+    "column_name": "id",
+    "data_type": "bigint",
+    "is_nullable": "NO",
+    "column_default": "nextval('staff_users_id_seq'::regclass)"
+  },
+  {
+    "table_name": "staff_users",
+    "column_name": "email",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "staff_users",
+    "column_name": "password_hash",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "staff_users",
+    "column_name": "full_name",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "staff_users",
+    "column_name": "role",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": "'staff'::text"
+  },
+  {
+    "table_name": "staff_users",
+    "column_name": "is_active",
+    "data_type": "boolean",
+    "is_nullable": "NO",
+    "column_default": "true"
+  },
+  {
+    "table_name": "staff_users",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "staff_users",
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  }
+]
+
+
+===== ORDERS_SANITY =====
+ERROR: error: column "total_jod" does not exist
+
+
+===== SESSIONS_SANITY =====
+ERROR: error: column "token_hash" does not exist
