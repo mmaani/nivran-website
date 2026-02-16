@@ -1,9 +1,10 @@
 import { db } from "@/lib/db";
 import { ensureOrdersTables } from "@/lib/orders";
 import OrdersClient from "./ui";
-import type { Row } from "./ui";
 import { adminT, getAdminLang } from "@/lib/admin-lang";
 
+
+// ...existing code...
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -71,7 +72,7 @@ export default async function AdminOrdersPage() {
         <p className="admin-muted">{hint}</p>
       </div>
 
-      <OrdersClient initialRows={rows as Row[]} lang={lang} />
+      <OrdersClient initialRows={rows as OrdersRow[]} lang={lang} />
     </div>
   );
 }
