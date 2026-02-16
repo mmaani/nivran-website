@@ -19,13 +19,14 @@ export default async function CompliancePage({
   const content: { title: string; intro: string; sections: Section[] } = isAr
     ? {
         title: "الجودة والالتزام",
-        intro: "كيف تتعامل نيفـران مع السلامة والتواصل المسؤول والعناية بالمنتج.",
+        intro: "كيف تتعامل نيفـران مع السلامة والتواصل المسؤول والعناية بمنتجاتها.",
         sections: [
           {
             id: "safety",
             title: "سلامة المنتج والاستخدام المسؤول",
             paragraphs: [
-              "عطور نيفـران منتجات تجميلية مخصّصة للرائحة فقط.",
+              "منتجات نيفـران تشمل العطور ومنتجات العناية الشخصية المشابهة مثل الكريمات والصابون.",
+              "هذه المنتجات تجميلية/عناية شخصية ومخصّصة للعناية اليومية أو الرائحة فقط.",
               "يرجى الاستخدام وفق الإرشادات: تجنب ملامسة العينين أو الجلد المتشقق وتجنب الابتلاع.",
             ],
             bullets: ["إن كانت بشرتك حساسة، اختبر المنتج أولًا وأوقف الاستخدام عند التهيّج.", "يُحفظ بعيدًا عن متناول الأطفال."],
@@ -34,7 +35,7 @@ export default async function CompliancePage({
             id: "allergens",
             title: "المكوّنات والمحسّسات",
             paragraphs: [
-              "مثل معظم العطور، قد تحتوي التركيبة على مكوّنات قد تسبب حساسية لدى البعض.",
+              "مثل معظم المنتجات التجميلية، قد تحتوي التركيبات على مكوّنات قد تسبب حساسية لدى البعض.",
               "راجع معلومات المكوّنات/المحسّسات على العبوة إن كانت متاحة.",
             ],
             bullets: ["إذا لديك حساسية معروفة، استشر مختصًا قبل الاستخدام."],
@@ -47,7 +48,7 @@ export default async function CompliancePage({
           {
             id: "flammable",
             title: "قابلية الاشتعال",
-            paragraphs: ["العطور تحتوي على كحول وقابلة للاشتعال.", "تُحفظ بعيدًا عن الحرارة والشرر واللهب ولا تُستخدم قرب النار."],
+            paragraphs: ["قد تكون بعض العطور محتوية على كحول وقابلة للاشتعال.", "تُحفظ بعيدًا عن الحرارة والشرر واللهب ولا تُستخدم قرب النار."],
           },
           {
             id: "auth",
@@ -59,18 +60,19 @@ export default async function CompliancePage({
       }
     : {
         title: "Quality & Compliance",
-        intro: "How NIVRAN approaches safety, responsible communication, and product care.",
+        intro: "How NIVRAN approaches safety, responsible communication, and product care across its range.",
         sections: [
           {
             id: "safety",
             title: "Product safety & responsible use",
-            paragraphs: ["NIVRAN fragrances are cosmetic products intended for scent only.", "Always use as directed: avoid contact with eyes, broken skin, or ingestion."],
+            paragraphs: ["NIVRAN products include perfumes and other personal care items such as creams, soaps, and similar cosmetic products.",
+              "These are cosmetic/personal care products intended for scent or routine care only.", "Always use as directed: avoid contact with eyes, broken skin, or ingestion."],
             bullets: ["Patch-test if you have sensitive skin; discontinue use if irritation occurs.", "Keep out of reach of children."],
           },
           {
             id: "allergens",
             title: "Ingredients & allergens",
-            paragraphs: ["Like most perfumes, formulas may contain materials that can trigger sensitivity for some people.", "Check the packaging ingredient/allergen information when available."],
+            paragraphs: ["Like most cosmetic products, formulas may contain materials that can trigger sensitivity for some people.", "Check the packaging ingredient/allergen information when available."],
             bullets: ["If you have known allergies, consult a healthcare professional before use."],
           },
           {
@@ -81,7 +83,7 @@ export default async function CompliancePage({
           {
             id: "flammable",
             title: "Flammability",
-            paragraphs: ["Perfumes are alcohol-based and flammable.", "Store away from heat, sparks, and open flame; do not spray near fire."],
+            paragraphs: ["Some perfumes are alcohol-based and flammable.", "Store away from heat, sparks, and open flame; do not spray near fire."],
           },
           {
             id: "auth",
@@ -97,6 +99,9 @@ export default async function CompliancePage({
       <div className="panel" style={{ padding: "1.1rem" }}>
         <p className="muted" style={{ marginTop: 0, marginBottom: ".35rem" }}>
           {isAr ? "NIVRAN / نيفـران" : "NIVRAN"}
+        </p>
+        <p className="muted" style={{ marginTop: 0, marginBottom: ".5rem", fontSize: 13 }}>
+          {isAr ? "الكيان القانوني: Nivran Fragrance" : "Legal entity: Nivran Fragrance"}
         </p>
         <h1 className="title" style={{ marginTop: 0 }}>{content.title}</h1>
         <p className="muted" style={{ marginTop: ".4rem" }}>{content.intro}</p>

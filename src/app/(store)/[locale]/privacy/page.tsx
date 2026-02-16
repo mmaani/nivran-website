@@ -19,13 +19,13 @@ export default async function PrivacyPage({
   const content: { title: string; intro: string; sections: Section[] } = isAr
     ? {
         title: "سياسة الخصوصية",
-        intro: "كيف تجمع نيفـران المعلومات الشخصية وتستخدمها.",
+        intro: "كيف تجمع نيفـران المعلومات الشخصية وتستخدمها عند شراء منتجاتها والتفاعل مع المتجر.",
         sections: [
           {
             id: "what",
             title: "ما البيانات التي نجمعها",
             paragraphs: [
-              "نجمع البيانات التي تزودنا بها عند إتمام الطلب أو التواصل مع الدعم أو الاشتراك بالتحديثات.",
+              "نجمع البيانات التي تزودنا بها عند إتمام طلبات منتجات نيفـران (مثل العطور ومنتجات العناية الشخصية المشابهة) أو التواصل مع الدعم أو الاشتراك بالتحديثات.",
               "قد تشمل: الاسم، البريد الإلكتروني، رقم الهاتف، عنوان التوصيل، وتفاصيل الطلب.",
             ],
             bullets: ["يتم الدفع بالبطاقة عبر PayTabs على صفحة دفع مستضافة؛ نحن لا نخزن بيانات بطاقتك كاملة."],
@@ -82,13 +82,13 @@ export default async function PrivacyPage({
       }
     : {
         title: "Privacy Policy",
-        intro: "How NIVRAN collects and uses personal information.",
+        intro: "How NIVRAN collects and uses personal information when you buy products and use the store.",
         sections: [
           {
             id: "what",
             title: "What we collect",
             paragraphs: [
-              "We collect information you provide to place an order, contact support, or sign up for updates.",
+              "We collect information you provide to place an order for NIVRAN products (including perfumes and similar personal care/cosmetic items), contact support, or sign up for updates.",
               "This may include name, email, phone, delivery address, and order details.",
             ],
             bullets: ["Payment card details are processed by PayTabs on a hosted page; we do not store your full card details."],
@@ -146,6 +146,9 @@ export default async function PrivacyPage({
       <div className="panel" style={{ padding: "1.1rem" }}>
         <p className="muted" style={{ marginTop: 0, marginBottom: ".35rem" }}>
           {isAr ? "NIVRAN / نيفـران" : "NIVRAN"}
+        </p>
+        <p className="muted" style={{ marginTop: 0, marginBottom: ".5rem", fontSize: 13 }}>
+          {isAr ? "الكيان القانوني: Nivran Fragrance" : "Legal entity: Nivran Fragrance"}
         </p>
         <h1 className="title" style={{ marginTop: 0 }}>{content.title}</h1>
         <p className="muted" style={{ marginTop: ".4rem" }}>{content.intro}</p>

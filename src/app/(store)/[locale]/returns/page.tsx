@@ -19,13 +19,13 @@ export default async function ReturnsPage({
   const content: { title: string; intro: string; sections: Section[] } = isAr
     ? {
         title: "سياسة الاستبدال/الاسترجاع",
-        intro: "كيف نتعامل مع الاستبدال والاسترجاع والاسترجاع المالي لطلبات نيفـران.",
+        intro: "كيف نتعامل مع الاستبدال والاسترجاع والاسترجاع المالي لطلبات منتجات نيفـران.",
         sections: [
           {
             id: "hygiene",
             title: "سياسة السلامة والنظافة (مهم)",
             paragraphs: [
-              "حرصًا على السلامة والنظافة، العطور المفتوحة أو المستخدمة غالبًا لا تُسترجع.",
+              "حرصًا على السلامة والنظافة، العطور ومنتجات العناية الشخصية/التجميلية المفتوحة أو المستخدمة غالبًا لا تُسترجع.",
               "في حال قبول الاسترجاع، يجب أن يكون المنتج غير مفتوح وغير مستخدم وبحالته الأصلية (بما في ذلك التغليف).",
             ],
             bullets: ["لا تفتح المنتج إذا كنت تنوي طلب الاسترجاع."],
@@ -36,6 +36,7 @@ export default async function ReturnsPage({
             paragraphs: [
               "إذا وصل الطلب تالفًا أو غير مطابق أو ناقصًا، تواصل معنا خلال 48 ساعة من الاستلام مع صور واضحة.",
               "سنراجع الحالة ونقترح الحل الأنسب (استبدال/رصيد/استرجاع) حسب الحالة.",
+              "تُطبق هذه السياسة على منتجات نيفـران بما يشمل العطور ومنتجات العناية الشخصية المشابهة مثل الكريمات والصابون.",
             ],
             bullets: ["البريد: hello@nivran.com", "واتساب: +962791752686"],
           },
@@ -63,13 +64,13 @@ export default async function ReturnsPage({
       }
     : {
         title: "Returns & Exchanges",
-        intro: "How returns, exchanges, and refunds work for NIVRAN orders.",
+        intro: "How returns, exchanges, and refunds work for NIVRAN product orders.",
         sections: [
           {
             id: "hygiene",
             title: "Hygiene-first policy (important)",
             paragraphs: [
-              "For safety and hygiene, opened or used perfumes are typically not returnable.",
+              "For safety and hygiene, opened or used perfumes and personal care/cosmetic items are typically not returnable.",
               "If a return is accepted, items must be unopened, unused, and in original condition (including all packaging).",
             ],
             bullets: ["Do not open the product if you plan to request a return."],
@@ -80,6 +81,7 @@ export default async function ReturnsPage({
             paragraphs: [
               "If your order arrives damaged, defective, missing items, or incorrect, contact us within 48 hours of delivery with clear photos.",
               "We will review and propose the appropriate resolution (replacement, store credit, or refund) depending on the case.",
+              "This policy applies across NIVRAN products, including perfumes and similar personal care items such as creams and soaps.",
             ],
             bullets: ["Email: hello@nivran.com", "WhatsApp: +962791752686"],
           },
@@ -103,6 +105,9 @@ export default async function ReturnsPage({
       <div className="panel" style={{ padding: "1.1rem" }}>
         <p className="muted" style={{ marginTop: 0, marginBottom: ".35rem" }}>
           {isAr ? "NIVRAN / نيفـران" : "NIVRAN"}
+        </p>
+        <p className="muted" style={{ marginTop: 0, marginBottom: ".5rem", fontSize: 13 }}>
+          {isAr ? "الكيان القانوني: Nivran Fragrance" : "Legal entity: Nivran Fragrance"}
         </p>
         <h1 className="title" style={{ marginTop: 0 }}>{content.title}</h1>
         <p className="muted" style={{ marginTop: ".4rem" }}>{content.intro}</p>

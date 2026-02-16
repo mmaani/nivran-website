@@ -19,12 +19,12 @@ export default async function ShippingPage({
   const content: { title: string; intro: string; sections: Section[] } = isAr
     ? {
         title: "سياسة الشحن",
-        intro: "تفاصيل نطاق الشحن والرسوم والمدة لطلبات التوصيل داخل الأردن.",
+        intro: "تفاصيل نطاق الشحن والرسوم والمدة لطلبات منتجات نيفـران داخل الأردن.",
         sections: [
           {
             id: "where",
             title: "نطاق الشحن",
-            paragraphs: ["المرحلة ١: التوصيل متاح حاليًا داخل الأردن فقط.", "عند التوسع مستقبلًا سيتم تحديث هذه الصفحة."],
+            paragraphs: ["المرحلة ١: التوصيل متاح حاليًا داخل الأردن فقط.", "تشمل هذه السياسة منتجات نيفـران، مثل العطور وبعض منتجات العناية الشخصية المشابهة (كريمات، صابون، وغيرها).", "عند التوسع مستقبلًا سيتم تحديث هذه الصفحة."],
             bullets: ["إذا كان العنوان خارج الأردن فقد لا يتوفر إتمام الطلب."],
           },
           {
@@ -63,18 +63,18 @@ export default async function ShippingPage({
           {
             id: "safety",
             title: "ملاحظة السلامة",
-            paragraphs: ["العطور تحتوي على كحول وقابلة للاشتعال—تُستخدم وتُحفظ بعيدًا عن الحرارة واللهب.", "يُحفظ بعيدًا عن متناول الأطفال."],
+            paragraphs: ["قد تختلف متطلبات التخزين حسب نوع المنتج؛ اتبع دائمًا التعليمات المدوّنة على العبوة.", "العطور قد تحتوي على كحول وقابلة للاشتعال—تُستخدم وتُحفظ بعيدًا عن الحرارة واللهب.", "يُحفظ بعيدًا عن متناول الأطفال."],
           },
         ],
       }
     : {
         title: "Shipping Policy",
-        intro: "Delivery coverage, fees, and timing for orders within Jordan.",
+        intro: "Delivery coverage, fees, and timing for NIVRAN product orders within Jordan.",
         sections: [
           {
             id: "where",
             title: "Where we ship",
-            paragraphs: ["Phase 1: We currently deliver within Jordan only.", "If we expand in the future, we’ll update this page."],
+            paragraphs: ["Phase 1: We currently deliver within Jordan only.", "This policy applies to NIVRAN products, including perfumes and other personal care items such as creams, soaps, and similar cosmetic products.", "If we expand in the future, we’ll update this page."],
             bullets: ["If your address is outside Jordan, checkout may not be available."],
           },
           {
@@ -110,7 +110,7 @@ export default async function ShippingPage({
           {
             id: "safety",
             title: "Safety note",
-            paragraphs: ["Perfumes are alcohol-based and flammable. Store and use away from heat and open flames.", "Keep out of reach of children."],
+            paragraphs: ["Storage guidance may vary by product type; always follow the packaging instructions.", "Perfumes may be alcohol-based and flammable. Store and use away from heat and open flames.", "Keep out of reach of children."],
           },
         ],
       };
@@ -120,6 +120,9 @@ export default async function ShippingPage({
       <div className="panel" style={{ padding: "1.1rem" }}>
         <p className="muted" style={{ marginTop: 0, marginBottom: ".35rem" }}>
           {isAr ? "NIVRAN / نيفـران" : "NIVRAN"}
+        </p>
+        <p className="muted" style={{ marginTop: 0, marginBottom: ".5rem", fontSize: 13 }}>
+          {isAr ? "الكيان القانوني: Nivran Fragrance" : "Legal entity: Nivran Fragrance"}
         </p>
         <h1 className="title" style={{ marginTop: 0 }}>{content.title}</h1>
         <p className="muted" style={{ marginTop: ".4rem" }}>{content.intro}</p>
