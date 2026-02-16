@@ -1,0 +1,23 @@
+tablename
+batches
+categories
+contact_submissions
+coupons
+customer_cart_items
+customer_carts
+customer_sessions
+customers
+inventory
+newsletter_subscribers
+order_items
+orders
+payments
+paytabs_callbacks
+product_images
+product_media
+products
+promotions
+shipments
+staff_users
+variants
+(21 rows)

@@ -1,0 +1,10 @@
+ id |          name           |           email            |     phone     |           message           | locale |          created_at           |  topic   |   subject    |  order_ref  
+----+-------------------------+----------------------------+---------------+-----------------------------+--------+-------------------------------+----------+--------------+-------------
+  6 | Mohammad Abdullah Maani | mohammad.maani@hotmail.com | 0791752686    | 44444444444                 | en     | 2026-02-16 15:35:08.577491+00 | order    | pay          | 444
+  5 | Mohammad Abdullah Maani | mohammad.maani@hotmail.com | 0791752686    | 333                         | en     | 2026-02-16 15:29:06.078782+00 | order    | Test3        | 333
+  4 | Test                    | test@example.com           | 079           | Hello                       | en     | 2026-02-16 15:21:36.664118+00 | shipping | ddd          | 222
+  3 | Mohammad Abdullah Maani | mohammad.maani@hotmail.com | 0791752686    | Hello                       | en     | 2026-02-16 15:17:21.833021+00 | shipping | ddd          | 222
+  2 | Test User               | test@example.com           | +962000000000 | Hello, testing contact API. | en     | 2026-02-16 15:06:15.633148+00 |          |              | 
+  1 | Test User               | test@example.com           | +962000000000 | Hello from DB insert        | en     | 2026-02-16 15:04:40.579191+00 | order    | Test subject | NIVRAN-TEST
+(6 rows)
+

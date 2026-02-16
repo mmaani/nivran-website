@@ -1,0 +1,202 @@
+table_name	column_name	data_type	is_nullable
+batches	id	bigint	NO
+batches	variant_id	bigint	NO
+batches	lot_code	text	NO
+batches	mfg_date	date	YES
+batches	expiry_date	date	YES
+batches	qty_total	integer	NO
+batches	qty_available	integer	NO
+batches	created_at	timestamp with time zone	NO
+categories	key	text	NO
+categories	name_en	text	NO
+categories	name_ar	text	NO
+categories	sort_order	integer	NO
+categories	is_active	boolean	NO
+categories	is_promoted	boolean	NO
+categories	created_at	timestamp with time zone	NO
+categories	updated_at	timestamp with time zone	NO
+contact_submissions	id	bigint	NO
+contact_submissions	name	text	NO
+contact_submissions	email	text	NO
+contact_submissions	phone	text	YES
+contact_submissions	message	text	NO
+contact_submissions	locale	text	NO
+contact_submissions	created_at	timestamp with time zone	NO
+contact_submissions	topic	text	YES
+contact_submissions	subject	text	YES
+contact_submissions	order_ref	text	YES
+coupons	id	bigint	NO
+coupons	code	text	NO
+coupons	type	text	NO
+coupons	value	numeric	NO
+coupons	active	boolean	NO
+coupons	starts_at	timestamp with time zone	YES
+coupons	ends_at	timestamp with time zone	YES
+coupons	max_uses	integer	YES
+coupons	used_count	integer	NO
+customer_cart_items	customer_id	bigint	NO
+customer_cart_items	slug	text	NO
+customer_cart_items	name	text	NO
+customer_cart_items	price_jod	numeric	NO
+customer_cart_items	qty	integer	NO
+customer_cart_items	updated_at	timestamp with time zone	NO
+customer_carts	customer_id	bigint	NO
+customer_carts	updated_at	timestamp with time zone	NO
+customer_sessions	id	bigint	NO
+customer_sessions	customer_id	bigint	NO
+customer_sessions	token	text	NO
+customer_sessions	created_at	timestamp with time zone	NO
+customer_sessions	expires_at	timestamp with time zone	NO
+customer_sessions	revoked_at	timestamp with time zone	YES
+customers	id	bigint	NO
+customers	email	text	NO
+customers	password_hash	text	NO
+customers	first_name	text	YES
+customers	last_name	text	YES
+customers	phone	text	YES
+customers	locale	text	NO
+customers	is_active	boolean	NO
+customers	created_at	timestamp with time zone	NO
+customers	updated_at	timestamp with time zone	NO
+inventory	variant_id	bigint	NO
+inventory	on_hand	integer	NO
+inventory	reserved	integer	NO
+inventory	updated_at	timestamp with time zone	NO
+newsletter_subscribers	id	bigint	NO
+newsletter_subscribers	email	text	NO
+newsletter_subscribers	locale	text	NO
+newsletter_subscribers	created_at	timestamp with time zone	NO
+newsletter_subscribers	updated_at	timestamp with time zone	YES
+order_items	id	bigint	NO
+order_items	order_id	bigint	NO
+order_items	variant_id	bigint	NO
+order_items	qty	integer	NO
+order_items	unit_price_jod	numeric	NO
+order_items	lot_code	text	YES
+order_items	line_total_jod	numeric	NO
+orders	id	bigint	NO
+orders	cart_id	text	NO
+orders	status	text	NO
+orders	amount	numeric	NO
+orders	currency	text	NO
+orders	locale	text	NO
+orders	customer_email	text	YES
+orders	customer_name	text	YES
+orders	paytabs_tran_ref	text	YES
+orders	paytabs_response_status	text	YES
+orders	paytabs_response_message	text	YES
+orders	paytabs_payload	jsonb	YES
+orders	created_at	timestamp with time zone	NO
+orders	updated_at	timestamp with time zone	NO
+orders	payment_method	text	NO
+orders	customer	jsonb	YES
+orders	shipping	jsonb	YES
+orders	paytabs_last_payload	text	YES
+orders	paytabs_last_signature	text	YES
+orders	items	jsonb	YES
+orders	customer_phone	text	YES
+orders	shipping_city	text	YES
+orders	shipping_address	text	YES
+orders	shipping_country	text	YES
+orders	notes	text	YES
+orders	subtotal_before_discount_jod	numeric	YES
+orders	discount_jod	numeric	YES
+orders	subtotal_after_discount_jod	numeric	YES
+orders	shipping_jod	numeric	YES
+orders	total_jod	numeric	YES
+orders	customer_id	bigint	YES
+payments	id	bigint	NO
+payments	order_id	bigint	NO
+payments	provider	USER-DEFINED	NO
+payments	status	USER-DEFINED	NO
+payments	amount_jod	numeric	NO
+payments	paytabs_cart_id	text	YES
+payments	paytabs_tran_ref	text	YES
+payments	paytabs_tran_id	text	YES
+payments	signature	text	YES
+payments	callback_raw	jsonb	YES
+payments	created_at	timestamp with time zone	NO
+payments	updated_at	timestamp with time zone	NO
+paytabs_callbacks	id	bigint	NO
+paytabs_callbacks	received_at	timestamp with time zone	YES
+paytabs_callbacks	payload	jsonb	YES
+paytabs_callbacks	signature	text	YES
+paytabs_callbacks	verified	boolean	NO
+paytabs_callbacks	cart_id	text	YES
+paytabs_callbacks	tran_ref	text	YES
+paytabs_callbacks	signature_header	text	YES
+paytabs_callbacks	signature_computed	text	NO
+paytabs_callbacks	signature_valid	boolean	NO
+paytabs_callbacks	raw_body	text	NO
+paytabs_callbacks	created_at	timestamp with time zone	NO
+product_images	id	bigint	NO
+product_images	product_id	bigint	NO
+product_images	position	integer	NO
+product_images	filename	text	YES
+product_images	content_type	text	NO
+product_images	bytes	bytea	NO
+product_images	created_at	timestamp with time zone	NO
+product_media	id	bigint	NO
+product_media	product_id	bigint	NO
+product_media	url	text	NO
+product_media	alt_en	text	YES
+product_media	alt_ar	text	YES
+product_media	sort	integer	NO
+products	id	bigint	NO
+products	slug_en	text	NO
+products	slug_ar	text	NO
+products	name_en	text	NO
+products	name_ar	text	NO
+products	tagline_en	text	NO
+products	tagline_ar	text	NO
+products	story_en	text	YES
+products	story_ar	text	YES
+products	notes_json	jsonb	YES
+products	concentration	text	YES
+products	active	boolean	NO
+products	created_at	timestamp with time zone	NO
+products	updated_at	timestamp with time zone	NO
+products	slug	text	NO
+products	description_en	text	YES
+products	description_ar	text	YES
+products	price_jod	numeric	YES
+products	compare_at_price_jod	numeric	YES
+products	inventory_qty	integer	NO
+products	category_key	text	YES
+products	is_active	boolean	NO
+promotions	id	bigint	NO
+promotions	code	text	YES
+promotions	title_en	text	YES
+promotions	title_ar	text	YES
+promotions	discount_type	text	YES
+promotions	discount_value	numeric	YES
+promotions	starts_at	timestamp with time zone	YES
+promotions	ends_at	timestamp with time zone	YES
+promotions	usage_limit	integer	YES
+promotions	is_active	boolean	NO
+promotions	created_at	timestamp with time zone	NO
+promotions	updated_at	timestamp with time zone	NO
+promotions	category_keys	ARRAY	YES
+shipments	id	bigint	NO
+shipments	order_id	bigint	NO
+shipments	courier_name	text	YES
+shipments	tracking_number	text	YES
+shipments	shipped_at	timestamp with time zone	YES
+shipments	delivered_at	timestamp with time zone	YES
+shipments	cod_amount_jod	numeric	YES
+shipments	notes	text	YES
+staff_users	id	bigint	NO
+staff_users	email	text	NO
+staff_users	password_hash	text	NO
+staff_users	full_name	text	YES
+staff_users	role	text	NO
+staff_users	is_active	boolean	NO
+staff_users	created_at	timestamp with time zone	NO
+staff_users	updated_at	timestamp with time zone	NO
+variants	id	bigint	NO
+variants	product_id	bigint	NO
+variants	sku	text	NO
+variants	size_ml	integer	NO
+variants	price_jod	numeric	NO
+variants	active	boolean	NO
+(200 rows)
