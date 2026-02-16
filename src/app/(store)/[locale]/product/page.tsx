@@ -132,6 +132,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
 
               <div
                 style={{
+                  position: "relative",
                   width: "100%",
                   aspectRatio: "4 / 3",
                   overflow: "hidden",

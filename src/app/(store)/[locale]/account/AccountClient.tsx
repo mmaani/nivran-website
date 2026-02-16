@@ -54,10 +54,7 @@ export default function AccountClient({ locale }: { locale: string }) {
       if (!alive) return;
 
       if (!res.ok || !data?.ok) {
-        setErr(isAr ? "يرجى تسجيل الدخول." : "Please login.");
-        setProfile(null);
-        setOrders([]);
-        setLoading(false);
+        window.location.href = `/${locale}/account/login`;
         return;
       }
 
@@ -76,7 +73,7 @@ export default function AccountClient({ locale }: { locale: string }) {
     return () => {
       alive = false;
     };
-  }, [isAr]);
+  }, [isAr, locale]);
 
   async function saveProfile() {
     setErr(null);

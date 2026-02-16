@@ -4,7 +4,7 @@ export function adminMiddleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
 
   const adminToken = process.env.ADMIN_TOKEN || "";
-  const cookieToken = req.cookies.get("admin_token")?.value || "";
+  const cookieToken = req.cookies.get("admin_token")?.value || req.cookies.get("nivran_admin_token")?.value || "";
 
   const isAdminRoute = path.startsWith("/admin");
   const isAdminApi = path.startsWith("/api/admin");
@@ -20,7 +20,7 @@ export function adminMiddleware(req: NextRequest) {
       : NextResponse.redirect(new URL("/admin/login", req.url));
   }
 
-  if (cookieToken !== adminToken) {
+  if (cookieToken.trim() !== adminToken.trim()) {
     if (isAdminApi) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }

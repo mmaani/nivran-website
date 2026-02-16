@@ -39,11 +39,16 @@ export default function LoginPage() {
 
   const t = useMemo(
     () => ({
-      title: isAr ? "تسجيل الدخول" : "Login",
+      title: isAr ? "مرحباً بعودتك" : "Welcome back",
+      subtitle: isAr ? "سجّل الدخول لإدارة طلباتك وعناوينك بسرعة." : "Sign in to manage orders, addresses, and checkout faster.",
       email: isAr ? "البريد الإلكتروني" : "Email",
       password: isAr ? "كلمة المرور" : "Password",
+      remember: isAr ? "تذكّرني" : "Remember me",
+      showPassword: isAr ? "إظهار" : "Show",
+      hidePassword: isAr ? "إخفاء" : "Hide",
       submit: isAr ? "دخول" : "Sign in",
-      signup: isAr ? "إنشاء حساب" : "Create account",
+      signup: isAr ? "إنشاء حساب جديد" : "Create account",
+      forgot: isAr ? "نسيت كلمة المرور؟" : "Forgot password?",
       error: isAr ? "حدث خطأ. حاول مرة أخرى." : "Something went wrong. Please try again.",
     }),
     [isAr]
@@ -51,6 +56,8 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -63,13 +70,12 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password, locale }),
+        body: JSON.stringify({ email, password, locale, rememberMe }),
       });
 
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok) throw new Error(data?.error || t.error);
 
-      // After login, sync local cart to account (DB)
       const localItems = readCart();
       if (localItems.length) {
         const syncRes = await fetch("/api/cart/sync", {
@@ -92,24 +98,61 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ padding: "1.2rem 0", maxWidth: 520 }}>
-      <h1 className="title" style={{ marginTop: 0 }}>
-        {t.title}
-      </h1>
+    <div className="auth-shell" style={{ padding: "1.2rem 0" }}>
+      <section className="auth-card panel" dir={isAr ? "rtl" : "ltr"}>
+        <h1 className="title" style={{ marginTop: 0, marginBottom: 8 }}>
+          {t.title}
+        </h1>
+        <p className="muted" style={{ marginTop: 0 }}>
+          {t.subtitle}
+        </p>
 
-      <section className="panel">
         <form onSubmit={onSubmit} style={{ display: "grid", gap: 10 }}>
-          <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t.email} />
           <input
             className="input"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={t.password}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder={t.email}
+            type="email"
+            autoComplete="email"
+            required
           />
+
+          <div style={{ position: "relative" }}>
+            <input
+              className="input"
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={t.password}
+              autoComplete="current-password"
+              required
+            />
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setShowPassword((v) => !v)}
+              style={{ position: "absolute", top: 6, insetInlineEnd: 6, padding: ".35rem .65rem", borderRadius: 9 }}
+            >
+              {showPassword ? t.hidePassword : t.showPassword}
+            </button>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
+              <span className="muted">{t.remember}</span>
+            </label>
+
+            <a href={`/${locale}/account/forgot-password`} style={{ textDecoration: "underline" }}>
+              {t.forgot}
+            </a>
+          </div>
+
           {err ? <p style={{ color: "crimson", margin: 0 }}>{err}</p> : null}
+
           <button className="btn primary" disabled={loading}>
-            {t.submit}
+            {loading ? "…" : t.submit}
           </button>
 
           <div style={{ marginTop: 6 }}>

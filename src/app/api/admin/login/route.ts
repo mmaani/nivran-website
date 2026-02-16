@@ -9,19 +9,21 @@ export async function POST(req: Request) {
   }
 
   const body = (await req.json().catch(() => ({}))) as { token?: string };
-  const token = String(body?.token || "");
+  const token = String(body?.token || "").trim();
 
-  if (token !== adminToken) {
+  if (token !== adminToken.trim()) {
     return NextResponse.json({ ok: false, error: "Invalid token" }, { status: 401 });
   }
 
   const res = NextResponse.json({ ok: true });
-  res.cookies.set("admin_token", token, {
+  const opts = {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 60 * 60 * 12, // 12h
-  });
+  };
+  res.cookies.set("admin_token", token, opts);
+  res.cookies.set("nivran_admin_token", token, opts);
   return res;
 }

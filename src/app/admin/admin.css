@@ -1,18 +1,18 @@
 /* src/app/admin/admin.css */
-/* Uses NIVRAN global palette from globals.css: --bg, --bg-soft, --ink, --muted, --line, --shadow, --gold */
 
 .admin-shell {
   min-height: 100dvh;
-  background: var(--bg);
-  color: var(--ink);
+  background:
+    radial-gradient(950px 520px at -10% -10%, rgba(201, 160, 93, 0.16), transparent 65%),
+    radial-gradient(900px 520px at 110% 0%, rgba(118, 121, 230, 0.12), transparent 62%),
+    #0b0d11;
+  color: #eef1f8;
 }
 
 /* Hide/show bilingual spans based on admin_lang */
 .admin-shell .t-ar { display: none; }
 .admin-shell[data-lang="ar"] .t-en { display: none; }
 .admin-shell[data-lang="ar"] .t-ar { display: inline; }
-
-/* If you used block-ish bilingual spans somewhere */
 .admin-shell .t-en.block,
 .admin-shell .t-ar.block { display: block; }
 
@@ -20,14 +20,14 @@
 .admin-topbar {
   position: sticky;
   top: 0;
-  z-index: 20;
-  background: rgba(255, 255, 255, 0.65);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  z-index: 25;
+  background: rgba(8, 10, 14, 0.72);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .admin-topbar-inner {
-  max-width: 1200px;
+  max-width: 1220px;
   margin: 0 auto;
   padding: 14px 16px;
   display: flex;
@@ -36,22 +36,19 @@
   flex-wrap: wrap;
 }
 
-.admin-brand {
-  display: flex;
-  gap: 10px;
-  align-items: baseline;
-}
+.admin-brand { display: flex; gap: 10px; align-items: baseline; }
 
 .admin-logo {
   text-decoration: none;
-  color: var(--ink);
-  font-weight: 700;
-  letter-spacing: 0.10em;
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .admin-subtitle {
   font-size: 12px;
-  opacity: 0.72;
+  color: rgba(238, 241, 248, 0.8);
 }
 
 /* Nav */
@@ -64,16 +61,18 @@
 
 .admin-nav a {
   text-decoration: none;
-  color: var(--ink);
-  padding: 8px 10px;
+  color: #d6d9e4;
+  padding: 8px 11px;
   border-radius: 999px;
   border: 1px solid transparent;
   background: transparent;
+  transition: all 160ms ease;
 }
 
 .admin-nav a:hover {
-  border-color: rgba(0,0,0,.10);
-  background: rgba(255,255,255,.55);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .admin-nav-disabled {
@@ -92,35 +91,33 @@
 
 /* Content */
 .admin-content {
-  max-width: 1200px;
+  max-width: 1220px;
   margin: 0 auto;
-  padding: 18px 16px 40px;
+  padding: 20px 16px 44px;
 }
 
 /* Headings + muted text */
 .admin-h1 {
   margin: 0 0 6px 0;
-  font-size: 22px;
+  font-size: clamp(22px, 2.4vw, 30px);
+  letter-spacing: 0.01em;
 }
 
 .admin-muted {
   margin: 0;
-  opacity: 0.75;
+  color: rgba(226, 230, 238, 0.78);
 }
 
 /* Cards */
 .admin-card {
-  border: 1px solid rgba(0,0,0,.10);
-  border-radius: 14px;
-  padding: 14px;
-  background: rgba(255,255,255,.72);
-  box-shadow: 0 8px 24px var(--shadow);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  padding: 15px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.28);
 }
 
-.admin-grid {
-  display: grid;
-  gap: 14px;
-}
+.admin-grid { display: grid; gap: 14px; }
 
 .admin-row {
   display: flex;
@@ -129,10 +126,7 @@
   flex-wrap: wrap;
 }
 
-.admin-page {
-  display: grid;
-  gap: 14px;
-}
+.admin-page { display: grid; gap: 14px; }
 
 /* Inputs */
 .admin-input, .admin-select,
@@ -144,9 +138,23 @@
   width: 100%;
   padding: 10px 12px;
   border-radius: 12px;
-  border: 1px solid rgba(0,0,0,.14);
-  background: rgba(255,255,255,.86);
-  color: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(7, 9, 12, 0.65);
+  color: #f4f6fc;
+}
+
+.admin-shell input::placeholder,
+.admin-shell textarea::placeholder {
+  color: rgba(231, 234, 243, 0.5);
+}
+
+.admin-shell input:focus,
+.admin-shell select:focus,
+.admin-shell textarea:focus,
+.admin-input:focus {
+  outline: none;
+  border-color: rgba(213, 177, 114, 0.9);
+  box-shadow: 0 0 0 3px rgba(213, 177, 114, 0.22);
 }
 
 .admin-shell[dir="rtl"] input,
@@ -160,9 +168,9 @@
 .table-wrap,
 .admin-scroll {
   overflow-x: auto;
-  border: 1px solid rgba(0,0,0,.10);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
-  background: rgba(255,255,255,.78);
+  background: rgba(8, 10, 14, 0.55);
 }
 
 .admin-table,
@@ -178,8 +186,9 @@
 .admin-scroll th {
   text-align: start;
   padding: 10px;
-  border-bottom: 1px solid rgba(0,0,0,.08);
-  background: rgba(0,0,0,.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(230, 234, 245, 0.88);
   white-space: nowrap;
 }
 
@@ -187,14 +196,14 @@
 .table td,
 .admin-scroll td {
   padding: 10px;
-  border-bottom: 1px solid rgba(0,0,0,.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   vertical-align: top;
 }
 
 .admin-table tbody tr:hover,
 .table tbody tr:hover,
 .admin-scroll tbody tr:hover {
-  background: rgba(255,255,255,.60);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 /* Badge */
@@ -204,8 +213,8 @@
   gap: 6px;
   padding: 4px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(0,0,0,.12);
-  background: rgba(255,255,255,.65);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* Monospace utility */
@@ -215,48 +224,93 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
-/* Buttons (admin-scoped) — supports your current "btn btn-primary" usage */
+/* Buttons */
 .admin-shell .btn {
   padding: 9px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(0,0,0,.16);
-  background: rgba(255,255,255,.78);
-  color: var(--ink);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #eff2fb;
   cursor: pointer;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
+  transition: all 150ms ease;
 }
 
 .admin-shell .btn:hover {
-  border-color: rgba(0,0,0,.26);
-  background: rgba(255,255,255,.92);
+  border-color: rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .admin-shell .btn-primary {
-  background: var(--ink);
-  color: white;
-  border-color: var(--ink);
+  background: linear-gradient(135deg, #f0c373, #d7a14f);
+  color: #17120a;
+  border-color: rgba(255, 234, 196, 0.5);
+  font-weight: 700;
 }
 
 .admin-shell .btn-primary:hover {
-  background: #1a1a1d;
+  filter: brightness(1.03);
 }
 
 .admin-shell .btn-secondary {
-  background: rgba(255,255,255,.60);
+  background: rgba(255,255,255,.10);
 }
 
 .admin-shell .btn:disabled {
-  opacity: 0.65;
+  opacity: 0.62;
   cursor: not-allowed;
 }
 
-/* Language toggle (button) */
+/* Login-only extras */
+.admin-login-shell { color: #f4f6fd; }
+
+.admin-login-card {
+  max-width: 920px;
+  margin: 42px auto 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.admin-login-layout {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+}
+
+.admin-login-side {
+  padding: 24px;
+  background: linear-gradient(160deg, rgba(213, 170, 94, 0.28), rgba(110, 84, 201, 0.18));
+  border-inline-end: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.admin-login-side ul {
+  margin: 16px 0 0;
+  padding-inline-start: 18px;
+  display: grid;
+  gap: 10px;
+  color: rgba(250, 251, 255, 0.92);
+}
+
+.admin-login-form {
+  padding: 24px;
+  display: grid;
+  gap: 14px;
+}
+
+.admin-login-note {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(228, 232, 242, 0.85);
+}
+
+/* Language toggle */
 .lang-toggle {
-  border: 1px solid rgba(0,0,0,.14);
-  background: rgba(255,255,255,.78);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
   border-radius: 999px;
   padding: 6px 10px;
   display: inline-flex;
@@ -266,15 +320,15 @@
 }
 
 .lang-toggle:hover {
-  background: rgba(255,255,255,.92);
-  border-color: rgba(0,0,0,.22);
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .lang-toggle-track {
   width: 42px;
   height: 22px;
   border-radius: 999px;
-  background: rgba(0,0,0,.10);
+  background: rgba(255, 255, 255, 0.18);
   position: relative;
   flex: 0 0 auto;
 }
@@ -299,5 +353,10 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   font-size: 12px;
-  color: var(--ink);
+  color: #fff;
+}
+
+@media (max-width: 900px) {
+  .admin-login-layout { grid-template-columns: 1fr; }
+  .admin-login-side { border-inline-end: none; border-bottom: 1px solid rgba(255,255,255,.16); }
 }
