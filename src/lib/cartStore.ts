@@ -25,6 +25,13 @@ function toNum(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function normalizeVariantId(v: unknown): number | null {
+  const parsed = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
+  if (!Number.isFinite(parsed)) return null;
+  const id = Math.trunc(parsed);
+  return id > 0 ? id : null;
+}
+
 export function clampQty(v: unknown, min = 1, max = MAX_QTY): number {
   const x = Math.floor(toNum(v) || min);
   return Math.min(max, Math.max(min, x));
@@ -42,7 +49,7 @@ export function normalizeCartItems(items: unknown): CartItem[] {
 
     out.push({
       slug,
-      variantId: Number.isFinite(toNum(it.variantId)) ? Math.trunc(toNum(it.variantId)) : null,
+      variantId: normalizeVariantId(it.variantId),
       variantLabel: toStr(it.variantLabel).trim(),
       name: toStr(it.name).trim(),
       priceJod: toNum(it.priceJod),

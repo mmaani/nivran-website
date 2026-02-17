@@ -39,6 +39,11 @@ type VariantRow = {
   price_jod: string | number;
 };
 
+type DefaultVariantPriceRow = {
+  product_id: number;
+  price_jod: string | number;
+};
+
 type OrderLine = {
   slug: string;
   variant_id: number | null;
@@ -140,6 +145,21 @@ export async function POST(req: NextRequest) {
     for (const v of vr.rows) variantMap.set(v.id, v);
   }
 
+  const productIds = Array.from(new Set(products.map((p) => Number(p.id)).filter(Number.isFinite)));
+  const defaultVariantPriceMap = new Map<number, number>();
+  if (productIds.length) {
+    const defaultVariantPrices = await db.query<DefaultVariantPriceRow>(
+      `select distinct on (product_id) product_id, price_jod
+         from product_variants
+        where product_id = any($1::bigint[]) and is_active=true
+        order by product_id, is_default desc, price_jod asc, sort_order asc, id asc`,
+      [productIds]
+    );
+    for (const row of defaultVariantPrices.rows) {
+      defaultVariantPriceMap.set(Number(row.product_id), Number(row.price_jod || 0));
+    }
+  }
+
   const lines: OrderLine[] = [];
   for (const it of items) {
     const p = map.get(it.slug);
@@ -155,6 +175,8 @@ export async function POST(req: NextRequest) {
       }
       unit = Number(variant.price_jod || 0);
       variantLabel = String(variant.label || "");
+    } else {
+      unit = defaultVariantPriceMap.get(Number(p.id)) ?? unit;
     }
     const qty = it.qty;
     lines.push({
