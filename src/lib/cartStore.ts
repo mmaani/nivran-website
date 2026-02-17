@@ -25,11 +25,21 @@ function toNum(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * Keep variantId NULL when absent/invalid.
+ * Never coerce null/undefined/"" to 0 (Number(null) === 0).
+ */
 function normalizeVariantId(v: unknown): number | null {
-  const parsed = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
-  if (!Number.isFinite(parsed)) return null;
-  const id = Math.trunc(parsed);
-  return id > 0 ? id : null;
+  if (typeof v === "number") {
+    return Number.isFinite(v) && v > 0 ? Math.trunc(v) : null;
+  }
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
+  }
+  return null;
 }
 
 export function clampQty(v: unknown, min = 1, max = MAX_QTY): number {
@@ -115,7 +125,7 @@ export function mergeCartSum(a: CartItem[], b: CartItem[]): CartItem[] {
     }
     map.set(key, {
       slug: it.slug,
-      variantId: it.variantId,
+      variantId: it.variantId ?? prev.variantId ?? null,
       variantLabel: it.variantLabel || prev.variantLabel,
       name: it.name || prev.name,
       priceJod: Number.isFinite(it.priceJod) ? it.priceJod : prev.priceJod,
