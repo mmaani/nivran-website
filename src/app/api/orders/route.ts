@@ -15,9 +15,8 @@ type PaymentMethod = "PAYTABS" | "COD";
 
 type IncomingItem = {
   slug?: string;
+  variantId?: number;
   qty?: number;
-  name?: string;
-  priceJod?: number;
 };
 
 type CustomerInput = { name?: string; phone?: string; email?: string };
@@ -27,13 +26,15 @@ type ProductRow = {
   slug: string;
   name_en: string | null;
   name_ar: string | null;
-  price_jod: string | number;
   category_key: string | null;
   is_active: boolean;
 };
+type VariantRow = { id: number; product_id: number; label: string; price_jod: string | number; is_active: boolean; is_default: boolean; sort_order: number };
 
 type OrderLine = {
   slug: string;
+  variant_id: number;
+  variant_label: string;
   name_en: string;
   name_ar: string;
   qty: number;
@@ -45,7 +46,7 @@ type OrderLine = {
 async function fetchProductsBySlugs(slugs: string[]) {
   await ensureCatalogTables();
   const r = await db.query<ProductRow>(
-    `select slug, name_en, name_ar, price_jod, category_key, is_active
+    `select slug, name_en, name_ar, category_key, is_active
        from products
       where slug = any($1::text[])`,
     [slugs]
@@ -53,11 +54,12 @@ async function fetchProductsBySlugs(slugs: string[]) {
   return r.rows || [];
 }
 
-function normalizeItems(items: unknown): { slug: string; qty: number }[] {
+function normalizeItems(items: unknown): { slug: string; variantId: number | null; qty: number }[] {
   if (!Array.isArray(items)) return [];
   return items
     .map((x: IncomingItem) => ({
       slug: String(x?.slug || "").trim(),
+      variantId: Number.isFinite(Number(x?.variantId || 0)) && Number(x?.variantId || 0) > 0 ? Math.floor(Number(x?.variantId || 0)) : null,
       qty: Math.max(1, Math.min(99, Number(x?.qty || 1))),
     }))
     .filter((x) => !!x.slug);
@@ -106,7 +108,7 @@ export async function POST(req: NextRequest) {
   const legacyQty = Math.max(1, Math.min(99, Number(body.qty || 1)));
 
   if (!items.length && legacySlug) {
-    items = [{ slug: legacySlug, qty: legacyQty }];
+    items = [{ slug: legacySlug, variantId: null, qty: legacyQty }];
   }
 
   if (!items.length) {
@@ -119,9 +121,20 @@ export async function POST(req: NextRequest) {
 
   const slugs = Array.from(new Set(items.map((i) => i.slug)));
   const products = await fetchProductsBySlugs(slugs);
-
   const map = new Map<string, ProductRow>();
   for (const p of products) map.set(String(p.slug), p);
+
+  const variantsRes = await db.query<(VariantRow & { slug: string })>(`
+    select v.id, v.product_id, v.label, v.price_jod, v.is_active, v.is_default, v.sort_order, p.slug
+      from product_variants v
+      join products p on p.id=v.product_id
+     where p.slug = any($1::text[])`, [slugs]);
+  const grouped = new Map<string, (VariantRow & { slug: string })[]>();
+  for (const v of variantsRes.rows) {
+    const arr = grouped.get(v.slug) || [];
+    arr.push(v);
+    grouped.set(v.slug, arr);
+  }
 
   const lines: OrderLine[] = [];
   for (const it of items) {
@@ -129,10 +142,16 @@ export async function POST(req: NextRequest) {
     if (!p || !p.is_active) {
       return NextResponse.json({ ok: false, error: `Unknown or inactive product: ${it.slug}` }, { status: 400 });
     }
-    const unit = Number(p.price_jod || 0);
+    const list = (grouped.get(it.slug) || []).filter((v) => v.is_active).sort((a, b) => (a.is_default === b.is_default ? a.sort_order - b.sort_order : (a.is_default ? -1 : 1)));
+    const selected = (it.variantId ? list.find((v) => v.id === it.variantId) : null) || list[0];
+    if (!selected) return NextResponse.json({ ok: false, error: `No active variant for product: ${it.slug}` }, { status: 400 });
+
+    const unit = Number(selected.price_jod || 0);
     const qty = it.qty;
     lines.push({
       slug: it.slug,
+      variant_id: selected.id,
+      variant_label: selected.label,
       name_en: String(p.name_en || it.slug),
       name_ar: String(p.name_ar || p.name_en || it.slug),
       qty,
@@ -183,6 +202,8 @@ export async function POST(req: NextRequest) {
     name_en: l.name_en,
     name_ar: l.name_ar,
     qty: l.qty,
+    variant_id: l.variant_id,
+    variant_label: l.variant_label,
     unit_price_jod: l.unit_price_jod,
     line_total_jod: l.line_total_jod,
     category_key: l.category_key,

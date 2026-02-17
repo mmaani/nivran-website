@@ -7,14 +7,16 @@ import {
   type PricedOrderLine,
 } from "@/lib/promotions";
 
-type IncomingItem = { slug?: string; qty?: number };
-type ProductRow = { slug: string; price_jod: string | number; category_key: string | null; is_active: boolean };
+type IncomingItem = { slug?: string; variantId?: number; qty?: number };
+type ProductRow = { slug: string; category_key: string | null; is_active: boolean };
+type VariantRow = { slug: string; id: number; price_jod: string | number; is_active: boolean; is_default: boolean; sort_order: number };
 
-function normalizeItems(items: unknown): { slug: string; qty: number }[] {
+function normalizeItems(items: unknown): { slug: string; variantId: number | null; qty: number }[] {
   if (!Array.isArray(items)) return [];
   return items
     .map((x: IncomingItem) => ({
       slug: String(x?.slug || "").trim(),
+      variantId: Number.isFinite(Number(x?.variantId || 0)) && Number(x?.variantId || 0) > 0 ? Math.floor(Number(x?.variantId || 0)) : null,
       qty: Math.max(1, Math.min(99, Number(x?.qty || 1))),
     }))
     .filter((x) => x.slug.length > 0);
@@ -44,7 +46,7 @@ export async function POST(req: Request) {
 
   const slugs = Array.from(new Set(normalized.map((i) => i.slug)));
   const productRes = await db.query<ProductRow>(
-    `select slug, price_jod, category_key, is_active
+    `select slug, category_key, is_active
        from products
       where slug = any($1::text[])`,
     [slugs]
@@ -52,6 +54,18 @@ export async function POST(req: Request) {
 
   const map = new Map<string, ProductRow>();
   for (const p of productRes.rows) map.set(p.slug, p);
+
+  const variantsRes = await db.query<VariantRow>(`
+    select p.slug, v.id, v.price_jod, v.is_active, v.is_default, v.sort_order
+      from product_variants v
+      join products p on p.id=v.product_id
+     where p.slug = any($1::text[])`, [slugs]);
+  const variantMap = new Map<string, VariantRow[]>();
+  for (const v of variantsRes.rows) {
+    const arr = variantMap.get(v.slug) || [];
+    arr.push(v);
+    variantMap.set(v.slug, arr);
+  }
 
   const lines: PricedOrderLine[] = [];
   for (const item of normalized) {
@@ -62,7 +76,10 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    const unit = Number(prod.price_jod || 0);
+    const list = (variantMap.get(item.slug) || []).filter((v) => v.is_active).sort((a,b)=>(a.is_default===b.is_default? a.sort_order-b.sort_order : (a.is_default?-1:1)));
+    const selected = (item.variantId ? list.find((v)=>v.id===item.variantId) : null) || list[0];
+    if (!selected) return NextResponse.json({ ok: false, error: locale === "ar" ? "لا يوجد متغير صالح" : "No valid variant" }, { status: 400 });
+    const unit = Number(selected.price_jod || 0);
     const lineTotal = Number((unit * item.qty).toFixed(2));
     lines.push({ slug: item.slug, qty: item.qty, category_key: prod.category_key, line_total_jod: lineTotal });
   }

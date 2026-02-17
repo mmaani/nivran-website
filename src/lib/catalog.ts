@@ -185,6 +185,62 @@ export async function ensureCatalogTables() {
       end if;
     end $$;
   `);
+
+
+  // ---------- PRODUCT VARIANTS ----------
+  await db.query(`
+    create table if not exists product_variants (
+      id bigserial primary key,
+      product_id bigint not null references products(id) on delete cascade,
+      label text not null,
+      size_ml integer,
+      price_jod numeric(10,2) not null,
+      compare_at_price_jod numeric(10,2),
+      is_default boolean not null default false,
+      is_active boolean not null default true,
+      sort_order integer not null default 0,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+  `);
+
+  await db.query(`create unique index if not exists idx_product_variants_one_default_per_product on product_variants(product_id) where is_default=true;`);
+  await db.query(`create index if not exists idx_product_variants_product on product_variants(product_id);`);
+  await db.query(`create index if not exists idx_product_variants_active on product_variants(product_id, is_active, sort_order asc);`);
+
+  await db.query(`
+    insert into product_variants (product_id, label, price_jod, compare_at_price_jod, is_default, is_active, sort_order)
+    select p.id, 'Default', coalesce(p.price_jod, 0), p.compare_at_price_jod, true, true, 0
+    from products p
+    where not exists (select 1 from product_variants v where v.product_id=p.id)
+  `);
+
+  await db.query(`
+    with ranked as (
+      select id, row_number() over (partition by product_id order by is_default desc, sort_order asc, price_jod asc, id asc) as rn
+      from product_variants
+    )
+    update product_variants v
+       set is_default = (r.rn = 1)
+      from ranked r
+     where r.id=v.id
+  `);
+
+  // ---------- PRODUCT TAGS ----------
+  await db.query(`
+    create table if not exists product_tags (
+      product_id bigint primary key references products(id) on delete cascade,
+      wear_times text[] not null default '{}',
+      seasons text[] not null default '{}',
+      audiences text[] not null default '{}',
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+  `);
+  await db.query(`create index if not exists idx_product_tags_wear_times on product_tags using gin (wear_times);`);
+  await db.query(`create index if not exists idx_product_tags_seasons on product_tags using gin (seasons);`);
+  await db.query(`create index if not exists idx_product_tags_audiences on product_tags using gin (audiences);`);
+
   // ---------- PRODUCT IMAGES (bytea in Postgres) ----------
   await db.query(`
     create table if not exists product_images (

@@ -19,9 +19,14 @@ type ProductRow = {
   name_ar: string;
   description_en: string | null;
   description_ar: string | null;
-  price_jod: string;
+  from_price_jod: string;
+  default_variant_id: number | null;
+  default_variant_label: string | null;
   category_key: string;
   inventory_qty: number;
+  wear_times: string[] | null;
+  seasons: string[] | null;
+  audiences: string[] | null;
   image_id: number | null;
   promo_type: "PERCENT" | "FIXED" | null;
   promo_value: string | null;
@@ -44,7 +49,7 @@ function fallbackFromSlug(slug: string) {
 
 function promoBadgeText(locale: "en" | "ar", promoType: string | null, promoValue: number): string {
   if (promoType === "PERCENT") {
-    return locale === "ar" ? `خصم ${promoValue}%` : `-${promoValue}%`;
+    return locale === "ar" ? `وفّر ${promoValue}%` : `Save ${promoValue}%`;
   }
   return locale === "ar" ? `وفر ${promoValue.toFixed(2)} د.أ` : `Save ${promoValue.toFixed(2)} JOD`;
 }
@@ -73,9 +78,14 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
             p.name_ar,
             p.description_en,
             p.description_ar,
-            p.price_jod::text as price_jod,
+            v.from_price_jod::text as from_price_jod,
+            v.default_variant_id,
+            v.default_variant_label,
             p.category_key,
             p.inventory_qty,
+            t.wear_times,
+            t.seasons,
+            t.audiences,
             (
               select pi.id
               from product_images pi
@@ -88,12 +98,21 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
             (
               case
                 when bp.id is null then null
-                when bp.discount_type='PERCENT' then greatest(0, p.price_jod - (p.price_jod * (bp.discount_value / 100)))
-                when bp.discount_type='FIXED' then greatest(0, p.price_jod - bp.discount_value)
+                when bp.discount_type='PERCENT' then greatest(0, v.from_price_jod - (v.from_price_jod * (bp.discount_value / 100)))
+                when bp.discount_type='FIXED' then greatest(0, v.from_price_jod - bp.discount_value)
                 else null
               end
             )::text as discounted_price_jod
        from products p
+       left join lateral (
+         select
+           min(v2.price_jod) filter (where v2.is_active=true) as from_price_jod,
+           (array_agg(v2.id order by v2.is_default desc, v2.sort_order asc, v2.price_jod asc, v2.id asc))[1] as default_variant_id,
+           (array_agg(v2.label order by v2.is_default desc, v2.sort_order asc, v2.price_jod asc, v2.id asc))[1] as default_variant_label
+         from product_variants v2
+         where v2.product_id=p.id and v2.is_active=true
+       ) v on true
+       left join product_tags t on t.product_id=p.id
        left join lateral (
          select pr.id, pr.discount_type, pr.discount_value, pr.priority
          from promotions pr
@@ -103,21 +122,20 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
            and (pr.ends_at is null or pr.ends_at >= now())
            and (pr.category_keys is null or array_length(pr.category_keys, 1) is null or p.category_key = any(pr.category_keys))
            and (pr.product_slugs is null or array_length(pr.product_slugs, 1) is null or p.slug = any(pr.product_slugs))
-           and (pr.min_order_jod is null or pr.min_order_jod <= p.price_jod)
+           and (pr.min_order_jod is null or pr.min_order_jod <= v.from_price_jod)
          order by pr.priority desc,
                   case
-                    when pr.discount_type='PERCENT' then (p.price_jod * (pr.discount_value / 100))
+                    when pr.discount_type='PERCENT' then (v.from_price_jod * (pr.discount_value / 100))
                     when pr.discount_type='FIXED' then pr.discount_value
                     else 0
                   end desc,
                   pr.created_at desc
          limit 1
        ) bp on true
-      where p.is_active=true
+      where p.is_active=true and v.from_price_jod is not null
       order by p.created_at desc
       limit 500`
   );
-
   const cats: Array<{ key: string; label: string }> = categoriesRes.rows.length
     ? categoriesRes.rows.map((c) => ({ key: c.key, label: locale === "ar" ? c.name_ar : c.name_en }))
     : Object.entries(FALLBACK_CATS).map(([key, v]) => ({ key, label: v[locale] }));
@@ -149,7 +167,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
         {productsRes.rows.map((p) => {
           const name = isAr ? p.name_ar : p.name_en;
           const desc = isAr ? p.description_ar : p.description_en;
-          const price = Number(p.price_jod || 0);
+          const price = Number(p.from_price_jod || 0);
           const discounted = p.discounted_price_jod != null ? Number(p.discounted_price_jod) : null;
           const promoValue = Number(p.promo_value || 0);
           const hasPromo = discounted != null && discounted < price;
@@ -207,6 +225,12 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
               <h3 style={{ margin: "0 0 .35rem" }}>{name}</h3>
               {desc ? <p className="muted">{desc}</p> : null}
 
+
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                {([...(p.wear_times || []), ...(p.seasons || []), ...(p.audiences || [])].slice(0, 2)).map((tag) => (
+                  <span key={`${p.slug}-${tag}`} className="badge" style={{ fontSize: 11, padding: "2px 8px" }}>{tag}</span>
+                ))}
+              </div>
               <p>
                 {hasPromo ? (
                   <>
@@ -216,7 +240,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
                     <strong>{discounted.toFixed(2)} JOD</strong>
                   </>
                 ) : (
-                  <strong>{price.toFixed(2)} JOD</strong>
+                  <strong>{isAr ? "من" : "From"} {price.toFixed(2)} JOD</strong>
                 )}
               </p>
 
@@ -228,8 +252,10 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
                 <AddToCartButton
                   locale={locale}
                   slug={p.slug}
+                  variantId={p.default_variant_id}
+                  variantLabel={p.default_variant_label || ""}
                   name={name}
-                  priceJod={hasPromo ? discounted ?? price : price}
+                  priceJod={price}
                   label={outOfStock ? (isAr ? "غير متوفر" : "Out of stock") : (isAr ? "أضف إلى السلة" : "Add to cart")}
                   addedLabel={isAr ? "تمت الإضافة ✓" : "Added ✓"}
                   updatedLabel={isAr ? "تم التحديث ✓" : "Updated ✓"}

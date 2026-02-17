@@ -19,16 +19,10 @@ export function requireAdmin(req: Request): AdminAuth {
     return { ok: false, status: 500, error: "Server misconfigured: ADMIN_TOKEN missing" };
   }
 
-  const headerToken = (req.headers.get("x-admin-token") || "").trim();
-  const authHeader = (req.headers.get("authorization") || "").trim();
-  const bearer = authHeader.toLowerCase().startsWith("bearer ") ? authHeader.slice(7).trim() : "";
   const cookieHeader = req.headers.get("cookie") || "";
-  const cookieToken =
+  const got =
     readCookie(cookieHeader, "admin_token") ||
-    readCookie(cookieHeader, "nivran_admin_token") ||
-    readCookie(cookieHeader, "admin_token_client");
-
-  const got = headerToken || bearer || cookieToken;
+    readCookie(cookieHeader, "nivran_admin_token");
 
   if (!got || got !== expected) {
     return { ok: false, status: 401, error: "Unauthorized" };
