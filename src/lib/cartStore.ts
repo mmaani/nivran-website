@@ -1,5 +1,7 @@
 export type CartItem = {
   slug: string;
+  variantId?: number | null;
+  variantLabel?: string;
   name: string;
   priceJod: number;
   qty: number;
@@ -23,6 +25,23 @@ function toNum(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * Keep variantId NULL when absent/invalid.
+ * Never coerce null/undefined/"" to 0 (Number(null) === 0).
+ */
+function normalizeVariantId(v: unknown): number | null {
+  if (typeof v === "number") {
+    return Number.isFinite(v) && v > 0 ? Math.trunc(v) : null;
+  }
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
+  }
+  return null;
+}
+
 export function clampQty(v: unknown, min = 1, max = MAX_QTY): number {
   const x = Math.floor(toNum(v) || min);
   return Math.min(max, Math.max(min, x));
@@ -40,15 +59,17 @@ export function normalizeCartItems(items: unknown): CartItem[] {
 
     out.push({
       slug,
+      variantId: normalizeVariantId(it.variantId),
+      variantLabel: toStr(it.variantLabel).trim(),
       name: toStr(it.name).trim(),
       priceJod: toNum(it.priceJod),
       qty: clampQty(it.qty),
     });
   }
 
-  // de-dupe by slug (keep last)
+  // de-dupe by slug + variant
   const map = new Map<string, CartItem>();
-  for (const i of out) map.set(i.slug, i);
+  for (const i of out) map.set(`${i.slug}::${i.variantId ?? "base"}`, i);
   return Array.from(map.values());
 }
 
@@ -93,16 +114,19 @@ export function cartSubtotalJod(items: CartItem[]): number {
 export function mergeCartSum(a: CartItem[], b: CartItem[]): CartItem[] {
   const map = new Map<string, CartItem>();
 
-  for (const it of normalizeCartItems(a)) map.set(it.slug, { ...it });
+  for (const it of normalizeCartItems(a)) map.set(`${it.slug}::${it.variantId ?? "base"}`, { ...it });
 
   for (const it of normalizeCartItems(b)) {
-    const prev = map.get(it.slug);
+    const key = `${it.slug}::${it.variantId ?? "base"}`;
+    const prev = map.get(key);
     if (!prev) {
-      map.set(it.slug, { ...it });
+      map.set(key, { ...it });
       continue;
     }
-    map.set(it.slug, {
+    map.set(key, {
       slug: it.slug,
+      variantId: it.variantId ?? prev.variantId ?? null,
+      variantLabel: it.variantLabel || prev.variantLabel,
       name: it.name || prev.name,
       priceJod: Number.isFinite(it.priceJod) ? it.priceJod : prev.priceJod,
       qty: clampQty((prev.qty || 0) + (it.qty || 0)),
