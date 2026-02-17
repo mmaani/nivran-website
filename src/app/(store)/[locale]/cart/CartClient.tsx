@@ -1,15 +1,9 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { type CartItem } from "@/lib/cartStore";
 
 type Locale = "en" | "ar";
-
-type CartItem = {
-  slug: string;
-  name: string;
-  priceJod: number;
-  qty: number;
-};
 
 const CART_KEY = "nivran_cart_v1";
 
@@ -98,18 +92,18 @@ export default function CartClient({ locale }: { locale: Locale }) {
     bestEffortSync(next);
   }
 
-  function inc(slug: string) {
-    const next = items.map((i) => (i.slug === slug ? { ...i, qty: Math.min(99, i.qty + 1) } : i));
+  function inc(slugKey: string) {
+    const next = items.map((i) => (`${i.slug}::${i.variantId ?? "base"}` === slugKey ? { ...i, qty: Math.min(99, i.qty + 1) } : i));
     setAndSync(next);
   }
 
-  function dec(slug: string) {
-    const next = items.map((i) => (i.slug === slug ? { ...i, qty: Math.max(1, i.qty - 1) } : i));
+  function dec(slugKey: string) {
+    const next = items.map((i) => (`${i.slug}::${i.variantId ?? "base"}` === slugKey ? { ...i, qty: Math.max(1, i.qty - 1) } : i));
     setAndSync(next);
   }
 
-  function remove(slug: string) {
-    const next = items.filter((i) => i.slug !== slug);
+  function remove(slugKey: string) {
+    const next = items.filter((i) => `${i.slug}::${i.variantId ?? "base"}` !== slugKey);
     setAndSync(next);
   }
 
@@ -150,7 +144,7 @@ export default function CartClient({ locale }: { locale: Locale }) {
           <div className="panel" style={{ display: "grid", gap: 12 }}>
             {items.map((i) => (
               <div
-                key={i.slug}
+                key={`${i.slug}::${i.variantId ?? "base"}`}
                 style={{
                   display: "grid",
                   gridTemplateColumns: "1fr auto",
@@ -163,7 +157,7 @@ export default function CartClient({ locale }: { locale: Locale }) {
                 <div>
                   <strong>{i.name}</strong>
                   <div className="muted" style={{ marginTop: 4 }}>
-                    {i.slug}
+                    {i.variantLabel ? `${i.slug} · ${i.variantLabel}` : i.slug}
                   </div>
                   <div className="muted" style={{ marginTop: 4 }}>
                     {COPY.price}: {Number(i.priceJod || 0).toFixed(2)} JOD
@@ -172,18 +166,18 @@ export default function CartClient({ locale }: { locale: Locale }) {
 
                 <div style={{ display: "grid", gap: 8, justifyItems: "end" }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <button className="btn btn-outline" onClick={() => dec(i.slug)} aria-label="decrease">
+                    <button className="btn btn-outline" onClick={() => dec(`${i.slug}::${i.variantId ?? "base"}`)} aria-label="decrease">
                       −
                     </button>
                     <div style={{ minWidth: 28, textAlign: "center" }}>
                       <strong>{i.qty}</strong>
                     </div>
-                    <button className="btn btn-outline" onClick={() => inc(i.slug)} aria-label="increase">
+                    <button className="btn btn-outline" onClick={() => inc(`${i.slug}::${i.variantId ?? "base"}`)} aria-label="increase">
                       +
                     </button>
                   </div>
 
-                  <button className="btn" onClick={() => remove(i.slug)}>
+                  <button className="btn" onClick={() => remove(`${i.slug}::${i.variantId ?? "base"}`)}>
                     {COPY.remove}
                   </button>
                 </div>
