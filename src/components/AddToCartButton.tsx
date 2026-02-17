@@ -35,6 +35,8 @@ export default function AddToCartButton({
   locale,
   slug,
   name,
+  variantId,
+  variantLabel,
   priceJod,
   label,
   addedLabel,
@@ -48,6 +50,8 @@ export default function AddToCartButton({
   locale: string;
   slug: string;
   name: string;
+  variantId: number;
+  variantLabel?: string;
   priceJod: number;
   label: string;
   addedLabel?: string;
@@ -72,10 +76,10 @@ export default function AddToCartButton({
 
   useEffect(() => {
     const items = readLocalCart();
-    const found = items.find((i) => i.slug === slug);
+    const found = items.find((i) => i.slug === slug && i.variantId === variantId);
     if (found?.qty) setQty(Math.min(safeMax, Math.max(safeMin, found.qty)));
     else setQty(safeMin);
-  }, [slug, safeMin, safeMax]);
+  }, [slug, variantId, safeMin, safeMax]);
 
   useEffect(() => () => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -99,8 +103,8 @@ export default function AddToCartButton({
 
   function upsertCartItem(baseItems: CartItem[]): { items: CartItem[]; wasUpdate: boolean } {
     const items = [...baseItems];
-    const idx = items.findIndex((i) => i.slug === slug);
-    const nextItem: CartItem = { slug, name, priceJod, qty: clampQty(qty, safeMin, safeMax) };
+    const idx = items.findIndex((i) => i.slug === slug && i.variantId === variantId);
+    const nextItem: CartItem = { slug, variantId, variantLabel: variantLabel || "", name, priceJod, qty: clampQty(qty, safeMin, safeMax) };
 
     if (idx >= 0) {
       items[idx] = nextItem;
@@ -123,7 +127,7 @@ export default function AddToCartButton({
     if (disabled) return;
 
     const current = readLocalCart();
-    const idx = current.findIndex((i) => i.slug === slug);
+    const idx = current.findIndex((i) => i.slug === slug && i.variantId === variantId);
     const selectedQty = clampQty(qty, safeMin, safeMax);
 
     const items = [...current];
@@ -131,12 +135,14 @@ export default function AddToCartButton({
       const prev = items[idx];
       items[idx] = {
         slug,
+        variantId,
+        variantLabel: variantLabel || "",
         name,
         priceJod,
         qty: clampQty((prev?.qty || 0) + selectedQty, safeMin, safeMax),
       };
     } else {
-      items.push({ slug, name, priceJod, qty: selectedQty });
+      items.push({ slug, variantId, variantLabel: variantLabel || "", name, priceJod, qty: selectedQty });
     }
 
     writeLocalCart(items);

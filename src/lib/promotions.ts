@@ -22,7 +22,9 @@ type PromotionRow = {
   used_count: number | null;
   is_active: boolean;
   category_keys: string[] | null;
+  product_slugs: string[] | null;
   min_order_jod: string | number | null;
+  priority: number | null;
 };
 
 export type PromotionEvaluation =
@@ -102,13 +104,20 @@ function evaluatePromotionRow(
     : [];
   const hasScopedCategories = keys.length > 0;
 
-  const eligibleSubtotal = hasScopedCategories
-    ? round2(
-        lines
-          .filter((line) => line.category_key && keys.includes(line.category_key))
-          .reduce((sum, line) => sum + toNum(line.line_total_jod), 0)
-      )
-    : round2(subtotalJod);
+  const targetSlugs = Array.isArray(promo.product_slugs)
+    ? promo.product_slugs.map((s) => String(s || "").trim()).filter(Boolean)
+    : [];
+  const hasScopedSlugs = targetSlugs.length > 0;
+
+  const eligibleSubtotal = round2(
+    lines
+      .filter((line) => {
+        const categoryOk = !hasScopedCategories || (line.category_key ? keys.includes(line.category_key) : false);
+        const slugOk = !hasScopedSlugs || targetSlugs.includes(line.slug);
+        return categoryOk && slugOk;
+      })
+      .reduce((sum, line) => sum + toNum(line.line_total_jod), 0)
+  );
 
   if (eligibleSubtotal <= 0) {
     return { ok: false, code: "PROMO_CATEGORY_MISMATCH", error: "Promo code does not apply to these items" };
@@ -154,7 +163,7 @@ export async function evaluatePromoCodeForLines(
   const promoRes = await dbx.query<PromotionRow>(
     `select id, promo_kind, code, title_en, title_ar, discount_type, discount_value,
             starts_at::text, ends_at::text,
-            usage_limit, used_count, is_active, category_keys, min_order_jod
+            usage_limit, used_count, is_active, category_keys, product_slugs, min_order_jod, priority
        from promotions
       where code = $1 and promo_kind='CODE'
       limit 1`,
@@ -175,10 +184,10 @@ export async function evaluateAutomaticPromotionForLines(
   const promoRes = await dbx.query<PromotionRow>(
     `select id, promo_kind, code, title_en, title_ar, discount_type, discount_value,
             starts_at::text, ends_at::text,
-            usage_limit, used_count, is_active, category_keys, min_order_jod
+            usage_limit, used_count, is_active, category_keys, product_slugs, min_order_jod, priority
        from promotions
       where promo_kind='AUTO' and is_active=true
-      order by created_at desc
+      order by priority desc, created_at desc
       limit 200`
   );
 

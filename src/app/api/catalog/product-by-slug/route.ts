@@ -13,9 +13,17 @@ export async function GET(req: NextRequest) {
   await ensureCatalogTables();
 
   const r = await db.query(
-    `select slug, name_en, name_ar, description_en, description_ar, price_jod, is_active
-       from products
-      where slug=$1
+    `select p.slug, p.name_en, p.name_ar, p.description_en, p.description_ar, p.is_active,
+            coalesce(v.id,0) as variant_id, coalesce(v.label,'Standard') as variant_label, coalesce(v.price_jod,p.price_jod) as price_jod
+       from products p
+       left join lateral (
+         select id, label, price_jod
+         from product_variants
+         where product_id=p.id and is_active=true
+         order by is_default desc, price_jod asc, sort_order asc, id asc
+         limit 1
+       ) v on true
+      where p.slug=$1
       limit 1`,
     [slug]
   );
@@ -32,6 +40,8 @@ export async function GET(req: NextRequest) {
         name_ar: p.name_ar,
         description_en: p.description_en,
         description_ar: p.description_ar,
+        variant_id: Number(p.variant_id || 0),
+        variant_label: String(p.variant_label || ""),
         price_jod: Number(p.price_jod || 0),
         is_active: !!p.is_active,
       },

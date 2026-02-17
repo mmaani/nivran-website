@@ -25,8 +25,7 @@ export function requireAdmin(req: Request): AdminAuth {
   const cookieHeader = req.headers.get("cookie") || "";
   const cookieToken =
     readCookie(cookieHeader, "admin_token") ||
-    readCookie(cookieHeader, "nivran_admin_token") ||
-    readCookie(cookieHeader, "admin_token_client");
+    readCookie(cookieHeader, "nivran_admin_token");
 
   const got = headerToken || bearer || cookieToken;
 

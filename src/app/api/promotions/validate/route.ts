@@ -7,17 +7,18 @@ import {
   type PricedOrderLine,
 } from "@/lib/promotions";
 
-type IncomingItem = { slug?: string; qty?: number };
-type ProductRow = { slug: string; price_jod: string | number; category_key: string | null; is_active: boolean };
+type IncomingItem = { slug?: string; variantId?: number; qty?: number };
+type ProductRow = { slug: string; variant_id: number; price_jod: string | number; category_key: string | null; is_active: boolean };
 
-function normalizeItems(items: unknown): { slug: string; qty: number }[] {
+function normalizeItems(items: unknown): { slug: string; variantId: number; qty: number }[] {
   if (!Array.isArray(items)) return [];
   return items
     .map((x: IncomingItem) => ({
       slug: String(x?.slug || "").trim(),
+      variantId: Math.max(0, Number(x?.variantId || 0)),
       qty: Math.max(1, Math.min(99, Number(x?.qty || 1))),
     }))
-    .filter((x) => x.slug.length > 0);
+    .filter((x) => x.slug.length > 0 && x.variantId > 0);
 }
 
 export const runtime = "nodejs";
@@ -42,20 +43,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: locale === "ar" ? "أدخل كود الخصم" : "Promo code is required" }, { status: 400 });
   }
 
-  const slugs = Array.from(new Set(normalized.map((i) => i.slug)));
+  const variantIds = Array.from(new Set(normalized.map((i) => i.variantId)));
   const productRes = await db.query<ProductRow>(
-    `select slug, price_jod, category_key, is_active
-       from products
-      where slug = any($1::text[])`,
-    [slugs]
+    `select p.slug, v.id as variant_id, v.price_jod, p.category_key, p.is_active
+       from product_variants v
+       join products p on p.id=v.product_id
+      where v.id = any($1::bigint[]) and v.is_active=true`,
+    [variantIds]
   );
 
-  const map = new Map<string, ProductRow>();
-  for (const p of productRes.rows) map.set(p.slug, p);
+  const map = new Map<number, ProductRow>();
+  for (const p of productRes.rows) map.set(Number(p.variant_id), p);
 
   const lines: PricedOrderLine[] = [];
   for (const item of normalized) {
-    const prod = map.get(item.slug);
+    const prod = map.get(item.variantId);
     if (!prod || !prod.is_active) {
       return NextResponse.json(
         { ok: false, error: locale === "ar" ? "يوجد منتج غير صالح في السلة" : "Cart contains invalid product" },

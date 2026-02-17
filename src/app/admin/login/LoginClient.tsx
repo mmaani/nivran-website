@@ -104,7 +104,7 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
         throw new Error(lang === "ar" ? "فشل تسجيل الدخول" : "Login failed");
       }
 
-      persistAdminToken(token);
+      persistAdminToken();
       router.replace(safeNext);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e || "");

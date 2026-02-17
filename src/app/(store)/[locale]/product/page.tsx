@@ -19,8 +19,13 @@ type ProductRow = {
   name_ar: string;
   description_en: string | null;
   description_ar: string | null;
-  price_jod: string;
+  from_price_jod: string;
+  from_variant_id: number | null;
+  from_variant_label: string | null;
   category_key: string;
+  wear_times: string[] | null;
+  seasons: string[] | null;
+  audiences: string[] | null;
   inventory_qty: number;
   image_id: number | null;
   promo_type: "PERCENT" | "FIXED" | null;
@@ -73,8 +78,13 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
             p.name_ar,
             p.description_en,
             p.description_ar,
-            p.price_jod::text as price_jod,
+            coalesce(vmin.price_jod, p.price_jod)::text as from_price_jod,
+            vmin.id as from_variant_id,
+            vmin.label as from_variant_label,
             p.category_key,
+            p.wear_times,
+            p.seasons,
+            p.audiences,
             p.inventory_qty,
             (
               select pi.id
@@ -94,6 +104,13 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
               end
             )::text as discounted_price_jod
        from products p
+       left join lateral (
+         select v.id, v.label, v.price_jod
+         from product_variants v
+         where v.product_id=p.id and v.is_active=true
+         order by v.price_jod asc, v.sort_order asc, v.id asc
+         limit 1
+       ) vmin on true
        left join lateral (
          select pr.id, pr.discount_type, pr.discount_value, pr.priority
          from promotions pr
@@ -149,7 +166,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
         {productsRes.rows.map((p) => {
           const name = isAr ? p.name_ar : p.name_en;
           const desc = isAr ? p.description_ar : p.description_en;
-          const price = Number(p.price_jod || 0);
+          const price = Number(p.from_price_jod || 0);
           const discounted = p.discounted_price_jod != null ? Number(p.discounted_price_jod) : null;
           const promoValue = Number(p.promo_value || 0);
           const hasPromo = discounted != null && discounted < price;
@@ -207,6 +224,12 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
               <h3 style={{ margin: "0 0 .35rem" }}>{name}</h3>
               {desc ? <p className="muted">{desc}</p> : null}
 
+              <div className="badge-row" style={{ marginBottom: 8 }}>
+                {[...(p.wear_times || []), ...(p.seasons || []), ...(p.audiences || [])].slice(0,2).map((tag) => (
+                  <span key={tag} className="badge">{tag}</span>
+                ))}
+              </div>
+
               <p>
                 {hasPromo ? (
                   <>
@@ -216,7 +239,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
                     <strong>{discounted.toFixed(2)} JOD</strong>
                   </>
                 ) : (
-                  <strong>{price.toFixed(2)} JOD</strong>
+                  <strong>{(isAr ? "من " : "From ") + price.toFixed(2) + " JOD"}</strong>
                 )}
               </p>
 
@@ -229,7 +252,9 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
                   locale={locale}
                   slug={p.slug}
                   name={name}
-                  priceJod={hasPromo ? discounted ?? price : price}
+                  variantId={Number(p.from_variant_id || 0)}
+                  variantLabel={String(p.from_variant_label || "") }
+                  priceJod={price}
                   label={outOfStock ? (isAr ? "غير متوفر" : "Out of stock") : (isAr ? "أضف إلى السلة" : "Add to cart")}
                   addedLabel={isAr ? "تمت الإضافة ✓" : "Added ✓"}
                   updatedLabel={isAr ? "تم التحديث ✓" : "Updated ✓"}

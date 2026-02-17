@@ -15,25 +15,28 @@ type PaymentMethod = "PAYTABS" | "COD";
 
 type IncomingItem = {
   slug?: string;
+  variantId?: number;
   qty?: number;
-  name?: string;
-  priceJod?: number;
 };
 
 type CustomerInput = { name?: string; phone?: string; email?: string };
 type ShippingInput = { city?: string; address?: string; notes?: string; country?: string };
 
-type ProductRow = {
+type ProductVariantRow = {
   slug: string;
   name_en: string | null;
   name_ar: string | null;
-  price_jod: string | number;
   category_key: string | null;
   is_active: boolean;
+  variant_id: number;
+  variant_label: string;
+  price_jod: string | number;
 };
 
 type OrderLine = {
   slug: string;
+  variant_id: number;
+  variant_label: string;
   name_en: string;
   name_ar: string;
   qty: number;
@@ -42,25 +45,28 @@ type OrderLine = {
   category_key: string | null;
 };
 
-async function fetchProductsBySlugs(slugs: string[]) {
+async function fetchProductVariants(variantIds: number[]) {
   await ensureCatalogTables();
-  const r = await db.query<ProductRow>(
-    `select slug, name_en, name_ar, price_jod, category_key, is_active
-       from products
-      where slug = any($1::text[])`,
-    [slugs]
+  const r = await db.query<ProductVariantRow>(
+    `select p.slug, p.name_en, p.name_ar, p.category_key, p.is_active,
+            v.id as variant_id, v.label as variant_label, v.price_jod
+       from product_variants v
+       join products p on p.id=v.product_id
+      where v.id = any($1::bigint[]) and v.is_active=true`,
+    [variantIds]
   );
   return r.rows || [];
 }
 
-function normalizeItems(items: unknown): { slug: string; qty: number }[] {
+function normalizeItems(items: unknown): { slug: string; variantId: number; qty: number }[] {
   if (!Array.isArray(items)) return [];
   return items
     .map((x: IncomingItem) => ({
       slug: String(x?.slug || "").trim(),
+      variantId: Math.max(0, Number(x?.variantId || 0)),
       qty: Math.max(1, Math.min(99, Number(x?.qty || 1))),
     }))
-    .filter((x) => !!x.slug);
+    .filter((x) => !!x.slug && x.variantId > 0);
 }
 
 export const runtime = "nodejs";
@@ -100,14 +106,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let items = normalizeItems(body.items);
+  const items = normalizeItems(body.items);
 
-  const legacySlug = String(body.productSlug || body.slug || "").trim();
-  const legacyQty = Math.max(1, Math.min(99, Number(body.qty || 1)));
 
-  if (!items.length && legacySlug) {
-    items = [{ slug: legacySlug, qty: legacyQty }];
-  }
 
   if (!items.length) {
     return NextResponse.json({ ok: false, error: locale === "ar" ? "لا توجد عناصر في السلة." : "No items" }, { status: 400 });
@@ -117,22 +118,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: locale === "ar" ? "أدخل كود الخصم" : "Promo code is required" }, { status: 400 });
   }
 
-  const slugs = Array.from(new Set(items.map((i) => i.slug)));
-  const products = await fetchProductsBySlugs(slugs);
+  const variantIds = Array.from(new Set(items.map((i) => i.variantId)));
+  const products = await fetchProductVariants(variantIds);
 
-  const map = new Map<string, ProductRow>();
-  for (const p of products) map.set(String(p.slug), p);
+  const map = new Map<number, ProductVariantRow>();
+  for (const p of products) map.set(Number(p.variant_id), p);
 
   const lines: OrderLine[] = [];
   for (const it of items) {
-    const p = map.get(it.slug);
+    const p = map.get(it.variantId);
     if (!p || !p.is_active) {
       return NextResponse.json({ ok: false, error: `Unknown or inactive product: ${it.slug}` }, { status: 400 });
     }
     const unit = Number(p.price_jod || 0);
     const qty = it.qty;
     lines.push({
-      slug: it.slug,
+      slug: p.slug,
+      variant_id: p.variant_id,
+      variant_label: p.variant_label,
       name_en: String(p.name_en || it.slug),
       name_ar: String(p.name_ar || p.name_en || it.slug),
       qty,
@@ -180,6 +183,8 @@ export async function POST(req: NextRequest) {
 
   const itemsJson = lines.map((l) => ({
     slug: l.slug,
+    variant_id: l.variant_id,
+    variant_label: l.variant_label,
     name_en: l.name_en,
     name_ar: l.name_ar,
     qty: l.qty,

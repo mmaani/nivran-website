@@ -35,6 +35,9 @@ export async function ensureCatalogTables() {
   await db.query(`alter table products add column if not exists is_active boolean not null default true;`);
   await db.query(`alter table products add column if not exists created_at timestamptz not null default now();`);
   await db.query(`alter table products add column if not exists updated_at timestamptz not null default now();`);
+  await db.query(`alter table products add column if not exists wear_times text[];`);
+  await db.query(`alter table products add column if not exists seasons text[];`);
+  await db.query(`alter table products add column if not exists audiences text[];`);
 
   // Backfill slug if blank/null (unique by appending id)
   await db.query(`
@@ -137,6 +140,23 @@ export async function ensureCatalogTables() {
   await db.query(`alter table promotions add column if not exists category_keys text[];`);
   await db.query(`alter table promotions add column if not exists product_slugs text[];`);
 
+  // ---------- PRODUCT VARIANTS ----------
+  await db.query(`
+    create table if not exists product_variants (
+      id bigserial primary key,
+      product_id bigint not null references products(id) on delete cascade,
+      label text not null,
+      size_ml integer,
+      price_jod numeric(10,2) not null,
+      compare_at_price_jod numeric(10,2),
+      is_default boolean not null default false,
+      is_active boolean not null default true,
+      sort_order integer not null default 0,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+  `);
+
 
   await db.query(`
     do $$
@@ -203,6 +223,9 @@ export async function ensureCatalogTables() {
   await db.query(`create index if not exists idx_products_active on products(is_active);`);
   await db.query(`create index if not exists idx_products_category on products(category_key);`);
   await db.query(`create index if not exists idx_products_created_at on products(created_at desc);`);
+  await db.query(`create index if not exists idx_products_tags_wear_times on products using gin(wear_times);`);
+  await db.query(`create index if not exists idx_products_tags_seasons on products using gin(seasons);`);
+  await db.query(`create index if not exists idx_products_tags_audiences on products using gin(audiences);`);
 
   await db.query(`create unique index if not exists idx_categories_key_unique on categories(key);`);
   await db.query(`create index if not exists idx_categories_active on categories(is_active);`);
@@ -217,4 +240,18 @@ export async function ensureCatalogTables() {
   await db.query(`create index if not exists idx_promotions_priority on promotions(priority desc);`);
 
   await db.query(`create index if not exists idx_product_images_product on product_images(product_id, "position");`);
+  await db.query(`create index if not exists idx_variants_product on product_variants(product_id);`);
+  await db.query(`create index if not exists idx_variants_active_default on product_variants(product_id, is_active, is_default);`);
+  await db.query(`create unique index if not exists idx_variants_one_default_per_product on product_variants(product_id) where is_default=true;`);
+
+  await db.query(`
+    with missing as (
+      select p.id as product_id, p.price_jod, p.compare_at_price_jod
+      from products p
+      where not exists (select 1 from product_variants v where v.product_id=p.id)
+    )
+    insert into product_variants (product_id, label, price_jod, compare_at_price_jod, is_default, is_active, sort_order)
+    select product_id, 'Standard', price_jod, compare_at_price_jod, true, true, 0
+    from missing;
+  `);
 }

@@ -1,5 +1,5 @@
 import ProductImageGallery from "./ProductImageGallery";
-import AddToCartButton from "@/components/AddToCartButton";
+import VariantPurchasePanel from "./VariantPurchasePanel";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
@@ -28,14 +28,14 @@ type ProductRow = {
   name_ar: string;
   description_en: string | null;
   description_ar: string | null;
-  price_jod: string;
-  compare_at_price_jod: string | null;
+  wear_times: string[] | null;
+  seasons: string[] | null;
+  audiences: string[] | null;
   inventory_qty: number;
   category_key: string;
   is_active: boolean;
   promo_type: "PERCENT" | "FIXED" | null;
   promo_value: string | null;
-  discounted_price_jod: string | null;
 };
 
 type CategoryRow = { key: string; name_en: string; name_ar: string };
@@ -58,21 +58,14 @@ export default async function ProductDetailPage({
             p.name_ar,
             p.description_en,
             p.description_ar,
-            p.price_jod::text as price_jod,
-            p.compare_at_price_jod::text as compare_at_price_jod,
+            p.wear_times,
+            p.seasons,
+            p.audiences,
             p.inventory_qty,
             p.category_key,
             p.is_active,
             bp.discount_type as promo_type,
-            bp.discount_value::text as promo_value,
-            (
-              case
-                when bp.id is null then null
-                when bp.discount_type='PERCENT' then greatest(0, p.price_jod - (p.price_jod * (bp.discount_value / 100)))
-                when bp.discount_type='FIXED' then greatest(0, p.price_jod - bp.discount_value)
-                else null
-              end
-            )::text as discounted_price_jod
+            bp.discount_value::text as promo_value
        from products p
        left join lateral (
          select pr.id, pr.discount_type, pr.discount_value, pr.priority
@@ -110,6 +103,15 @@ export default async function ProductDetailPage({
   );
   const cat = cr.rows[0];
 
+
+  const variantsRes = await db.query<{ id: number; label: string; price_jod: string; compare_at_price_jod: string | null }>(
+    `select id, label, price_jod::text, compare_at_price_jod::text
+       from product_variants
+      where product_id=$1 and is_active=true
+      order by is_default desc, sort_order asc, price_jod asc, id asc`,
+    [product.id]
+  );
+
   const imgs = await db.query<{ id: number }>(
     `select id
        from product_images
@@ -122,12 +124,9 @@ export default async function ProductDetailPage({
   const desc = isAr ? product.description_ar : product.description_en;
   const catLabel = cat ? (isAr ? cat.name_ar : cat.name_en) : product.category_key;
 
-  const price = Number(product.price_jod || 0);
-  const compareAt = product.compare_at_price_jod ? Number(product.compare_at_price_jod) : null;
-  const discounted = product.discounted_price_jod ? Number(product.discounted_price_jod) : null;
   const promoType = product.promo_type;
   const promoValue = Number(product.promo_value || 0);
-  const hasPromo = discounted != null && discounted < price && (promoType === "PERCENT" || promoType === "FIXED");
+  const hasPromo = promoType === "PERCENT" || promoType === "FIXED";
   const outOfStock = Number(product.inventory_qty || 0) <= 0;
 
   const imageUrls = imgs.rows.map((img) => `/api/catalog/product-image/${img.id}`);
@@ -167,46 +166,25 @@ export default async function ProductDetailPage({
             {name}
           </h1>
 
-          <p style={{ marginTop: 0 }}>
-            {hasPromo ? (
-              <>
-                <span style={{ textDecoration: "line-through", opacity: 0.7, marginInlineEnd: 10 }}>
-                  {price.toFixed(2)} JOD
-                </span>
-                <strong>{discounted.toFixed(2)} JOD</strong>
-              </>
-            ) : compareAt && compareAt > price ? (
-              <>
-                <span style={{ textDecoration: "line-through", opacity: 0.7, marginInlineEnd: 10 }}>
-                  {compareAt.toFixed(2)} JOD
-                </span>
-                <strong>{price.toFixed(2)} JOD</strong>
-              </>
-            ) : (
-              <strong>{price.toFixed(2)} JOD</strong>
-            )}
-          </p>
+          <div className="badge-row" style={{ marginBottom: 10 }}>
+            {[...(product.wear_times || []), ...(product.seasons || []), ...(product.audiences || [])].map((tag) => (
+              <span key={tag} className="badge">{tag}</span>
+            ))}
+          </div>
 
           {outOfStock ? <p className="muted">{isAr ? "غير متوفر حالياً." : "Currently out of stock."}</p> : null}
 
           {desc ? <p className="muted">{desc}</p> : null}
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14, alignItems: "center" }}>
-            <AddToCartButton
-              locale={locale}
-              slug={product.slug}
-              name={name}
-              priceJod={hasPromo ? discounted ?? price : price}
-              label={outOfStock ? (isAr ? "غير متوفر" : "Out of stock") : (isAr ? "أضف إلى السلة" : "Add to cart")}
-              addedLabel={isAr ? "تمت الإضافة ✓" : "Added ✓"}
-              updatedLabel={isAr ? "تم التحديث ✓" : "Updated ✓"}
-              className={"btn btn-outline" + (outOfStock ? " btn-disabled" : "")}
-              disabled={outOfStock}
-              minQty={1}
-              maxQty={99}
-              buyNowLabel={isAr ? "شراء الآن" : "Buy now"}
-            />
+          <VariantPurchasePanel
+            locale={locale}
+            slug={product.slug}
+            name={name}
+            variants={variantsRes.rows.map((v) => ({ id: v.id, label: v.label, priceJod: Number(v.price_jod || 0), compareAtPriceJod: v.compare_at_price_jod ? Number(v.compare_at_price_jod) : null }))}
+            disabled={outOfStock}
+          />
 
+          <div style={{ marginTop: 14 }}>
             <a className="btn btn-outline" href={`/${locale}/product`}>
               {isAr ? "العودة للمتجر" : "Back to shop"}
             </a>
