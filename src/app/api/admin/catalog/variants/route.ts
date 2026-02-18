@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureCatalogTablesSafe } from "@/lib/catalog";
 import { requireAdmin } from "@/lib/guards";
-import { catalogErrorRedirect, catalogSavedRedirect, catalogUnauthorizedRedirect } from "../redirects";
+import {
+  catalogErrorRedirect,
+  catalogSavedRedirect,
+  catalogUnauthorizedRedirect,
+} from "../redirects";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function catalogErrorRedirect(req: Request, code: string) {
-  return NextResponse.redirect(new URL(`/admin/catalog?error=${encodeURIComponent(code)}`, req.url), 303);
-}
 
 function toBool(v: FormDataEntryValue | null): boolean {
   return String(v || "") === "on";

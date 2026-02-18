@@ -2,17 +2,20 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureCatalogTablesSafe } from "@/lib/catalog";
 import { requireAdmin } from "@/lib/guards";
-import { catalogErrorRedirect, catalogSavedRedirect, catalogUnauthorizedRedirect } from "../redirects";
+import {
+  catalogErrorRedirect,
+  catalogSavedRedirect,
+  catalogUnauthorizedRedirect,
+} from "../redirects";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function catalogErrorRedirect(req: Request, code: string) {
-  return NextResponse.redirect(new URL(`/admin/catalog?error=${encodeURIComponent(code)}`, req.url), 303);
-}
-
 function pickMulti(form: FormData, key: string): string[] {
-  return form.getAll(key).map((v) => String(v || "").trim()).filter(Boolean);
+  return form
+    .getAll(key)
+    .map((v) => String(v || "").trim())
+    .filter(Boolean);
 }
 
 function normalizeSlug(v: unknown) {
@@ -123,7 +126,17 @@ export async function POST(req: Request) {
                  audiences=$9::text[],
                  updated_at=now()
            where id=$1`,
-          [id, price, compareAt ? Number(compareAt) : null, inventory, categoryKey, isActive, wearTimes, seasons, audiences]
+          [
+            id,
+            price,
+            compareAt ? Number(compareAt) : null,
+            inventory,
+            categoryKey,
+            isActive,
+            wearTimes,
+            seasons,
+            audiences,
+          ]
         );
       }
     }
