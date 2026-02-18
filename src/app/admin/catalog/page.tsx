@@ -101,9 +101,9 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
                 p.category_key,
                 p.is_active,
                 coalesce(i.image_count,0)::int as image_count,
-                coalesce(p.wear_times, "{}"::text[]) as wear_times,
-                coalesce(p.seasons, "{}"::text[]) as seasons,
-                coalesce(p.audiences, "{}"::text[]) as audiences
+                coalesce(p.wear_times, '{}'::text[]) as wear_times,
+                coalesce(p.seasons, '{}'::text[]) as seasons,
+                coalesce(p.audiences, '{}'::text[]) as audiences
            from products p
       left join (
              select product_id, count(*)::int as image_count
@@ -266,6 +266,45 @@ export default async function AdminCatalogPage({
   const outOfStockCount = data.products.filter((p) => Number(p.inventory_qty || 0) <= 0).length;
   const variantsActive = data.variants.filter((v) => v.is_active).length;
 
+  const qProducts = String(params.qProducts || "").trim().toLowerCase();
+  const qVariants = String(params.qVariants || "").trim().toLowerCase();
+  const qPromos = String(params.qPromos || "").trim().toLowerCase();
+  const productState = String(params.productState || "all").toLowerCase();
+  const variantState = String(params.variantState || "all").toLowerCase();
+  const promoState = String(params.promoState || "all").toLowerCase();
+
+  const filteredProducts = data.products.filter((p) => {
+    if (productState === "active" && !p.is_active) return false;
+    if (productState === "inactive" && p.is_active) return false;
+    if (!qProducts) return true;
+    const haystack = [p.slug, p.name_en, p.name_ar, p.category_key, ...p.wear_times, ...p.seasons, ...p.audiences].join(" ").toLowerCase();
+    return haystack.includes(qProducts);
+  });
+
+  const filteredVariants = data.variants.filter((v) => {
+    if (variantState === "active" && !v.is_active) return false;
+    if (variantState === "inactive" && v.is_active) return false;
+    if (!qVariants) return true;
+    const haystack = [v.product_slug, v.product_name_en, v.product_name_ar, v.label].join(" ").toLowerCase();
+    return haystack.includes(qVariants);
+  });
+
+  const variantProductIds = new Set(filteredVariants.map((v) => v.product_id));
+  const productsForVariantSection = qVariants || variantState !== "all"
+    ? data.products.filter((p) => variantProductIds.has(p.id))
+    : data.products;
+
+  const filteredPromos = data.promos.filter((r) => {
+    const kind = String(r.promo_kind || "CODE").toUpperCase();
+    if (promoState === "active" && !r.is_active) return false;
+    if (promoState === "inactive" && r.is_active) return false;
+    if (promoState === "auto" && kind !== "AUTO") return false;
+    if (promoState === "code" && kind !== "CODE") return false;
+    if (!qPromos) return true;
+    const haystack = [r.code || "", r.title_en, r.title_ar, ...(r.category_keys || []), ...(r.product_slugs || [])].join(" ").toLowerCase();
+    return haystack.includes(qPromos);
+  });
+
   return (
     <main className={styles.adminGrid}>
       <header className={styles.adminCard}>
@@ -304,6 +343,48 @@ export default async function AdminCatalogPage({
         <div><strong>{outOfStockCount}</strong><div className="muted">{isAr ? "نفدت الكمية" : "Out of stock"}</div></div>
         <div><strong>{data.promos.length}</strong><div className="muted">{isAr ? "العروض" : "Promotions"}</div></div>
         <div><strong>{variantsActive}</strong><div className="muted">{isAr ? "متغيرات مفعلة" : "Active variants"}</div></div>
+      </section>
+      <section className={styles.adminCard}>
+        <div className={styles.anchorRow}>
+          <a className={styles.anchorChip} href="#products-section">{isAr ? "المنتجات" : "Products"}</a>
+          <a className={styles.anchorChip} href="#variants-section">{isAr ? "المتغيرات" : "Variants"}</a>
+          <a className={styles.anchorChip} href="#promos-section">{isAr ? "العروض" : "Promotions"}</a>
+          <a className={styles.anchorChip} href="#categories-section">{isAr ? "الفئات" : "Categories"}</a>
+        </div>
+
+        <div className={styles.filterGrid}>
+          <form className={styles.filterForm} method="get" action="/admin/catalog">
+            <input className={styles.adminInput} name="qProducts" defaultValue={qProducts} placeholder={isAr ? "بحث بالمنتجات" : "Search products"} />
+            <select className={styles.adminSelect} name="productState" defaultValue={productState}>
+              <option value="all">{isAr ? "كل الحالات" : "All states"}</option>
+              <option value="active">{isAr ? "مفعّل" : "Active"}</option>
+              <option value="inactive">{isAr ? "مخفي" : "Hidden"}</option>
+            </select>
+            <button className={styles.adminBtn} type="submit">{isAr ? "تصفية المنتجات" : "Filter products"}</button>
+          </form>
+
+          <form className={styles.filterForm} method="get" action="/admin/catalog">
+            <input className={styles.adminInput} name="qVariants" defaultValue={qVariants} placeholder={isAr ? "بحث بالمتغيرات" : "Search variants"} />
+            <select className={styles.adminSelect} name="variantState" defaultValue={variantState}>
+              <option value="all">{isAr ? "كل الحالات" : "All states"}</option>
+              <option value="active">{isAr ? "مفعّل" : "Active"}</option>
+              <option value="inactive">{isAr ? "مخفي" : "Hidden"}</option>
+            </select>
+            <button className={styles.adminBtn} type="submit">{isAr ? "تصفية المتغيرات" : "Filter variants"}</button>
+          </form>
+
+          <form className={styles.filterForm} method="get" action="/admin/catalog">
+            <input className={styles.adminInput} name="qPromos" defaultValue={qPromos} placeholder={isAr ? "بحث بالعروض" : "Search promotions"} />
+            <select className={styles.adminSelect} name="promoState" defaultValue={promoState}>
+              <option value="all">{isAr ? "كل الأنواع" : "All types"}</option>
+              <option value="active">{isAr ? "مفعّل" : "Active"}</option>
+              <option value="inactive">{isAr ? "مخفي" : "Hidden"}</option>
+              <option value="auto">AUTO</option>
+              <option value="code">CODE</option>
+            </select>
+            <button className={styles.adminBtn} type="submit">{isAr ? "تصفية العروض" : "Filter promotions"}</button>
+          </form>
+        </div>
       </section>
 
       {data.health === "error" ? (
@@ -382,15 +463,16 @@ export default async function AdminCatalogPage({
         </form>
       </section>
 
-      <section className={styles.adminCard}>
+      <section id="products-section" className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{L.products}</h2>
+        <p className="muted" style={{ marginTop: -4 }}>{isAr ? `نتائج: ${filteredProducts.length}` : `Results: ${filteredProducts.length}`}</p>
         <div className={styles.adminTableWrap}>
           <table className={styles.adminTable}>
             <thead>
               <tr><th>Slug</th><th>Name</th><th>Category</th><th>Price</th><th>Inventory</th><th>Images</th><th>Status</th><th>Actions</th></tr>
             </thead>
             <tbody>
-              {data.products.map((p) => (
+              {filteredProducts.map((p) => (
                 <tr key={p.id}>
                   <td className={styles.ltr}>{p.slug}</td>
                   <td>{p.name_en}<br />{p.name_ar}</td>
@@ -435,18 +517,20 @@ export default async function AdminCatalogPage({
                   </td>
                 </tr>
               ))}
-              {data.products.length === 0 ? <tr><td colSpan={8} style={{ padding: 12, opacity: 0.7 }}>{L.noProducts}</td></tr> : null}
+              {filteredProducts.length === 0 ? <tr><td colSpan={8} style={{ padding: 12, opacity: 0.7 }}>{L.noProducts}</td></tr> : null}
             </tbody>
           </table>
         </div>
       </section>
 
 
-      <section className={styles.adminCard}>
+      <section id="variants-section" className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{isAr ? "المتغيرات" : "Variants"}</h2>
+        <p className="muted" style={{ marginTop: -4 }}>{isAr ? `نتائج: ${filteredVariants.length}` : `Results: ${filteredVariants.length}`}</p>
         <div style={{ display: "grid", gap: 16 }}>
-          {data.products.map((product) => {
-            const variants = data.variants.filter((v) => v.product_id === product.id);
+          {productsForVariantSection.length === 0 ? <p className="muted" style={{ margin: 0 }}>{isAr ? "لا توجد متغيرات مطابقة." : "No matching variants found."}</p> : null}
+          {productsForVariantSection.map((product) => {
+            const variants = filteredVariants.filter((v) => v.product_id === product.id);
             return (
               <div key={product.id} style={{ border: "1px solid #ececec", borderRadius: 12, padding: 12 }}>
                 <div style={{ fontWeight: 700, marginBottom: 10 }}>
@@ -500,8 +584,9 @@ export default async function AdminCatalogPage({
         </div>
       </section>
 
-      <section className={styles.adminCard}>
+      <section id="promos-section" className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{L.addPromo}</h2>
+        <p className="muted" style={{ marginTop: -4 }}>{isAr ? `نتائج: ${filteredPromos.length}` : `Results: ${filteredPromos.length}`}</p>
         <form action="/api/admin/catalog/promotions" method="post" className={styles.adminGrid}>
           <input type="hidden" name="action" value="create" />
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
@@ -550,7 +635,7 @@ export default async function AdminCatalogPage({
       <section className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{L.promos}</h2>
         <ul style={{ margin: 0, paddingInlineStart: 18 }}>
-          {data.promos.map((r) => (
+          {filteredPromos.map((r) => (
             <li key={r.id} style={{ marginBottom: 12 }}>
               <strong className={styles.ltr}>{r.code || "(AUTO)"}</strong> — <span className={styles.ltr}>{r.discount_type === "PERCENT" ? `${r.discount_value}%` : `${r.discount_value} JOD`}</span>
               <div style={{ fontSize: 12, opacity: 0.82, marginTop: 4 }}>
@@ -580,11 +665,11 @@ export default async function AdminCatalogPage({
               </form>
             </li>
           ))}
-          {data.promos.length === 0 ? <li style={{ opacity: 0.7 }}>{L.noPromos}</li> : null}
+          {filteredPromos.length === 0 ? <li style={{ opacity: 0.7 }}>{L.noPromos}</li> : null}
         </ul>
       </section>
 
-      <section className={styles.adminCard}>
+      <section id="categories-section" className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{L.addCategory}</h2>
         <form action="/api/admin/catalog/categories" method="post" className={styles.adminGrid}>
           <input type="hidden" name="action" value="create" />
