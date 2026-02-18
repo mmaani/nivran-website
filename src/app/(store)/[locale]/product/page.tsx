@@ -1,7 +1,11 @@
 import SafeImg from "@/components/SafeImg";
 import AddToCartButton from "@/components/AddToCartButton";
-import { db } from "@/lib/db";
+import { db, isDbConnectivityError } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
+import {
+  fallbackCatalogRows,
+  fallbackCategories,
+} from "@/lib/catalogFallback";
 
 type CategoryRow = {
   key: string;
@@ -85,16 +89,21 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
   const locale = rawLocale === "ar" ? "ar" : "en";
   const isAr = locale === "ar";
 
-  await ensureCatalogTables();
+  let categoriesRows: CategoryRow[] = [];
+  let productRows: ProductRow[] = [];
 
-  const categoriesRes = await db.query<CategoryRow>(
+  try {
+    await ensureCatalogTables();
+
+    const categoriesRes = await db.query<CategoryRow>(
     `select key, name_en, name_ar, is_active, is_promoted, sort_order
        from categories
       where is_active=true
       order by sort_order asc, key asc`
-  );
+    );
+    categoriesRows = categoriesRes.rows;
 
-  const productsRes = await db.query<ProductRow>(
+    const productsRes = await db.query<ProductRow>(
     `select p.id,
             p.slug,
             p.name_en,
@@ -163,14 +172,22 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
       where p.is_active=true
       order by p.created_at desc
       limit 500`
-  );
+    );
+    productRows = productsRes.rows;
+  } catch (error: unknown) {
+    if (!isDbConnectivityError(error)) throw error;
 
-  const cats: Array<{ key: string; label: string }> = categoriesRes.rows.length
-    ? categoriesRes.rows.map((c) => ({ key: c.key, label: locale === "ar" ? c.name_ar : c.name_en }))
+    categoriesRows = fallbackCategories();
+    productRows = fallbackCatalogRows();
+    console.warn("[catalog] Falling back to static product catalog due to DB connectivity issue.");
+  }
+
+  const cats: Array<{ key: string; label: string }> = categoriesRows.length
+    ? categoriesRows.map((c) => ({ key: c.key, label: locale === "ar" ? c.name_ar : c.name_en }))
     : Object.entries(FALLBACK_CATS).map(([key, v]) => ({ key, label: v[locale] }));
 
   const catLabel = (key: string) => {
-    const found = categoriesRes.rows.find((c) => c.key === key);
+    const found = categoriesRows.find((c) => c.key === key);
     if (found) return locale === "ar" ? found.name_ar : found.name_en;
     return (FALLBACK_CATS[key] || { en: key, ar: key })[locale];
   };
@@ -193,7 +210,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
       </div>
 
       <div className="grid-3">
-        {productsRes.rows.map((p) => {
+        {productRows.map((p) => {
           const name = isAr ? p.name_ar : p.name_en;
           const desc = isAr ? p.description_ar : p.description_en;
           const baseFromPrice = Number(p.min_variant_price_jod || p.price_jod || 0);
@@ -301,7 +318,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
         })}
       </div>
 
-      {productsRes.rows.length === 0 ? (
+      {productRows.length === 0 ? (
         <p className="muted" style={{ marginTop: 14 }}>
           {isAr ? "لا توجد منتجات بعد. أضف المنتجات من لوحة الإدارة." : "No products yet. Add products from Admin."}
         </p>
