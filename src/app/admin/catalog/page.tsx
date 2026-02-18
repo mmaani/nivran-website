@@ -385,7 +385,7 @@ export default async function AdminCatalogPage({
         {errorCode && !variantError ? (
           <p style={{ marginTop: 10, marginBottom: 0, color: "crimson", fontWeight: 600 }}>
             {isAr ? `حدث خطأ في العملية: ${errorCode}` : `Catalog action error: ${errorCode}`}
-          </p>
+          </p> 
         ) : null}
         {data.bootstrapNote ? (
           <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
