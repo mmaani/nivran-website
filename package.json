@@ -6,7 +6,9 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start -p 3000",
-    "lint": "next lint"
+    "lint": "next lint",
+    "check:duplicate-types": "node scripts/check-duplicate-type-aliases.mjs",
+    "ci:guard": "pnpm check:duplicate-types"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

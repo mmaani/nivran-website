@@ -1,5 +1,5 @@
 import ProductImageGallery from "./ProductImageGallery";
-import AddToCartButton from "@/components/AddToCartButton";
+import ProductPurchasePanel from "./ProductPurchasePanel";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
@@ -14,11 +14,32 @@ function fallbackFromSlug(slug: string) {
   return `/products/${family}-1.svg`;
 }
 
+
+function tagLabel(locale: "en" | "ar", value: string): string {
+  const key = String(value || "").trim().toLowerCase();
+  const map: Record<string, { en: string; ar: string }> = {
+    day: { en: "Day", ar: "نهاري" },
+    night: { en: "Night", ar: "ليلي" },
+    anytime: { en: "Anytime", ar: "أي وقت" },
+    spring: { en: "Spring", ar: "ربيع" },
+    summer: { en: "Summer", ar: "صيف" },
+    fall: { en: "Fall", ar: "خريف" },
+    winter: { en: "Winter", ar: "شتاء" },
+    "all-season": { en: "All-season", ar: "كل المواسم" },
+    unisex: { en: "Unisex", ar: "للجنسين" },
+    "unisex-men-leaning": { en: "Unisex (Men-leaning)", ar: "للجنسين (يميل للرجال)" },
+    "unisex-women-leaning": { en: "Unisex (Women-leaning)", ar: "للجنسين (يميل للنساء)" },
+    men: { en: "Men", ar: "رجالي" },
+    women: { en: "Women", ar: "نسائي" },
+  };
+  return (map[key] || { en: value, ar: value })[locale];
+}
+
 function promoBadgeText(locale: "en" | "ar", promoType: "PERCENT" | "FIXED", promoValue: number): string {
   if (promoType === "PERCENT") {
-    return locale === "ar" ? `خصم ${promoValue}%` : `-${promoValue}%`;
+    return locale === "ar" ? `AUTO • وفر ${promoValue}%` : `AUTO • Save ${promoValue}%`;
   }
-  return locale === "ar" ? `وفر ${promoValue.toFixed(2)} د.أ` : `Save ${promoValue.toFixed(2)} JOD`;
+  return locale === "ar" ? `AUTO • وفر ${promoValue.toFixed(2)} د.أ` : `AUTO • Save ${promoValue.toFixed(2)} JOD`;
 }
 
 type ProductRow = {
@@ -36,9 +57,21 @@ type ProductRow = {
   promo_type: "PERCENT" | "FIXED" | null;
   promo_value: string | null;
   discounted_price_jod: string | null;
+  wear_times: string[];
+  seasons: string[];
+  audiences: string[];
 };
 
 type CategoryRow = { key: string; name_en: string; name_ar: string };
+
+type VariantRow = {
+  id: number;
+  label: string;
+  price_jod: string;
+  compare_at_price_jod: string | null;
+  is_default: boolean;
+  sort_order: number;
+};
 
 export default async function ProductDetailPage({
   params,
@@ -72,7 +105,10 @@ export default async function ProductDetailPage({
                 when bp.discount_type='FIXED' then greatest(0, p.price_jod - bp.discount_value)
                 else null
               end
-            )::text as discounted_price_jod
+            )::text as discounted_price_jod,
+            coalesce(p.wear_times, "{}"::text[]) as wear_times,
+            coalesce(p.seasons, "{}"::text[]) as seasons,
+            coalesce(p.audiences, "{}"::text[]) as audiences
        from products p
        left join lateral (
          select pr.id, pr.discount_type, pr.discount_value, pr.priority
@@ -118,17 +154,38 @@ export default async function ProductDetailPage({
     [product.id]
   );
 
+  const variantsRes = await db.query<VariantRow>(
+    `select id, label, price_jod::text as price_jod, compare_at_price_jod::text as compare_at_price_jod, is_default, sort_order
+       from product_variants
+      where product_id=$1 and is_active=true
+      order by is_default desc, sort_order asc, id asc`,
+    [product.id]
+  );
+
   const name = isAr ? product.name_ar : product.name_en;
   const desc = isAr ? product.description_ar : product.description_en;
   const catLabel = cat ? (isAr ? cat.name_ar : cat.name_en) : product.category_key;
 
-  const price = Number(product.price_jod || 0);
-  const compareAt = product.compare_at_price_jod ? Number(product.compare_at_price_jod) : null;
-  const discounted = product.discounted_price_jod ? Number(product.discounted_price_jod) : null;
   const promoType = product.promo_type;
   const promoValue = Number(product.promo_value || 0);
-  const hasPromo = discounted != null && discounted < price && (promoType === "PERCENT" || promoType === "FIXED");
+  const hasPromo = promoType === "PERCENT" || promoType === "FIXED";
   const outOfStock = Number(product.inventory_qty || 0) <= 0;
+
+  const variants = variantsRes.rows.length
+    ? variantsRes.rows.map((v) => ({
+        id: v.id,
+        label: v.label,
+        priceJod: Number(v.price_jod || 0),
+        compareAtPriceJod: v.compare_at_price_jod ? Number(v.compare_at_price_jod) : null,
+        isDefault: v.is_default,
+      }))
+    : [{
+        id: 0,
+        label: isAr ? "القياسي" : "Standard",
+        priceJod: Number(product.price_jod || 0),
+        compareAtPriceJod: product.compare_at_price_jod ? Number(product.compare_at_price_jod) : null,
+        isDefault: true,
+      }];
 
   const imageUrls = imgs.rows.map((img) => `/api/catalog/product-image/${img.id}`);
   const fallbackSrc = fallbackFromSlug(product.slug);
@@ -167,50 +224,25 @@ export default async function ProductDetailPage({
             {name}
           </h1>
 
-          <p style={{ marginTop: 0 }}>
-            {hasPromo ? (
-              <>
-                <span style={{ textDecoration: "line-through", opacity: 0.7, marginInlineEnd: 10 }}>
-                  {price.toFixed(2)} JOD
-                </span>
-                <strong>{discounted.toFixed(2)} JOD</strong>
-              </>
-            ) : compareAt && compareAt > price ? (
-              <>
-                <span style={{ textDecoration: "line-through", opacity: 0.7, marginInlineEnd: 10 }}>
-                  {compareAt.toFixed(2)} JOD
-                </span>
-                <strong>{price.toFixed(2)} JOD</strong>
-              </>
-            ) : (
-              <strong>{price.toFixed(2)} JOD</strong>
-            )}
-          </p>
-
           {outOfStock ? <p className="muted">{isAr ? "غير متوفر حالياً." : "Currently out of stock."}</p> : null}
 
           {desc ? <p className="muted">{desc}</p> : null}
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14, alignItems: "center" }}>
-            <AddToCartButton
-              locale={locale}
-              slug={product.slug}
-              name={name}
-              priceJod={hasPromo ? discounted ?? price : price}
-              label={outOfStock ? (isAr ? "غير متوفر" : "Out of stock") : (isAr ? "أضف إلى السلة" : "Add to cart")}
-              addedLabel={isAr ? "تمت الإضافة ✓" : "Added ✓"}
-              updatedLabel={isAr ? "تم التحديث ✓" : "Updated ✓"}
-              className={"btn btn-outline" + (outOfStock ? " btn-disabled" : "")}
-              disabled={outOfStock}
-              minQty={1}
-              maxQty={99}
-              buyNowLabel={isAr ? "شراء الآن" : "Buy now"}
-            />
-
-            <a className="btn btn-outline" href={`/${locale}/product`}>
-              {isAr ? "العودة للمتجر" : "Back to shop"}
-            </a>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+            {[...product.wear_times, ...product.seasons, ...product.audiences].map((chip) => (
+              <span key={`${product.slug}-${chip}`} className="badge" style={{ fontSize: 11 }}>{tagLabel(locale, chip)}</span>
+            ))}
           </div>
+
+          <ProductPurchasePanel
+            locale={locale}
+            slug={product.slug}
+            name={name}
+            variants={variants}
+            promoType={promoType}
+            promoValue={promoValue}
+            outOfStock={outOfStock}
+          />
         </div>
       </div>
     </div>

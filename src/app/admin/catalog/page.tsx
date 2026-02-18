@@ -26,6 +26,24 @@ type ProductRow = {
   category_key: string;
   is_active: boolean;
   image_count: number;
+  wear_times: string[];
+  seasons: string[];
+  audiences: string[];
+};
+
+type CatalogVariantRow = {
+  id: number;
+  product_id: number;
+  product_slug: string;
+  product_name_en: string;
+  product_name_ar: string;
+  label: string;
+  size_ml: number | null;
+  price_jod: string;
+  compare_at_price_jod: string | null;
+  is_default: boolean;
+  is_active: boolean;
+  sort_order: number;
 };
 
 type PromoRow = {
@@ -49,10 +67,18 @@ function labelCategory(lang: "en" | "ar", c: CategoryRow) {
   return lang === "ar" ? c.name_ar : c.name_en;
 }
 
-export default async function AdminCatalogPage() {
+export default async function AdminCatalogPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   await ensureCatalogTables();
   const lang = await getAdminLang();
   const isAr = lang === "ar";
+  const params = (await searchParams) || {};
+  const saved = String(params.saved || "") === "1";
+  const variantError = String(params.error || "") === "invalid-variant";
+
 
   const categoriesRes = await db.query<CategoryRow>(
     `select key, name_en, name_ar, sort_order, is_active, is_promoted
@@ -70,7 +96,10 @@ export default async function AdminCatalogPage() {
             p.inventory_qty,
             p.category_key,
             p.is_active,
-            coalesce(i.image_count,0)::int as image_count
+            coalesce(i.image_count,0)::int as image_count,
+            coalesce(p.wear_times, "{}"::text[]) as wear_times,
+            coalesce(p.seasons, "{}"::text[]) as seasons,
+            coalesce(p.audiences, "{}"::text[]) as audiences
        from products p
   left join (
          select product_id, count(*)::int as image_count
@@ -79,6 +108,25 @@ export default async function AdminCatalogPage() {
        ) i on i.product_id = p.id
       order by p.created_at desc
       limit 300`
+  );
+
+  const variantsRes = await db.query<CatalogVariantRow>(
+    `select v.id,
+            v.product_id,
+            p.slug as product_slug,
+            p.name_en as product_name_en,
+            p.name_ar as product_name_ar,
+            v.label,
+            v.size_ml,
+            v.price_jod::text as price_jod,
+            v.compare_at_price_jod::text as compare_at_price_jod,
+            v.is_default,
+            v.is_active,
+            v.sort_order
+       from product_variants v
+       join products p on p.id=v.product_id
+      order by p.created_at desc, v.sort_order asc, v.id asc
+      limit 1200`
   );
 
   const promosRes = await db.query<PromoRow>(
@@ -119,6 +167,10 @@ export default async function AdminCatalogPage() {
         promoType: "نوع الخصم",
         autoPromo: "تلقائي",
         codePromo: "كوبون",
+        tags: "الوسوم",
+        wearTime: "وقت الاستخدام",
+        season: "الموسم",
+        audience: "الفئة",
       }
     : {
         title: "Catalog",
@@ -150,6 +202,10 @@ export default async function AdminCatalogPage() {
         promoType: "Type",
         autoPromo: "Automatic",
         codePromo: "Promo code",
+        tags: "Tags",
+        wearTime: "Wear time",
+        season: "Season",
+        audience: "Audience",
       };
 
   const byKey = new Map(categoriesRes.rows.map((c) => [c.key, c]));
@@ -159,6 +215,16 @@ export default async function AdminCatalogPage() {
       <header className={styles.adminCard}>
         <h1 style={{ marginTop: 0 }}>{L.title}</h1>
         <p style={{ marginBottom: 0, opacity: 0.8 }}>{L.sub}</p>
+        {saved ? (
+          <p style={{ marginTop: 10, marginBottom: 0, color: "seagreen", fontWeight: 600 }}>
+            {isAr ? "تم الحفظ بنجاح." : "Saved successfully."}
+          </p>
+        ) : null}
+        {variantError ? (
+          <p style={{ marginTop: 10, marginBottom: 0, color: "crimson", fontWeight: 600 }}>
+            {isAr ? "تحقق من المتغير: الاسم والسعر مطلوبة والسعر يجب أن يكون أكبر من صفر." : "Variant validation failed: label and price are required, and price must be greater than zero."}
+          </p>
+        ) : null}
       </header>
 
       <section className={styles.adminCard}>
@@ -174,12 +240,36 @@ export default async function AdminCatalogPage() {
             </select>
             <input name="name_en" required placeholder="Product name (EN)" className={styles.adminInput} />
             <input name="name_ar" required placeholder="اسم المنتج (AR)" className={styles.adminInput} />
-            <input name="price_jod" type="number" min="0" step="0.01" required placeholder="Price" className={`${styles.adminInput} ${styles.ltr}`} />
+            <input name="price_jod" type="number" min="0.01" step="0.01" required placeholder="Price" className={`${styles.adminInput} ${styles.ltr}`} />
             <input name="compare_at_price_jod" type="number" step="0.01" placeholder="Compare at price" className={`${styles.adminInput} ${styles.ltr}`} />
             <input name="inventory_qty" type="number" min="0" defaultValue={0} placeholder="Inventory" className={`${styles.adminInput} ${styles.ltr}`} />
             <span />
             <textarea name="description_en" placeholder="Description (EN)" className={styles.adminTextarea} rows={3} />
             <textarea name="description_ar" placeholder="Description (AR)" className={styles.adminTextarea} rows={3} />
+          </div>
+          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(3,minmax(0,1fr))" }}>
+            <div>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>{L.wearTime}</div>
+              <label><input type="checkbox" name="wear_times" value="day" /> Day</label>
+              <label style={{ marginInlineStart: 8 }}><input type="checkbox" name="wear_times" value="night" /> Night</label>
+              <label style={{ marginInlineStart: 8 }}><input type="checkbox" name="wear_times" value="anytime" /> Anytime</label>
+            </div>
+            <div>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>{L.season}</div>
+              <label><input type="checkbox" name="seasons" value="spring" /> Spring</label>
+              <label style={{ marginInlineStart: 8 }}><input type="checkbox" name="seasons" value="summer" /> Summer</label>
+              <label style={{ marginInlineStart: 8 }}><input type="checkbox" name="seasons" value="fall" /> Fall</label>
+              <label style={{ marginInlineStart: 8 }}><input type="checkbox" name="seasons" value="winter" /> Winter</label>
+              <label style={{ marginInlineStart: 8 }}><input type="checkbox" name="seasons" value="all-season" /> All-season</label>
+            </div>
+            <div>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>{L.audience}</div>
+              <label><input type="checkbox" name="audiences" value="unisex" /> Unisex</label>
+              <label style={{ marginInlineStart: 8 }}><input type="checkbox" name="audiences" value="unisex-men-leaning" /> Unisex (Men-leaning)</label>
+              <label style={{ marginInlineStart: 8 }}><input type="checkbox" name="audiences" value="unisex-women-leaning" /> Unisex (Women-leaning)</label>
+              <label style={{ marginInlineStart: 8 }}><input type="checkbox" name="audiences" value="men" /> Men</label>
+              <label style={{ marginInlineStart: 8 }}><input type="checkbox" name="audiences" value="women" /> Women</label>
+            </div>
           </div>
           <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <input type="checkbox" name="is_active" defaultChecked /> {L.active}
@@ -200,7 +290,7 @@ export default async function AdminCatalogPage() {
                 <tr key={p.id}>
                   <td className={styles.ltr}>{p.slug}</td>
                   <td>{p.name_en}<br />{p.name_ar}</td>
-                  <td>{byKey.get(p.category_key) ? labelCategory(lang, byKey.get(p.category_key)!) : p.category_key}</td>
+                  <td>{byKey.get(p.category_key) ? labelCategory(lang, byKey.get(p.category_key)!) : p.category_key}<div style={{ fontSize: 12, opacity: 0.78, marginTop: 4 }}>{[...p.wear_times, ...p.seasons, ...p.audiences].slice(0,4).join(" • ")}</div></td>
                   <td className={styles.ltr}>{p.price_jod} JOD {p.compare_at_price_jod ? `(was ${p.compare_at_price_jod})` : ""}</td>
                   <td className={styles.ltr}>{p.inventory_qty}</td>
                   <td className={styles.ltr}>{p.image_count}/5</td>
@@ -216,6 +306,18 @@ export default async function AdminCatalogPage() {
                       </select>
                       <input name="price_jod" type="number" step="0.01" defaultValue={Number(p.price_jod || "0")} className={`${styles.adminInput} ${styles.ltr}`} style={{ width: 120 }} />
                       <input name="inventory_qty" type="number" min="0" defaultValue={p.inventory_qty} className={`${styles.adminInput} ${styles.ltr}`} style={{ width: 100 }} />
+                      <div style={{ display: "grid", gap: 6 }}>
+                        <div style={{ fontSize: 12, opacity: 0.8 }}>{L.tags}</div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {["day","night","anytime"].map((key) => (<label key={`wt-${p.id}-${key}`}><input type="checkbox" name="wear_times" value={key} defaultChecked={p.wear_times.includes(key)} /> {key}</label>))}
+                        </div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {["spring","summer","fall","winter","all-season"].map((key) => (<label key={`ss-${p.id}-${key}`}><input type="checkbox" name="seasons" value={key} defaultChecked={p.seasons.includes(key)} /> {key}</label>))}
+                        </div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {["unisex","unisex-men-leaning","unisex-women-leaning","men","women"].map((key) => (<label key={`au-${p.id}-${key}`}><input type="checkbox" name="audiences" value={key} defaultChecked={p.audiences.includes(key)} /> {key}</label>))}
+                        </div>
+                      </div>
                       <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
                         <input type="checkbox" name="is_active" defaultChecked={p.is_active} /> {L.active}
                       </label>
@@ -238,11 +340,60 @@ export default async function AdminCatalogPage() {
 
       <section className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{isAr ? "المتغيرات" : "Variants"}</h2>
-        <p style={{ margin: 0, opacity: 0.82 }}>
-          {isAr
-            ? "لا يوجد نموذج متغيرات مستقل حالياً. يتم إدارة الاختيارات/التركيزات من خلال Slug منفصل لكل منتج."
-            : "There is no separate variants table yet. Manage variants as separate product slugs for now."}
-        </p>
+        <div style={{ display: "grid", gap: 16 }}>
+          {productsRes.rows.map((product) => {
+            const variants = variantsRes.rows.filter((v) => v.product_id === product.id);
+            return (
+              <div key={product.id} style={{ border: "1px solid #ececec", borderRadius: 12, padding: 12 }}>
+                <div style={{ fontWeight: 700, marginBottom: 10 }}>
+                  <span className={styles.ltr}>{product.slug}</span> — {isAr ? product.name_ar : product.name_en}
+                </div>
+
+                <form action="/api/admin/catalog/variants" method="post" style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(8,minmax(0,1fr))", marginBottom: 10 }}>
+                  <input type="hidden" name="action" value="create" />
+                  <input type="hidden" name="product_id" value={product.id} />
+                  <input name="label" required minLength={2} placeholder={isAr ? "الاسم (مثال 50 ml)" : "Label (e.g. 50 ml)"} className={styles.adminInput} />
+                  <input name="size_ml" type="number" min="0" placeholder="ml" className={`${styles.adminInput} ${styles.ltr}`} />
+                  <input name="price_jod" type="number" min="0.01" step="0.01" required placeholder="Price" className={`${styles.adminInput} ${styles.ltr}`} />
+                  <input name="compare_at_price_jod" type="number" min="0" step="0.01" placeholder="Compare" className={`${styles.adminInput} ${styles.ltr}`} />
+                  <input name="sort_order" type="number" min="0" defaultValue={variants.length * 10} placeholder="Sort" className={`${styles.adminInput} ${styles.ltr}`} />
+                  <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" name="is_default" /> {isAr ? "افتراضي" : "Default"}</label>
+                  <span className="muted" style={{ fontSize: 12 }}>{isAr ? "عند تفعيل الافتراضي سيتم إلغاء الافتراضي القديم تلقائياً." : "When Default is enabled, the previous default is automatically unset."}</span>
+                  <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" name="is_active" defaultChecked /> {L.active}</label>
+                  <button className={styles.adminBtn} type="submit" style={{ gridColumn: "1 / -1", width: "fit-content" }}>{isAr ? "إضافة متغير" : "Add variant"}</button>
+                </form>
+
+                <div style={{ display: "grid", gap: 8 }}>
+                  {variants.map((v) => (
+                    <form key={v.id} action="/api/admin/catalog/variants" method="post" style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(8,minmax(0,1fr))", alignItems: "center", borderTop: "1px dashed #eee", paddingTop: 8 }}>
+                      <input type="hidden" name="action" value="update" />
+                      <input type="hidden" name="id" value={v.id} />
+                      <input type="hidden" name="product_id" value={product.id} />
+                      <input name="label" required minLength={2} defaultValue={v.label} className={styles.adminInput} />
+                      <input name="size_ml" type="number" min="0" defaultValue={v.size_ml ?? ""} className={`${styles.adminInput} ${styles.ltr}`} />
+                      <input name="price_jod" type="number" min="0.01" step="0.01" required defaultValue={Number(v.price_jod || "0")} className={`${styles.adminInput} ${styles.ltr}`} />
+                      <input name="compare_at_price_jod" type="number" min="0" step="0.01" defaultValue={v.compare_at_price_jod ? Number(v.compare_at_price_jod) : ""} className={`${styles.adminInput} ${styles.ltr}`} />
+                      <input name="sort_order" type="number" min="0" defaultValue={v.sort_order} className={`${styles.adminInput} ${styles.ltr}`} />
+                      <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" name="is_default" defaultChecked={v.is_default} /> {isAr ? "افتراضي" : "Default"}</label>
+                      <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" name="is_active" defaultChecked={v.is_active} /> {L.active}</label>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button className={styles.adminBtn} type="submit">{L.update}</button>
+                      </div>
+                    </form>
+                  ))}
+                  {variants.length === 0 ? <p style={{ margin: 0, opacity: 0.7 }}>{isAr ? "لا توجد متغيرات" : "No variants yet"}</p> : null}
+                  {variants.map((v) => (
+                    <form key={`del-${v.id}`} action="/api/admin/catalog/variants" method="post" style={{ display: "inline" }}>
+                      <input type="hidden" name="action" value="delete" />
+                      <input type="hidden" name="id" value={v.id} />
+                      <button className={styles.adminBtn} type="submit">{isAr ? `حذف ${v.label}` : `Delete ${v.label}`}</button>
+                    </form>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </section>
 
       <section className={styles.adminCard}>
