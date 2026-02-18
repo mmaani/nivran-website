@@ -29,4 +29,4 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Guard + lint + build
-        run: pnpm ci:guard && pnpm lint && pnpm build
+        run: pnpm ci:guard:full
