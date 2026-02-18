@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { db, isDbConnectivityError } from "@/lib/db";
-import { ensureCatalogTables } from "@/lib/catalog";
+import { ensureCatalogTablesSafe } from "@/lib/catalog";
 import { getAdminLang } from "@/lib/admin-lang";
 import styles from "./page.module.css";
 
@@ -70,17 +70,20 @@ function labelCategory(lang: "en" | "ar", c: CategoryRow) {
 
 
 type CatalogPageData = {
-  health: "db" | "fallback";
+  health: "db" | "fallback" | "error";
   categories: CategoryRow[];
   products: ProductRow[];
   variants: CatalogVariantRow[];
   promos: PromoRow[];
+  bootstrapNote?: string;
+  errorMessage?: string;
 };
 
 async function loadCatalogPageData(): Promise<CatalogPageData> {
-  try {
-    await ensureCatalogTables();
+  const bootstrap = await ensureCatalogTablesSafe();
+  const bootstrapNote = bootstrap.ok ? undefined : bootstrap.reason;
 
+  try {
     const [categoriesRes, productsRes, variantsRes, promosRes] = await Promise.all([
       db.query<CategoryRow>(
         `select key, name_en, name_ar, sort_order, is_active, is_promoted
@@ -142,9 +145,21 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
       products: productsRes.rows,
       variants: variantsRes.rows,
       promos: promosRes.rows,
+      bootstrapNote,
     };
   } catch (error: unknown) {
-    if (!isDbConnectivityError(error)) throw error;
+    const message = error instanceof Error ? error.message : String(error || "Unknown catalog error");
+    if (!isDbConnectivityError(error)) {
+      return {
+        health: "error",
+        categories: [],
+        products: [],
+        variants: [],
+        promos: [],
+        bootstrapNote,
+        errorMessage: message,
+      };
+    }
 
     return {
       health: "fallback",
@@ -152,6 +167,8 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
       products: [],
       variants: [],
       promos: [],
+      bootstrapNote,
+      errorMessage: message,
     };
   }
 }
@@ -165,7 +182,9 @@ export default async function AdminCatalogPage({
   const isAr = lang === "ar";
   const params = (await searchParams) || {};
   const saved = String(params.saved || "") === "1";
-  const variantError = String(params.error || "") === "invalid-variant";
+  const errorCode = String(params.error || "").trim();
+  const variantError = errorCode === "invalid-variant";
+  const uploaded = String(params.uploaded || "") === "1";
   const data = await loadCatalogPageData();
 
   const L = isAr
@@ -242,6 +261,11 @@ export default async function AdminCatalogPage({
 
   const byKey = new Map(data.categories.map((c) => [c.key, c]));
 
+  const productTotal = data.products.length;
+  const productActive = data.products.filter((p) => p.is_active).length;
+  const outOfStockCount = data.products.filter((p) => Number(p.inventory_qty || 0) <= 0).length;
+  const variantsActive = data.variants.filter((v) => v.is_active).length;
+
   return (
     <main className={styles.adminGrid}>
       <header className={styles.adminCard}>
@@ -257,7 +281,38 @@ export default async function AdminCatalogPage({
             {isAr ? "تحقق من المتغير: الاسم والسعر مطلوبة والسعر يجب أن يكون أكبر من صفر." : "Variant validation failed: label and price are required, and price must be greater than zero."}
           </p>
         ) : null}
+        {uploaded ? (
+          <p style={{ marginTop: 10, marginBottom: 0, color: "seagreen", fontWeight: 600 }}>
+            {isAr ? "تم رفع الصور بنجاح." : "Images uploaded successfully."}
+          </p>
+        ) : null}
+        {errorCode && !variantError ? (
+          <p style={{ marginTop: 10, marginBottom: 0, color: "crimson", fontWeight: 600 }}>
+            {isAr ? `حدث خطأ في العملية: ${errorCode}` : `Catalog action error: ${errorCode}`}
+          </p>
+        ) : null}
+        {data.bootstrapNote ? (
+          <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
+            {isAr ? "ملاحظة: تهيئة الجداول تم تجاوزها بسبب صلاحيات قاعدة البيانات، وتم الاستمرار بالوضع المتاح." : "Note: schema bootstrap was skipped due to DB privileges; running in compatibility mode."}
+          </p>
+        ) : null}
       </header>
+
+      <section className={styles.adminCard} style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))" }}>
+        <div><strong>{productTotal}</strong><div className="muted">{isAr ? "إجمالي المنتجات" : "Total products"}</div></div>
+        <div><strong>{productActive}</strong><div className="muted">{isAr ? "منتجات مفعلة" : "Active products"}</div></div>
+        <div><strong>{outOfStockCount}</strong><div className="muted">{isAr ? "نفدت الكمية" : "Out of stock"}</div></div>
+        <div><strong>{data.promos.length}</strong><div className="muted">{isAr ? "العروض" : "Promotions"}</div></div>
+        <div><strong>{variantsActive}</strong><div className="muted">{isAr ? "متغيرات مفعلة" : "Active variants"}</div></div>
+      </section>
+
+      {data.health === "error" ? (
+        <section className={styles.adminCard} style={{ borderColor: "#b91c1c", background: "#fef2f2" }}>
+          <h2 style={{ marginTop: 0 }}>{isAr ? "خطأ في تحميل الكتالوج" : "Catalog load error"}</h2>
+          <p style={{ marginBottom: 0 }}>{isAr ? "تعذر تحميل بيانات الكتالوج. تم تعطيل العمليات لحين التحقق من قاعدة البيانات." : "Catalog data could not be loaded. Mutations are disabled until database issues are fixed."}</p>
+          {data.errorMessage ? <p className="muted" style={{ marginTop: 8, marginBottom: 0 }}>{data.errorMessage}</p> : null}
+        </section>
+      ) : null}
 
       {data.health === "fallback" ? (
         <section className={styles.adminCard} style={{ borderColor: "#f59e0b", background: "#fffbeb" }}>
