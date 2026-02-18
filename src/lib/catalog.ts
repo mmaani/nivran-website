@@ -32,6 +32,9 @@ export async function ensureCatalogTables() {
   await db.query(`alter table products add column if not exists compare_at_price_jod numeric(10,2);`);
   await db.query(`alter table products add column if not exists inventory_qty integer not null default 0;`);
   await db.query(`alter table products add column if not exists category_key text default 'perfume';`);
+  await db.query(`alter table products add column if not exists wear_times text[] not null default '{}'::text[];`);
+  await db.query(`alter table products add column if not exists seasons text[] not null default '{}'::text[];`);
+  await db.query(`alter table products add column if not exists audiences text[] not null default '{}'::text[];`);
   await db.query(`alter table products add column if not exists is_active boolean not null default true;`);
   await db.query(`alter table products add column if not exists created_at timestamptz not null default now();`);
   await db.query(`alter table products add column if not exists updated_at timestamptz not null default now();`);
@@ -198,11 +201,32 @@ export async function ensureCatalogTables() {
     );
   `);
 
+  await db.query(`
+    create table if not exists product_variants (
+      id bigserial primary key,
+      product_id bigint not null references products(id) on delete cascade,
+      label text not null,
+      size_ml integer,
+      price_jod numeric(10,2) not null,
+      compare_at_price_jod numeric(10,2),
+      is_default boolean not null default false,
+      is_active boolean not null default true,
+      sort_order integer not null default 0,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+  `);
+
+  await db.query(`create unique index if not exists idx_product_variants_single_default on product_variants(product_id) where is_default=true;`);
+
   // ---------- Indexes (last) ----------
   await db.query(`create unique index if not exists idx_products_slug_unique on products(slug);`);
   await db.query(`create index if not exists idx_products_active on products(is_active);`);
   await db.query(`create index if not exists idx_products_category on products(category_key);`);
   await db.query(`create index if not exists idx_products_created_at on products(created_at desc);`);
+  await db.query(`create index if not exists idx_products_wear_times on products using gin(wear_times);`);
+  await db.query(`create index if not exists idx_products_seasons on products using gin(seasons);`);
+  await db.query(`create index if not exists idx_products_audiences on products using gin(audiences);`);
 
   await db.query(`create unique index if not exists idx_categories_key_unique on categories(key);`);
   await db.query(`create index if not exists idx_categories_active on categories(is_active);`);
@@ -217,4 +241,7 @@ export async function ensureCatalogTables() {
   await db.query(`create index if not exists idx_promotions_priority on promotions(priority desc);`);
 
   await db.query(`create index if not exists idx_product_images_product on product_images(product_id, "position");`);
+  await db.query(`create index if not exists idx_product_variants_product on product_variants(product_id);`);
+  await db.query(`create index if not exists idx_product_variants_active on product_variants(product_id, is_active);`);
+  await db.query(`create index if not exists idx_product_variants_sort on product_variants(product_id, sort_order asc, id asc);`);
 }

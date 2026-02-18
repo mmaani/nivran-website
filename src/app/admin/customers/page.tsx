@@ -21,8 +21,11 @@ export default async function AdminCustomersPage({
   const pageRaw = Array.isArray(query.page) ? query.page[0] : query.page;
   const pageSizeRaw = Array.isArray(query.pageSize) ? query.pageSize[0] : query.pageSize;
 
+  const scopeRaw = Array.isArray(query.scope) ? query.scope[0] : query.scope;
+
   const page = Math.max(1, toInt(pageRaw, 1));
   const pageSize = [25, 50, 100].includes(toInt(pageSizeRaw, 25)) ? toInt(pageSizeRaw, 25) : 25;
+  const exportScope = String(scopeRaw || "page").toLowerCase() === "all" ? "all" : "page";
 
   const data = await fetchAdminCustomers(page, pageSize);
   const totalPages = Math.max(1, Math.ceil(data.total / data.pageSize));
@@ -47,6 +50,9 @@ export default async function AdminCustomersPage({
           export: "تصدير Excel",
           pageSize: "عدد الصفوف",
           page: "الصفحة",
+          exportScope: "نطاق التصدير",
+          exportPage: "الصفحة الحالية",
+          exportAll: "كل العملاء",
         }
       : {
           title: "Customers",
@@ -66,6 +72,9 @@ export default async function AdminCustomersPage({
           export: "Export Excel",
           pageSize: "Rows",
           page: "Page",
+          exportScope: "Export scope",
+          exportPage: "Current page",
+          exportAll: "All customers",
         };
 
   return (
@@ -88,9 +97,21 @@ export default async function AdminCustomersPage({
             <button className="btn" type="submit">Apply</button>
           </form>
 
-          <a className="btn" href={`/api/admin/customers/export?scope=page&page=${data.page}&pageSize=${data.pageSize}`}>
-            {L.export}
-          </a>
+          <form method="get" className="admin-row">
+            <input type="hidden" name="page" value={String(data.page)} />
+            <input type="hidden" name="pageSize" value={String(data.pageSize)} />
+            <label htmlFor="scope" className="admin-muted" style={{ fontSize: 13 }}>
+              {L.exportScope}
+            </label>
+            <select id="scope" name="scope" className="admin-select" defaultValue={exportScope} style={{ width: 170 }}>
+              <option value="page">{L.exportPage}</option>
+              <option value="all">{L.exportAll}</option>
+            </select>
+            <button className="btn" type="submit">Apply</button>
+            <a className="btn" href={`/api/admin/customers/export?scope=${exportScope}&page=${data.page}&pageSize=${data.pageSize}`}>
+              {L.export}
+            </a>
+          </form>
         </div>
       </div>
 

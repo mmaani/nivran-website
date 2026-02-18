@@ -7,7 +7,6 @@ export function adminMiddleware(req: NextRequest) {
   const cookieToken =
     req.cookies.get("admin_token")?.value ||
     req.cookies.get("nivran_admin_token")?.value ||
-    req.cookies.get("admin_token_client")?.value ||
     "";
 
   const isAdminRoute = path.startsWith("/admin");
