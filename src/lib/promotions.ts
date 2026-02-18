@@ -10,7 +10,7 @@ export type PricedOrderLine = {
 
 type PromotionRow = {
   id: number;
-  promo_kind: "AUTO" | "CODE" | string;
+  promo_kind: "SEASONAL" | "PROMO" | "REFERRAL" | string;
   code: string | null;
   title_en: string | null;
   title_ar: string | null;
@@ -32,7 +32,7 @@ export type PromotionEvaluation =
       ok: true;
       promotionId: number;
       promoCode: string | null;
-      promoKind: "AUTO" | "CODE";
+      promoKind: "SEASONAL" | "PROMO" | "REFERRAL";
       discountJod: number;
       eligibleSubtotalJod: number;
       subtotalAfterDiscountJod: number;
@@ -66,8 +66,10 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function parsePromoKind(value: unknown): "AUTO" | "CODE" {
-  return String(value || "").toUpperCase() === "AUTO" ? "AUTO" : "CODE";
+function parsePromoKind(value: unknown): "SEASONAL" | "PROMO" | "REFERRAL" {
+  const kind = String(value || "").toUpperCase();
+  if (kind === "SEASONAL" || kind === "REFERRAL") return kind;
+  return "PROMO";
 }
 
 function evaluatePromotionRow(
@@ -162,7 +164,7 @@ export async function evaluatePromoCodeForLines(
             starts_at::text, ends_at::text,
             usage_limit, used_count, is_active, category_keys, product_slugs, min_order_jod, priority
        from promotions
-      where code = $1 and promo_kind='CODE'
+      where code = $1 and promo_kind in ('SEASONAL','PROMO','REFERRAL')
       limit 1`,
     [promoCode]
   );
@@ -170,30 +172,6 @@ export async function evaluatePromoCodeForLines(
   const promo = promoRes.rows[0];
   if (!promo) return { ok: false, code: "PROMO_NOT_FOUND", error: "Promo code not found" };
   return evaluatePromotionRow(promo, lines, subtotalJod, now);
-}
-
-export async function evaluateAutomaticPromotionForLines(
-  dbx: DbExecutor,
-  lines: PricedOrderLine[],
-  subtotalJod: number,
-  now = new Date()
-): Promise<PromotionEvaluation> {
-  const promoRes = await dbx.query<PromotionRow>(
-    `select id, promo_kind, code, title_en, title_ar, discount_type, discount_value,
-            starts_at::text, ends_at::text,
-            usage_limit, used_count, is_active, category_keys, product_slugs, min_order_jod, priority
-       from promotions
-      where promo_kind='AUTO' and is_active=true
-      order by priority desc, discount_value desc, created_at desc
-      limit 200`
-  );
-
-  for (const promo of promoRes.rows) {
-    const evaluated = evaluatePromotionRow(promo, lines, subtotalJod, now);
-    if (evaluated.ok) return evaluated;
-  }
-
-  return { ok: false, code: "PROMO_NOT_FOUND", error: "No automatic promotion applies" };
 }
 
 export async function consumePromotionUsage(dbx: DbExecutor, promotionId: number): Promise<boolean> {

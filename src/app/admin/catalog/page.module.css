@@ -1,5 +1,5 @@
 .adminPage {
-  max-width: 1100px;
+  max-width: 1160px;
   margin: 0 auto;
   padding: 20px 14px 60px;
 }
@@ -14,40 +14,88 @@
 
 .adminCard {
   background: #fff;
-  border: 1px solid #eee;
+  border: 1px solid #e8e8ea;
   border-radius: 14px;
-  padding: 14px;
+  padding: 16px;
   margin-bottom: 14px;
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.02);
 }
 
 .adminGrid {
   display: grid;
+  gap: 12px;
+}
+
+.filterGrid {
+  display: grid;
   gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  margin-top: 12px;
+}
+
+.filterForm {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 160px auto;
+  align-items: center;
+}
+
+.anchorRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.anchorChip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dedee1;
+  background: #fafafb;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 13px;
+  color: #141414;
+  text-decoration: none;
+}
+
+.anchorChip:hover {
+  border-color: #cfcfd4;
+  background: #f4f4f7;
 }
 
 .adminInput,
 .adminSelect,
 .adminTextarea {
   width: 100%;
-  border: 1px solid #e6e6e6;
-  border-radius: 12px;
+  border: 1px solid #dfdfe3;
+  border-radius: 10px;
   padding: 10px 12px;
+  min-height: 40px;
   font: inherit;
   background: #fff;
 }
 
 .adminTextarea {
+  min-height: 98px;
   resize: vertical;
 }
 
 .adminBtn {
-  border: 1px solid #e6e6e6;
-  border-radius: 12px;
-  padding: 10px 12px;
+  border: 1px solid #dfdfe3;
+  border-radius: 10px;
+  min-height: 40px;
+  padding: 8px 12px;
   background: #fff;
   font: inherit;
+  font-weight: 500;
+  line-height: 1.2;
   cursor: pointer;
+  white-space: nowrap;
+}
+
+.adminBtn:hover {
+  background: #fafafa;
 }
 
 .adminBtnPrimary {
@@ -56,10 +104,14 @@
   color: #fff;
 }
 
+.adminBtnPrimary:hover {
+  background: #1d1d1d;
+}
+
 .adminTableWrap {
   overflow: auto;
   border-radius: 12px;
-  border: 1px solid #eee;
+  border: 1px solid #e9e9eb;
 }
 
 .adminTable {
@@ -89,4 +141,23 @@
 
 .rtl {
   direction: rtl;
+}
+
+@media (max-width: 900px) {
+  .filterForm {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+.adminTable td form .adminBtn {
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.adminTable td form .adminInput,
+.adminTable td form .adminSelect {
+  min-height: 36px;
+  padding: 7px 10px;
 }
