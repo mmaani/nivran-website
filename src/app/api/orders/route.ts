@@ -156,6 +156,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
+
+  if (discountSource !== "CODE" && promoCode) {
+    return NextResponse.json(
+      { ok: false, error: locale === "ar" ? "لا يمكن استخدام الكود مع وضع الخصم الحالي" : "Promo code is only allowed with CODE mode" },
+      { status: 400 }
+    );
+  }
+
   const slugs = Array.from(new Set(items.map((i) => i.slug)));
   const products = await fetchProductsBySlugs(slugs);
 
