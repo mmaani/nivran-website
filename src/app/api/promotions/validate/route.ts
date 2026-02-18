@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { ensureCatalogTables } from "@/lib/catalog";
+import { db, isDbConnectivityError } from "@/lib/db";
+import { ensureCatalogTablesSafe } from "@/lib/catalog";
 import {
   evaluatePromoCodeForLines,
   type PricedOrderLine,
@@ -9,23 +9,36 @@ import {
 type PromoMode = "CODE" | "AUTO";
 
 type IncomingItem = { slug?: string; qty?: number; variantId?: number | null };
-type ProductRow = { slug: string; category_key: string | null; is_active: boolean };
-type VariantRow = { id: number; product_slug: string; price_jod: string | number };
-type FallbackPriceRow = { slug: string; price_jod: string | number };
+type ProductRow = {
+  id: number;
+  slug: string;
+  category_key: string | null;
+  is_active: boolean;
+  unit_price_jod: string | number;
+};
+type VariantRow = { id: number; product_id: number; price_jod: string | number };
+
+function normalizeQty(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(1, Math.min(99, Math.trunc(n)));
+}
+
+function normalizeVariantId(value: unknown): number | null {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.trunc(n);
+}
 
 function normalizeItems(items: unknown): { slug: string; qty: number; variantId: number | null }[] {
   if (!Array.isArray(items)) return [];
+
   return items
-    .map((x: IncomingItem) => {
-      const slug = String(x?.slug || "").trim();
-      const qtyNum = Number(x?.qty ?? 1);
-      const qty = Number.isFinite(qtyNum) ? Math.max(1, Math.min(99, qtyNum)) : 1;
-
-      const rawVid = Number(x?.variantId);
-      const variantId = Number.isFinite(rawVid) ? rawVid : null;
-
-      return { slug, qty, variantId };
-    })
+    .map((x: IncomingItem) => ({
+      slug: String(x?.slug || "").trim(),
+      qty: normalizeQty(x?.qty),
+      variantId: normalizeVariantId(x?.variantId),
+    }))
     .filter((x) => x.slug.length > 0);
 }
 
@@ -38,177 +51,128 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
-  await ensureCatalogTables();
-
-  const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!body) return NextResponse.json({ ok: false, error: "Invalid request" }, { status: 400 });
-
-  const locale = body.locale === "ar" ? "ar" : "en";
-  const mode = pickMode(body.mode);
-
-  const promoCode = String(body.promoCode || "").trim().toUpperCase();
-  const normalized = normalizeItems(body.items);
-
-  if (!normalized.length) {
+  const bootstrap = await ensureCatalogTablesSafe();
+  if (!bootstrap.ok) {
     return NextResponse.json(
-      { ok: false, error: locale === "ar" ? "السلة فارغة" : "Cart items are required" },
-      { status: 400 }
+      { ok: false, error: "Catalog is currently unavailable", reason: "CATALOG_BOOTSTRAP_UNAVAILABLE" },
+      { status: 503 }
     );
   }
 
-  // Mode-specific validation
-  if (mode === "CODE" && !promoCode) {
-    return NextResponse.json(
-      { ok: false, error: locale === "ar" ? "أدخل كود الخصم" : "Promo code is required" },
-      { status: 400 }
-    );
-  }
-  if (mode === "AUTO" && promoCode) {
-    return NextResponse.json(
-      { ok: false, error: locale === "ar" ? "لا يمكن استخدام كود مع خصم AUTO" : "Promo code cannot be used with AUTO mode" },
-      { status: 400 }
-    );
-  }
+  try {
+    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!body) return NextResponse.json({ ok: false, error: "Invalid request" }, { status: 400 });
 
-  const slugs = Array.from(new Set(normalized.map((i) => i.slug)));
+    const locale = body.locale === "ar" ? "ar" : "en";
+    const mode = "CODE";
+    const promoCode = String(body.promoCode || "").trim().toUpperCase();
+    const normalized = normalizeItems(body.items);
 
-  const productRes = await db.query<ProductRow>(
-    `select slug, category_key, is_active
-       from products
-      where slug = any($1::text[])`,
-    [slugs]
-  );
-  const productMap = new Map(productRes.rows.map((p) => [p.slug, p]));
+    if (!normalized.length) {
+      return NextResponse.json({ ok: false, error: locale === "ar" ? "السلة فارغة" : "Cart items are required" }, { status: 400 });
+    }
 
-  const variantIds = Array.from(
-    new Set(
-      normalized
-        .map((i) => i.variantId)
-        .filter((id): id is number => typeof id === "number" && Number.isFinite(id))
-    )
-  );
+    if (!promoCode) {
+      return NextResponse.json({ ok: false, error: locale === "ar" ? "أدخل كود الخصم" : "Promo code is required" }, { status: 400 });
+    }
 
-  const variantMap = new Map<number, VariantRow>();
-  if (variantIds.length) {
-    const vRes = await db.query<VariantRow>(
-      `select v.id, p.slug as product_slug, v.price_jod
-         from product_variants v
-         join products p on p.id = v.product_id
-        where v.id = any($1::bigint[])
-          and v.is_active = true`,
-      [variantIds]
-    );
-    for (const v of vRes.rows) variantMap.set(v.id, v);
-  }
-
-  // Prefetch fallback prices once (avoid per-line query)
-  const fallbackSlugs = Array.from(
-    new Set(normalized.filter((i) => i.variantId == null).map((i) => i.slug))
-  );
-
-  const fallbackPriceMap = new Map<string, number>();
-  if (fallbackSlugs.length) {
-    const fRes = await db.query<FallbackPriceRow>(
-      `select p.slug,
-              coalesce(
-                (
-                  select v.price_jod
-                    from product_variants v
-                   where v.product_id = (select id from products where slug = p.slug limit 1)
-                     and v.is_active = true
-                   order by v.is_default desc, v.price_jod asc, v.sort_order asc, v.id asc
-                   limit 1
-                ),
-                (select price_jod from products where slug = p.slug limit 1)
-              )::text as price_jod
+    const slugs = Array.from(new Set(normalized.map((i) => i.slug)));
+    const productRes = await db.query<ProductRow>(
+      `select p.id,
+              p.slug,
+              p.category_key,
+              p.is_active,
+              coalesce(v.price_jod, p.price_jod)::text as unit_price_jod
          from products p
+         left join lateral (
+           select pv.price_jod
+             from product_variants pv
+            where pv.product_id=p.id
+              and pv.is_active=true
+            order by pv.is_default desc, pv.price_jod asc, pv.sort_order asc, pv.id asc
+            limit 1
+         ) v on true
         where p.slug = any($1::text[])`,
-      [fallbackSlugs]
+      [slugs]
     );
+    const productMap = new Map(productRes.rows.map((p) => [p.slug, p]));
 
-    for (const row of fRes.rows) {
-      const n = Number(row.price_jod ?? 0);
-      fallbackPriceMap.set(row.slug, Number.isFinite(n) ? n : 0);
-    }
-  }
-
-  const lines: PricedOrderLine[] = [];
-
-  for (const item of normalized) {
-    const prod = productMap.get(item.slug);
-    if (!prod || !prod.is_active) {
-      return NextResponse.json(
-        { ok: false, error: locale === "ar" ? "يوجد منتج غير صالح في السلة" : "Cart contains invalid product" },
-        { status: 400 }
+    const variantIds = Array.from(new Set(normalized.map((i) => i.variantId).filter((id): id is number => typeof id === "number")));
+    const variantMap = new Map<number, VariantRow>();
+    if (variantIds.length) {
+      const vRes = await db.query<VariantRow>(
+        `select id, product_id, price_jod
+           from product_variants
+          where id = any($1::bigint[])
+            and is_active=true`,
+        [variantIds]
       );
+      for (const v of vRes.rows) variantMap.set(v.id, v);
     }
 
-    let unit = 0;
-
-    if (item.variantId != null) {
-      const v = variantMap.get(item.variantId);
-      if (!v || v.product_slug !== item.slug) {
+    const lines: PricedOrderLine[] = [];
+    for (const item of normalized) {
+      const product = productMap.get(item.slug);
+      if (!product || !product.is_active) {
         return NextResponse.json(
-          { ok: false, error: locale === "ar" ? "النسخة المختارة غير صالحة" : "Selected variant is invalid" },
+          { ok: false, error: locale === "ar" ? "يوجد منتج غير صالح في السلة" : "Cart contains invalid product" },
           { status: 400 }
         );
       }
-      const n = Number(v.price_jod ?? 0);
-      unit = Number.isFinite(n) ? n : 0;
-    } else {
-      unit = fallbackPriceMap.get(item.slug) ?? 0;
+
+      let unitPrice = Number(product.unit_price_jod || 0);
+      if (item.variantId) {
+        const variant = variantMap.get(item.variantId);
+        if (!variant || Number(variant.product_id) !== Number(product.id)) {
+          return NextResponse.json(
+            { ok: false, error: locale === "ar" ? "النسخة المختارة غير صالحة" : "Selected variant is invalid" },
+            { status: 400 }
+          );
+        }
+        unitPrice = Number(variant.price_jod || 0);
+      }
+
+      lines.push({
+        slug: item.slug,
+        qty: item.qty,
+        category_key: product.category_key,
+        line_total_jod: Number((unitPrice * item.qty).toFixed(2)),
+      });
     }
 
-    const lineTotal = Number((unit * item.qty).toFixed(2));
-    lines.push({
-      slug: item.slug,
-      qty: item.qty,
-      category_key: prod.category_key,
-      line_total_jod: lineTotal,
-    });
-  }
+    const subtotal = Number(lines.reduce((sum, line) => sum + line.line_total_jod, 0).toFixed(2));
+    const result = await evaluatePromoCodeForLines(db, promoCode, lines, subtotal);
 
-  const subtotal = Number(lines.reduce((sum, line) => sum + line.line_total_jod, 0).toFixed(2));
+    if (!result.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: locale === "ar" ? "الخصم غير صالح أو غير متاح" : "Discount is invalid or not eligible",
+          reason: result.code,
+        },
+        { status: 200 }
+      );
+    }
 
-  // AUTO mode (placeholder: no discount unless you add auto-promo evaluator later)
-  if (mode === "AUTO") {
     return NextResponse.json({
       ok: true,
       promo: {
         mode,
-        promotionId: null,
-        code: "",
-        discountJod: 0,
-        subtotalAfterDiscountJod: subtotal,
-        eligibleSubtotalJod: subtotal,
+        promotionId: result.promotionId,
+        code: result.promoCode,
+        discountJod: result.discountJod,
+        subtotalAfterDiscountJod: result.subtotalAfterDiscountJod,
+        eligibleSubtotalJod: result.eligibleSubtotalJod,
+        ...result.meta,
       },
     });
+  } catch (error: unknown) {
+    if (isDbConnectivityError(error)) {
+      return NextResponse.json(
+        { ok: false, error: "Promotion validation temporarily unavailable", reason: "DB_CONNECTIVITY" },
+        { status: 503 }
+      );
+    }
+    throw error;
   }
-
-  // CODE mode
-  const result = await evaluatePromoCodeForLines(db, promoCode, lines, subtotal);
-
-  if (!result.ok) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: locale === "ar" ? "الخصم غير صالح أو غير متاح" : "Discount is invalid or not eligible",
-        reason: result.code,
-      },
-      { status: 400 }
-    );
-  }
-
-  return NextResponse.json({
-    ok: true,
-    promo: {
-      mode,
-      promotionId: result.promotionId,
-      code: result.promoCode,
-      discountJod: result.discountJod,
-      subtotalAfterDiscountJod: result.subtotalAfterDiscountJod,
-      eligibleSubtotalJod: result.eligibleSubtotalJod,
-      ...result.meta,
-    },
-  });
 }

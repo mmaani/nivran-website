@@ -1,14 +1,13 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { clearLocalCart, readLocalCart, type CartItem } from "@/lib/cartStore";
 
 type Locale = "en" | "ar";
-type JsonRecord = Record<string, unknown>;
-
-// Your UI already references AUTO availability, so include it
-type DiscountMode = "NONE" | "CODE" | "AUTO";
+type JsonObject = Record<string, unknown>;
+type DiscountMode = "NONE" | "CODE";
+type HealthMode = "checking" | "db" | "fallback" | "error";
 
 type PromoState = {
   mode: Exclude<DiscountMode, "NONE">; // "CODE" | "AUTO"
@@ -17,7 +16,9 @@ type PromoState = {
   discountJod: number;
 };
 
-function isRecord(v: unknown): v is JsonRecord {
+const PROMO_CODE_STORAGE_KEY = "nivran.checkout.promoCode";
+
+function isObject(v: unknown): v is JsonObject {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
@@ -108,6 +109,7 @@ export default function CheckoutClient() {
       originalSubtotal: isAr ? "المجموع قبل الخصم" : "Original subtotal",
       discount: isAr ? "الخصم" : "Discount",
       shipping: isAr ? "الشحن" : "Shipping",
+      shippingFree: isAr ? "شحن مجاني" : "Free shipping",
       total: isAr ? "الإجمالي" : "Total",
 
       fullName: isAr ? "الاسم الكامل" : "Full name",
@@ -117,32 +119,43 @@ export default function CheckoutClient() {
       address: isAr ? "العنوان" : "Address",
       notes: isAr ? "ملاحظات" : "Notes",
       placed: isAr ? "تم إنشاء الطلب." : "Order created.",
-
-      promoLabel: isAr ? "كود الخصم" : "Promo code",
-      havePromo: isAr ? "استخدام كود خصم" : "Use promo code",
+      promoLabel: isAr ? "كود الحملة" : "Campaign code",
+      havePromo: isAr ? "استخدام كود حملة" : "Use campaign code",
       promoPlaceholder: isAr ? "أدخل الكود" : "Enter code",
       promoApply: isAr ? "تطبيق" : "Apply",
       promoRemove: isAr ? "إزالة" : "Remove",
-      promoApplied: isAr ? "تم تطبيق الخصم (CODE)" : "Promo code applied (CODE)",
-
-      // ✅ Add missing keys
-      autoAvailable: isAr ? "خصم تلقائي متاح" : "Automatic discount available",
-      autoUnavailable: isAr ? "لا توجد خصومات تلقائية حالياً" : "No automatic discounts available right now",
-
-      freeShippingReached: isAr
-        ? "تهانينا! أنت مؤهل للشحن المجاني."
-        : "Great news! You unlocked free shipping.",
-      freeShippingRemaining: isAr
-        ? "أضف {{amount}} JOD لتحصل على شحن مجاني"
-        : "Add {{amount}} JOD to unlock free shipping",
-
-      systemFallback: isAr ? "وضع الطوارئ: عرض البيانات عبر Fallback" : "Fallback mode: degraded data source active",
+      promoApplied: isAr ? "تم تطبيق الكود بنجاح" : "Campaign code applied successfully",
+      promoExpired: isAr ? "هذا الكود منتهي أو غير نشط" : "This code is expired or inactive",
+      promoNotFound: isAr ? "الكود غير موجود" : "Code was not found",
+      promoMinOrder: isAr ? "الحد الأدنى للطلب غير مستوفى" : "Minimum order requirement not met",
+      promoCoverage: isAr ? "الكود لا ينطبق على هذه المنتجات" : "Code does not apply to current items",
+      freeShippingReached: isAr ? "تهانينا! أنت مؤهل للشحن المجاني." : "Great news! You unlocked free shipping.",
+      freeShippingRemaining: isAr ? "أضف {{amount}} JOD لتحصل على شحن مجاني" : "Add {{amount}} JOD to unlock free shipping",
+      freeShippingThreshold: isAr ? "الحد الحالي للشحن المجاني: {{amount}} JOD" : "Current free-shipping threshold: {{amount}} JOD",
+      systemFallback: isAr ? "وضع الطوارئ: عرض البيانات عبر مصدر بديل" : "Fallback mode: degraded data source active",
       systemHealthy: isAr ? "اتصال قاعدة البيانات سليم" : "Database connectivity healthy",
     }),
     [isAr]
   );
 
-  // Health check
+  const mapPromoError = useCallback((reason: string, fallbackMessage: string) => {
+    if (reason === "PROMO_NOT_FOUND") return COPY.promoNotFound;
+    if (reason === "PROMO_MIN_ORDER") return COPY.promoMinOrder;
+    if (reason === "PROMO_CATEGORY_MISMATCH") return COPY.promoCoverage;
+    if (reason === "PROMO_EXPIRED" || reason === "PROMO_INACTIVE") return COPY.promoExpired;
+    if (reason === "DB_CONNECTIVITY") return isAr ? "الخدمة غير متاحة مؤقتًا. حاول لاحقًا." : "Service is temporarily unavailable. Please retry.";
+    return fallbackMessage;
+  }, [COPY, isAr]);
+
+  useEffect(() => {
+    try {
+      const remembered = window.localStorage.getItem(PROMO_CODE_STORAGE_KEY);
+      if (remembered) setPromoInput(remembered);
+    } catch {
+      // no-op
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -151,12 +164,12 @@ export default function CheckoutClient() {
         const data: unknown = await res.json().catch(() => null);
         if (cancelled) return;
 
-        if (!res.ok || !isRecord(data)) {
+        if (!res.ok || !isObject(data)) {
           setHealthMode("error");
           return;
         }
 
-        const mode = (getStr(data, "mode") || "").toLowerCase();
+        const mode = toStr(data.mode).toLowerCase();
         if (mode === "db") setHealthMode("db");
         else if (mode === "fallback") setHealthMode("fallback");
         else setHealthMode("error");
@@ -170,7 +183,6 @@ export default function CheckoutClient() {
     };
   }, []);
 
-  // Load cart / buy-now
   useEffect(() => {
     const cart = readLocalCart();
     if (cart.length) {
@@ -232,54 +244,118 @@ export default function CheckoutClient() {
     if (!items.length) {
       setDiscountMode("NONE");
       setSelectedPromo(null);
-      setAutoPromoCandidate(null);
+      setPromoMsg(null);
     }
   }, [items]);
 
-  // Shipping config
   useEffect(() => {
     let cancelled = false;
-
     fetch("/api/shipping-config", { cache: "no-store" })
       .then(async (r) => {
         const data: unknown = await r.json().catch(() => null);
-        if (cancelled || !isRecord(data)) return;
+        if (cancelled || !isObject(data)) return;
 
-        const threshold = getNum(data, "thresholdJod");
-        const base = getNum(data, "baseShippingJod");
+        const threshold = toNum(data.thresholdJod);
+        const base = toNum(data.baseShippingJod);
 
-        if (typeof threshold === "number" && threshold >= 0) setFreeShippingThresholdJod(threshold);
-        if (typeof base === "number" && base >= 0) setBaseShippingJod(base);
+        if (threshold >= 0) setFreeShippingThresholdJod(threshold);
+        if (base >= 0) setBaseShippingJod(base);
+
+        const fallback = data.fallback === true;
+        if (fallback) setHealthMode("fallback");
+        else if (healthMode === "checking") setHealthMode("db");
       })
-      .catch(() => null);
+      .catch(() => {
+        if (!cancelled && healthMode === "checking") setHealthMode("error");
+      });
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [healthMode]);
+
+  const runPromoValidation = useCallback(async (codeRaw: string, opts?: { silent?: boolean }) => {
+    const code = codeRaw.trim().toUpperCase();
+    if (!code || !items.length) return false;
+    const silent = opts?.silent === true;
+
+    if (!silent) {
+      setPromoBusy(true);
+      setPromoMsg(null);
+    }
+  }, [items]);
+
+    try {
+      const res = await fetch("/api/promotions/validate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: "CODE",
+          promoCode: code,
+          locale,
+          items: items.map((i) => ({ slug: i.slug, qty: i.qty, variantId: i.variantId })),
+        }),
+      });
+      const data: unknown = await res.json().catch(() => null);
+
+      if (!res.ok || !isObject(data)) {
+        throw new Error(isAr ? "تعذر التحقق من الكود الآن" : "Unable to validate code right now");
+      }
+
+      if (data.ok !== true || !isObject(data.promo)) {
+        const reason = toStr(data.reason).trim();
+        const fallbackMessage = typeof data.error === "string" ? data.error : isAr ? "كود غير صالح" : "Invalid code";
+        const finalMessage = mapPromoError(reason, fallbackMessage);
+
+        setSelectedPromo(null);
+        setDiscountMode("NONE");
+        if (!silent) setPromoMsg(finalMessage);
+        return false;
+      }
+
+      setSelectedPromo({
+        mode: "CODE",
+        code,
+        title: isAr ? toStr(data.promo.titleAr || data.promo.titleEn || code) : toStr(data.promo.titleEn || data.promo.titleAr || code),
+        discountJod: toNum(data.promo.discountJod),
+      });
+      setDiscountMode("CODE");
+      if (!silent) setPromoMsg(COPY.promoApplied);
+      setPromoOpen(false);
+
+      try {
+        window.localStorage.setItem(PROMO_CODE_STORAGE_KEY, code);
+      } catch {
+        // no-op
+      }
+
+      return true;
+    } catch (error: unknown) {
+      if (!silent) setPromoMsg(errMsg(error));
+      return false;
+    } finally {
+      if (!silent) setPromoBusy(false);
+    }
+  }, [COPY.promoApplied, isAr, items, locale, mapPromoError]);
+
+  useEffect(() => {
+    if (!selectedPromo?.code || !items.length) return;
+    runPromoValidation(selectedPromo.code, { silent: true }).catch(() => null);
+  }, [items, selectedPromo?.code, runPromoValidation]);
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((sum, i) => sum + Number(i.priceJod || 0) * Number(i.qty || 1), 0);
     const discount = selectedPromo ? Number(selectedPromo.discountJod || 0) : 0;
     const subtotalAfterDiscount = Math.max(0, subtotal - discount);
-
-    const shipping = items.length
-      ? freeShippingThresholdJod > 0 && subtotalAfterDiscount >= freeShippingThresholdJod
-        ? 0
-        : baseShippingJod
-      : 0;
-
+    const shipping = items.length ? (freeShippingThresholdJod > 0 && subtotalAfterDiscount >= freeShippingThresholdJod ? 0 : baseShippingJod) : 0;
     const total = Number((subtotalAfterDiscount + shipping).toFixed(2));
     return { subtotal, discount, subtotalAfterDiscount, shipping, total };
   }, [items, selectedPromo, freeShippingThresholdJod, baseShippingJod]);
 
   const freeShippingRemaining = Math.max(0, freeShippingThresholdJod - totals.subtotalAfterDiscount);
-
-  const showAutoAvailability = !promoOpen && discountMode !== "CODE";
-
-  // ✅ declare ONCE (fixes redeclare error)
-  const shouldShowPromoMsg =
-    Boolean(promoMsg) && !(showAutoAvailability && promoMsg === COPY.autoUnavailable);
+  const freeShippingProgress = freeShippingThresholdJod > 0
+    ? Math.max(0, Math.min(100, (totals.subtotalAfterDiscount / freeShippingThresholdJod) * 100))
+    : 100;
 
   function validate() {
     if (!items.length) {
@@ -294,52 +370,7 @@ export default function CheckoutClient() {
   }
 
   async function applyPromoCode() {
-    const code = promoInput.trim().toUpperCase();
-    if (!code) return;
-
-    setPromoBusy(true);
-    setPromoMsg(null);
-
-    try {
-      const res = await fetch("/api/promotions/validate", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          mode: "CODE",
-          promoCode: code,
-          locale,
-          items: items.map((i) => ({ slug: i.slug, qty: i.qty, variantId: i.variantId })),
-        }),
-      });
-
-      const data: unknown = await res.json().catch(() => null);
-
-      if (!res.ok || !isRecord(data) || data.ok !== true || !isRecord(data.promo)) {
-        const message = isRecord(data) && typeof data.error === "string" ? data.error : isAr ? "كود غير صالح" : "Invalid code";
-        throw new Error(message);
-      }
-
-      const promo = data.promo;
-
-      const titleAr = getStr(promo, "titleAr");
-      const titleEn = getStr(promo, "titleEn");
-      const title = isAr ? (titleAr || titleEn || code) : (titleEn || titleAr || code);
-
-      setSelectedPromo({
-        mode: "CODE",
-        code,
-        title,
-        discountJod: getNum(promo, "discountJod") ?? 0,
-      });
-
-      setDiscountMode("CODE");
-      setPromoMsg(COPY.promoApplied);
-      setPromoOpen(false);
-    } catch (error: unknown) {
-      setPromoMsg(errMsg(error));
-    } finally {
-      setPromoBusy(false);
-    }
+    await runPromoValidation(promoInput);
   }
 
   function removePromoCode() {
@@ -350,6 +381,11 @@ export default function CheckoutClient() {
     setPromoInput("");
     setPromoMsg(null);
     setPromoOpen(false);
+    try {
+      window.localStorage.removeItem(PROMO_CODE_STORAGE_KEY);
+    } catch {
+      // no-op
+    }
   }
 
   async function createOrder(paymentMethod: "PAYTABS" | "COD") {
@@ -416,8 +452,9 @@ export default function CheckoutClient() {
       }
 
       const redirectUrl =
-        (getStr(data, "redirectUrl") || "").trim() ||
-        (getStr(data, "redirect_url") || "").trim();
+        (isObject(data) && typeof data.redirectUrl === "string" && data.redirectUrl)
+        || (isObject(data) && typeof data.redirect_url === "string" && data.redirect_url)
+        || "";
 
       if (!redirectUrl) throw new Error("PayTabs redirect URL missing");
 
@@ -527,54 +564,50 @@ export default function CheckoutClient() {
             </div>
 
             <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={() => {
-                  setPromoOpen((v) => !v);
-                  setPromoMsg(null);
-                }}
-              >
+              <button type="button" className="btn btn-outline" onClick={() => { setPromoOpen((v) => !v); setPromoMsg(null); }}>
                 {COPY.havePromo}
               </button>
 
               {totals.subtotalAfterDiscount > 0 ? (
-                freeShippingRemaining <= 0 ? (
-                  <p className="muted" style={{ margin: 0 }}>
-                    <strong>{COPY.freeShippingReached}</strong>
-                  </p>
-                ) : (
-                  <p className="muted" style={{ margin: 0 }}>
-                    {COPY.freeShippingRemaining.replace("{{amount}}", freeShippingRemaining.toFixed(2))}
-                  </p>
-                )
-              ) : null}
-
-              {showAutoAvailability ? (
-                autoPromoCandidate ? (
-                  <p className="muted" style={{ margin: 0 }}>
-                    {COPY.autoAvailable}: <strong>{autoPromoCandidate.discountJod.toFixed(2)} JOD</strong>
-                  </p>
-                ) : (
-                  <p className="muted" style={{ margin: 0 }}>
-                    {COPY.autoUnavailable}
-                  </p>
-                )
+                <>
+                  <div
+                    aria-hidden
+                    style={{
+                      height: 8,
+                      borderRadius: 999,
+                      background: "#ececec",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${freeShippingProgress.toFixed(1)}%`,
+                        height: "100%",
+                        background: "linear-gradient(90deg,#141414,#3a3228)",
+                        transition: "width 180ms ease",
+                      }}
+                    />
+                  </div>
+                  <p className="muted" style={{ margin: 0 }}>{COPY.freeShippingThreshold.replace("{{amount}}", freeShippingThresholdJod.toFixed(2))}</p>
+                  {freeShippingRemaining <= 0 ? (
+                    <p className="muted" style={{ margin: 0 }}><strong>{COPY.freeShippingReached}</strong></p>
+                  ) : (
+                    <p className="muted" style={{ margin: 0 }}>{COPY.freeShippingRemaining.replace("{{amount}}", freeShippingRemaining.toFixed(2))}</p>
+                  )}
+                </>
               ) : null}
 
               {promoOpen ? (
                 <>
-                  <label htmlFor="promo-code" className="muted" style={{ fontSize: 13 }}>
-                    {COPY.promoLabel}
-                  </label>
-                  <div style={{ display: "flex", gap: 8 }}>
+                  <label htmlFor="promo-code" className="muted" style={{ fontSize: 13 }}>{COPY.promoLabel}</label>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <input
                       id="promo-code"
                       className="input"
                       value={promoInput}
                       onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
                       placeholder={COPY.promoPlaceholder}
-                      disabled={false}
+                      disabled={promoBusy}
                     />
                     <button className="btn btn-outline" type="button" disabled={promoBusy || !promoInput.trim()} onClick={applyPromoCode}>
                       {COPY.promoApply}
@@ -610,7 +643,7 @@ export default function CheckoutClient() {
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span className="muted">{COPY.shipping}</span>
-                <strong>{totals.shipping.toFixed(2)} JOD</strong>
+                <strong>{totals.shipping <= 0 ? COPY.shippingFree : `${totals.shipping.toFixed(2)} JOD`}</strong>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 18 }}>
                 <span>{COPY.total}</span>
