@@ -134,9 +134,9 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
                 else null
               end
             )::text as discounted_price_jod,
-            coalesce(p.wear_times, "{}"::text[]) as wear_times,
-            coalesce(p.seasons, "{}"::text[]) as seasons,
-            coalesce(p.audiences, "{}"::text[]) as audiences
+            coalesce(p.wear_times, '{}'::text[]) as wear_times,
+            coalesce(p.seasons, '{}'::text[]) as seasons,
+            coalesce(p.audiences, '{}'::text[]) as audiences
        from products p
        left join lateral (
          select min(v.price_jod) as min_variant_price_jod
