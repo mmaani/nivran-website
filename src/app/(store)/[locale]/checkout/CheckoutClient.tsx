@@ -62,6 +62,7 @@ export default function CheckoutClient() {
   const [promoOpen, setPromoOpen] = useState(false);
   const [discountMode, setDiscountMode] = useState<DiscountMode>("NONE");
   const [selectedPromo, setSelectedPromo] = useState<PromoState | null>(null);
+  const [autoPromoCandidate, setAutoPromoCandidate] = useState<PromoState | null>(null);
   const [promoBusy, setPromoBusy] = useState(false);
   const [freeShippingThresholdJod, setFreeShippingThresholdJod] = useState(35);
   const [baseShippingJod, setBaseShippingJod] = useState(3.5);
@@ -182,6 +183,7 @@ export default function CheckoutClient() {
     if (!items.length) {
       setDiscountMode("NONE");
       setSelectedPromo(null);
+      setAutoPromoCandidate(null);
       return;
     }
   }, [items]);
@@ -215,6 +217,9 @@ export default function CheckoutClient() {
 
   const freeShippingRemaining = Math.max(0, freeShippingThresholdJod - totals.subtotalAfterDiscount);
   const shouldShowPromoMsg = Boolean(promoMsg);
+
+  const showAutoAvailability = !promoOpen && discountMode !== "CODE";
+  const shouldShowPromoMsg = Boolean(promoMsg) && !(promoMsg === COPY.autoUnavailable && showAutoAvailability);
 
   function validate() {
     if (!items.length) {
@@ -437,6 +442,14 @@ export default function CheckoutClient() {
                 ) : (
                   <p className="muted" style={{ margin: 0 }}>{COPY.freeShippingRemaining.replace("{{amount}}", freeShippingRemaining.toFixed(2))}</p>
                 )
+              ) : null}
+
+              {showAutoAvailability ? autoPromoCandidate ? (
+                <p className="muted" style={{ margin: 0 }}>
+                  {COPY.autoAvailable}: <strong>{autoPromoCandidate.discountJod.toFixed(2)} JOD</strong>
+                </p>
+              ) : (
+                <p className="muted" style={{ margin: 0 }}>{COPY.autoUnavailable}</p>
               ) : null}
 
               {promoOpen ? (
