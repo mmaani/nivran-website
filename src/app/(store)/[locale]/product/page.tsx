@@ -1,7 +1,10 @@
-import SafeImg from "@/components/SafeImg";
-import AddToCartButton from "@/components/AddToCartButton";
-import { db } from "@/lib/db";
+import ProductGridClient from "./ProductGridClient";
+import { db, isDbConnectivityError } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
+import {
+  fallbackCatalogRows,
+  fallbackCategories,
+} from "@/lib/catalogFallback";
 
 type CategoryRow = {
   key: string;
@@ -33,6 +36,20 @@ type ProductRow = {
   wear_times: string[];
   seasons: string[];
   audiences: string[];
+};
+
+type CampaignRow = {
+  id: number;
+  promo_kind: "AUTO" | "CODE" | string;
+  title_en: string | null;
+  title_ar: string | null;
+  discount_type: "PERCENT" | "FIXED" | null;
+  discount_value: string | null;
+  ends_at: string | null;
+  starts_at: string | null;
+  min_order_jod: string | null;
+  category_keys: string[] | null;
+  product_slugs: string[] | null;
 };
 
 const FALLBACK_CATS: Record<string, { en: string; ar: string }> = {
@@ -70,12 +87,6 @@ function tagLabel(locale: "en" | "ar", value: string): string {
   return (map[key] || { en: value, ar: value })[locale];
 }
 
-function promoBadgeText(locale: "en" | "ar", promoType: string | null, promoValue: number): string {
-  if (promoType === "PERCENT") {
-    return locale === "ar" ? `AUTO • وفر ${promoValue}%` : `AUTO • Save ${promoValue}%`;
-  }
-  return locale === "ar" ? `AUTO • وفر ${promoValue.toFixed(2)} د.أ` : `AUTO • Save ${promoValue.toFixed(2)} JOD`;
-}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -85,16 +96,22 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
   const locale = rawLocale === "ar" ? "ar" : "en";
   const isAr = locale === "ar";
 
-  await ensureCatalogTables();
+  let categoriesRows: CategoryRow[] = [];
+  let productRows: ProductRow[] = [];
+  let campaignRows: CampaignRow[] = [];
 
-  const categoriesRes = await db.query<CategoryRow>(
+  try {
+    await ensureCatalogTables();
+
+    const categoriesRes = await db.query<CategoryRow>(
     `select key, name_en, name_ar, is_active, is_promoted, sort_order
        from categories
       where is_active=true
       order by sort_order asc, key asc`
-  );
+    );
+    categoriesRows = categoriesRes.rows;
 
-  const productsRes = await db.query<ProductRow>(
+    const productsRes = await db.query<ProductRow>(
     `select p.id,
             p.slug,
             p.name_en,
@@ -125,9 +142,9 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
                 else null
               end
             )::text as discounted_price_jod,
-            coalesce(p.wear_times, "{}"::text[]) as wear_times,
-            coalesce(p.seasons, "{}"::text[]) as seasons,
-            coalesce(p.audiences, "{}"::text[]) as audiences
+            coalesce(p.wear_times, '{}'::text[]) as wear_times,
+            coalesce(p.seasons, '{}'::text[]) as seasons,
+            coalesce(p.audiences, '{}'::text[]) as audiences
        from products p
        left join lateral (
          select min(v.price_jod) as min_variant_price_jod
@@ -163,17 +180,88 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
       where p.is_active=true
       order by p.created_at desc
       limit 500`
-  );
+    );
+    productRows = productsRes.rows;
 
-  const cats: Array<{ key: string; label: string }> = categoriesRes.rows.length
-    ? categoriesRes.rows.map((c) => ({ key: c.key, label: locale === "ar" ? c.name_ar : c.name_en }))
+    const campaignsRes = await db.query<CampaignRow>(
+      `select id, promo_kind, title_en, title_ar, discount_type, discount_value::text,
+              ends_at::text as ends_at, starts_at::text as starts_at, min_order_jod::text as min_order_jod,
+              category_keys, product_slugs
+         from promotions
+        where is_active=true
+          and (starts_at is null or starts_at <= now())
+          and (ends_at is null or ends_at >= now())
+        order by priority desc, created_at desc
+        limit 8`
+    );
+    campaignRows = campaignsRes.rows;
+  } catch (error: unknown) {
+    if (!isDbConnectivityError(error)) throw error;
+
+    categoriesRows = fallbackCategories();
+    productRows = fallbackCatalogRows();
+    campaignRows = [];
+    console.warn("[catalog] Falling back to static product catalog due to DB connectivity issue.");
+  }
+
+  const cats: Array<{ key: string; label: string }> = categoriesRows.length
+    ? categoriesRows.map((c) => ({ key: c.key, label: locale === "ar" ? c.name_ar : c.name_en }))
     : Object.entries(FALLBACK_CATS).map(([key, v]) => ({ key, label: v[locale] }));
 
   const catLabel = (key: string) => {
-    const found = categoriesRes.rows.find((c) => c.key === key);
+    const found = categoriesRows.find((c) => c.key === key);
     if (found) return locale === "ar" ? found.name_ar : found.name_en;
     return (FALLBACK_CATS[key] || { en: key, ar: key })[locale];
   };
+
+
+
+  const campaignCards = campaignRows.map((c) => ({
+    id: c.id,
+    title: (isAr ? c.title_ar : c.title_en) || (isAr ? "عرض خاص" : "Special campaign"),
+    badge: c.discount_type === "PERCENT"
+      ? (isAr ? `وفر ${Number(c.discount_value || 0)}%` : `Save ${Number(c.discount_value || 0)}%`)
+      : (isAr ? `وفر ${Number(c.discount_value || 0).toFixed(2)} د.أ` : `Save ${Number(c.discount_value || 0).toFixed(2)} JOD`),
+    endsAt: c.ends_at,
+    minOrderJod: Number(c.min_order_jod || 0),
+  }));
+
+  const productCards = productRows.map((p) => {
+    const name = isAr ? p.name_ar : p.name_en;
+    const desc = (isAr ? p.description_ar : p.description_en) || "";
+    const baseFromPrice = Number(p.min_variant_price_jod || p.price_jod || 0);
+    const defaultVariantId = typeof p.default_variant_id === "number" && Number.isFinite(p.default_variant_id) ? p.default_variant_id : null;
+    const defaultVariantLabel = p.default_variant_label ? String(p.default_variant_label) : "";
+    const defaultVariantPrice = Number(p.default_variant_price_jod || p.price_jod || 0);
+    const discounted = p.discounted_price_jod != null ? Number(p.discounted_price_jod) : null;
+    const promoValue = Number(p.promo_value || 0);
+    const hasPromo = discounted != null && discounted < baseFromPrice;
+
+    const apiSrc = p.image_id ? `/api/catalog/product-image/${p.image_id}` : "";
+    const fallbackSrc = fallbackFromSlug(p.slug);
+
+    const tags = [...p.wear_times, ...p.seasons, ...p.audiences].map((chip) => tagLabel(locale, chip));
+
+    return {
+      slug: p.slug,
+      name,
+      description: desc,
+      categoryKey: p.category_key,
+      categoryLabel: catLabel(p.category_key),
+      inventoryQty: Number(p.inventory_qty || 0),
+      fromPrice: baseFromPrice,
+      defaultVariantId,
+      defaultVariantLabel,
+      defaultVariantPrice,
+      hasPromo,
+      promoType: p.promo_type,
+      promoValue,
+      discountedPrice: discounted,
+      imageSrc: apiSrc || fallbackSrc,
+      fallbackSrc,
+      tags,
+    };
+  });
 
   return (
     <div style={{ padding: "1.2rem 0" }}>
@@ -192,116 +280,14 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
         ))}
       </div>
 
-      <div className="grid-3">
-        {productsRes.rows.map((p) => {
-          const name = isAr ? p.name_ar : p.name_en;
-          const desc = isAr ? p.description_ar : p.description_en;
-          const baseFromPrice = Number(p.min_variant_price_jod || p.price_jod || 0);
-          const price = baseFromPrice;
-          const defaultVariantId = typeof p.default_variant_id === "number" && Number.isFinite(p.default_variant_id) ? p.default_variant_id : null;
-          const defaultVariantLabel = p.default_variant_label ? String(p.default_variant_label) : "";
-          const defaultVariantPrice = Number(p.default_variant_price_jod || p.price_jod || 0);
-          const discounted = p.discounted_price_jod != null ? Number(p.discounted_price_jod) : null;
-          const promoValue = Number(p.promo_value || 0);
-          const hasPromo = discounted != null && discounted < price;
-          const outOfStock = Number(p.inventory_qty || 0) <= 0;
+      <ProductGridClient
+        locale={locale}
+        categories={cats}
+        products={productCards}
+        campaigns={campaignCards}
+      />
 
-          const apiSrc = p.image_id ? `/api/catalog/product-image/${p.image_id}` : "";
-          const fallbackSrc = fallbackFromSlug(p.slug);
-          const imgSrc = apiSrc || fallbackSrc;
-
-          return (
-            <article key={p.slug} className="panel">
-              <p className="muted" style={{ marginTop: 0 }}>
-                {catLabel(p.category_key)}
-                {outOfStock ? (isAr ? " · غير متوفر" : " · Out of stock") : ""}
-              </p>
-
-              <div
-                style={{
-                  position: "relative",
-                  width: "100%",
-                  aspectRatio: "4 / 3",
-                  overflow: "hidden",
-                  borderRadius: 14,
-                  marginBottom: 10,
-                  background: "#f7f7f8",
-                  border: "1px solid #eee",
-                }}
-              >
-                <SafeImg
-                  src={imgSrc}
-                  fallbackSrc={fallbackSrc}
-                  alt={name}
-                  style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
-                  loading="lazy"
-                />
-                {hasPromo ? (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: 10,
-                      insetInlineStart: 10,
-                      background: "linear-gradient(135deg, #141414, #2a2622)",
-                      color: "#fff",
-                      fontSize: 12,
-                      fontWeight: 700,
-                      padding: "6px 10px",
-                      borderRadius: 999,
-                    }}
-                  >
-                    {promoBadgeText(locale, p.promo_type, promoValue)}
-                  </div>
-                ) : null}
-              </div>
-
-              <h3 style={{ margin: "0 0 .35rem" }}>{name}</h3>
-              {desc ? <p className="muted">{desc}</p> : null}
-
-              <p style={{ marginBottom: 4 }}>
-                <strong>{isAr ? `ابتداءً من ${price.toFixed(2)} JOD` : `From ${price.toFixed(2)} JOD`}</strong>
-              </p>
-              <p className="muted" style={{ marginTop: 0 }}>
-                {hasPromo
-                  ? isAr
-                    ? `السعر الحالي (${defaultVariantLabel || "Default"}): ${discounted.toFixed(2)} JOD`
-                    : `Current price (${defaultVariantLabel || "Default"}): ${discounted.toFixed(2)} JOD`
-                  : isAr
-                    ? `السعر الحالي (${defaultVariantLabel || "Default"}): ${defaultVariantPrice.toFixed(2)} JOD`
-                    : `Current price (${defaultVariantLabel || "Default"}): ${defaultVariantPrice.toFixed(2)} JOD`}
-              </p>
-
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
-                {[...p.wear_times, ...p.seasons, ...p.audiences].slice(0, 2).map((chip) => (
-                  <span key={`${p.slug}-${chip}`} className="badge" style={{ fontSize: 11, padding: "2px 8px" }}>{tagLabel(locale, chip)}</span>
-                ))}
-              </div>
-
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
-                <a className="btn" href={`/${locale}/product/${p.slug}`}>
-                  {isAr ? "عرض المنتج" : "View product"}
-                </a>
-
-                <AddToCartButton
-                  locale={locale}
-                  slug={p.slug}
-                  name={name}
-                  variantId={defaultVariantId}
-                  variantLabel={defaultVariantLabel}
-                  priceJod={defaultVariantPrice}
-                  label={outOfStock ? (isAr ? "غير متوفر" : "Out of stock") : (isAr ? "أضف إلى السلة" : "Add to cart")}
-                  addedLabel={isAr ? "تمت الإضافة ✓" : "Added ✓"}
-                  updatedLabel={isAr ? "تم التحديث ✓" : "Updated ✓"}
-                  className={"btn btn-outline" + (outOfStock ? " btn-disabled" : "")}
-                  disabled={outOfStock}
-                />
-              </div>
-            </article>
-          );
-        })}
-      </div>
-
-      {productsRes.rows.length === 0 ? (
+      {productRows.length === 0 ? (
         <p className="muted" style={{ marginTop: 14 }}>
           {isAr ? "لا توجد منتجات بعد. أضف المنتجات من لوحة الإدارة." : "No products yet. Add products from Admin."}
         </p>
