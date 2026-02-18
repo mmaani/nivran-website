@@ -59,6 +59,7 @@ export default function CheckoutClient() {
   const [notes, setNotes] = useState("");
 
   const [promoInput, setPromoInput] = useState("");
+  const [promoOpen, setPromoOpen] = useState(false);
   const [discountMode, setDiscountMode] = useState<DiscountMode>("NONE");
   const [selectedPromo, setSelectedPromo] = useState<PromoState | null>(null);
   const [promoBusy, setPromoBusy] = useState(false);
@@ -94,6 +95,8 @@ export default function CheckoutClient() {
       notes: isAr ? "ملاحظات" : "Notes",
       placed: isAr ? "تم إنشاء الطلب." : "Order created.",
       promoLabel: isAr ? "كود الخصم" : "Promo code",
+      havePromo: isAr ? "لديك كود خصم؟" : "Have a promo code?",
+      useCodeInstead: isAr ? "استخدم كود خصم بدلاً من العرض التلقائي" : "Use a promo code instead",
       promoPlaceholder: isAr ? "أدخل الكود" : "Enter code",
       promoApply: isAr ? "تطبيق" : "Apply",
       promoRemove: isAr ? "إزالة" : "Remove",
@@ -135,7 +138,7 @@ export default function CheckoutClient() {
         const prodName = isAr ? toStr(prod.name_ar || prod.name_en || slug) : toStr(prod.name_en || prod.name_ar || slug);
         const price = toNum(prod.price_jod);
 
-        setItems([{ slug, name: prodName, priceJod: price, qty: 1 }]);
+        setItems([{ slug, variantId: toNum(prod.variant_id) || null, variantLabel: toStr(prod.variant_label), name: prodName, priceJod: price, qty: 1 }]);
       })
       .finally(() => {
         if (!cancelled) setLoadingBuyNow(false);
@@ -157,7 +160,7 @@ export default function CheckoutClient() {
       const res = await fetch("/api/promotions/validate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mode: "AUTO", locale, items: items.map((i) => ({ slug: i.slug, qty: i.qty })) }),
+        body: JSON.stringify({ mode: "AUTO", locale, items: items.map((i) => ({ slug: i.slug, qty: i.qty, variantId: i.variantId })) }),
       });
 
       const data: unknown = await res.json().catch(() => null);
@@ -177,6 +180,7 @@ export default function CheckoutClient() {
       if (discountMode !== "CODE") {
         setSelectedPromo(nextAuto);
         setDiscountMode("AUTO");
+        setPromoOpen(false);
       }
     }
 
@@ -214,7 +218,7 @@ export default function CheckoutClient() {
       const res = await fetch("/api/promotions/validate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mode: "CODE", promoCode: code, locale, items: items.map((i) => ({ slug: i.slug, qty: i.qty })) }),
+        body: JSON.stringify({ mode: "CODE", promoCode: code, locale, items: items.map((i) => ({ slug: i.slug, qty: i.qty, variantId: i.variantId })) }),
       });
       const data: unknown = await res.json().catch(() => null);
       if (!res.ok || !isObject(data) || data.ok !== true || !isObject(data.promo)) {
@@ -244,6 +248,7 @@ export default function CheckoutClient() {
     }
     setPromoInput("");
     setPromoMsg(null);
+    setPromoOpen(false);
   }
 
   function toggleAutoPromo() {
@@ -267,7 +272,7 @@ export default function CheckoutClient() {
       paymentMethod,
       discountMode,
       promoCode: discountMode === "CODE" ? selectedPromo?.code || undefined : undefined,
-      items: items.map((i) => ({ slug: i.slug, qty: i.qty })),
+      items: items.map((i) => ({ slug: i.slug, qty: i.qty, variantId: i.variantId })),
       customer: { name, phone, email },
       shipping: { city, address, country: "Jordan", notes },
     };
@@ -399,11 +404,11 @@ export default function CheckoutClient() {
 
             <div style={{ display: "grid", gap: 10 }}>
               {items.map((i) => (
-                <div key={i.slug} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                <div key={`${i.slug}::${i.variantId ?? "base"}`} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                   <div style={{ flex: 1 }}>
                     <strong>{i.name}</strong>
                     <div className="muted" style={{ marginTop: 4 }}>{i.qty} × {Number(i.priceJod || 0).toFixed(2)} JOD</div>
-                    <div className="muted" style={{ marginTop: 2 }}>{i.slug}</div>
+                    <div className="muted" style={{ marginTop: 2 }}>{i.variantLabel ? `${i.slug} · ${i.variantLabel}` : i.slug}</div>
                   </div>
                   <div style={{ minWidth: 120, textAlign: "end" }}>
                     <strong>{(Number(i.priceJod || 0) * Number(i.qty || 1)).toFixed(2)} JOD</strong>
@@ -413,30 +418,44 @@ export default function CheckoutClient() {
             </div>
 
             <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <span className="muted">{COPY.autoPromo}</span>
                 <button className="btn btn-outline" type="button" onClick={toggleAutoPromo} disabled={discountMode === "CODE"}>
                   {discountMode === "AUTO" ? COPY.removeAutoPromo : COPY.useAutoPromo}
                 </button>
               </div>
 
-              <label htmlFor="promo-code" className="muted" style={{ fontSize: 13 }}>{COPY.promoLabel}</label>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  id="promo-code"
-                  className="input"
-                  value={promoInput}
-                  onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
-                  placeholder={COPY.promoPlaceholder}
-                  disabled={discountMode === "AUTO"}
-                />
-                <button className="btn btn-outline" type="button" disabled={promoBusy || !promoInput.trim() || discountMode === "AUTO"} onClick={applyPromoCode}>
-                  {COPY.promoApply}
+              {discountMode === "AUTO" ? (
+                <button type="button" className="btn btn-outline" onClick={() => { setPromoOpen(true); setDiscountMode("NONE"); setSelectedPromo(null); }}>
+                  {COPY.useCodeInstead}
                 </button>
-                {selectedPromo?.mode === "CODE" ? (
-                  <button className="btn" type="button" onClick={removePromoCode}>{COPY.promoRemove}</button>
-                ) : null}
-              </div>
+              ) : (
+                <button type="button" className="btn btn-outline" onClick={() => setPromoOpen((v) => !v)}>
+                  {COPY.havePromo}
+                </button>
+              )}
+
+              {promoOpen ? (
+                <>
+                  <label htmlFor="promo-code" className="muted" style={{ fontSize: 13 }}>{COPY.promoLabel}</label>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input
+                      id="promo-code"
+                      className="input"
+                      value={promoInput}
+                      onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                      placeholder={COPY.promoPlaceholder}
+                      disabled={discountMode === "AUTO"}
+                    />
+                    <button className="btn btn-outline" type="button" disabled={promoBusy || !promoInput.trim() || discountMode === "AUTO"} onClick={applyPromoCode}>
+                      {COPY.promoApply}
+                    </button>
+                    {selectedPromo?.mode === "CODE" ? (
+                      <button className="btn" type="button" onClick={removePromoCode}>{COPY.promoRemove}</button>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
               {promoMsg ? <p className="muted" style={{ margin: 0 }}>{promoMsg}</p> : null}
               {selectedPromo ? <p className="muted" style={{ margin: 0 }}>{selectedPromo.title}</p> : null}
             </div>

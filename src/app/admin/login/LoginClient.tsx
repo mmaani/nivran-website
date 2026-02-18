@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { readErrorMessage } from "@/lib/http-client";
-import { adminFetch, getStoredAdminToken, persistAdminToken, readAdminLangCookie } from "@/app/admin/_components/adminClient";
+import { adminFetch, readAdminLangCookie } from "@/app/admin/_components/adminClient";
 
 type Lang = "en" | "ar";
 
@@ -72,10 +72,6 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
-  React.useEffect(() => {
-    const saved = getStoredAdminToken();
-    if (saved) setToken(saved);
-  }, []);
 
   const safeNext = useMemo(() => {
     if (!nextPath || typeof nextPath !== "string") return "/admin";
@@ -104,7 +100,6 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
         throw new Error(lang === "ar" ? "فشل تسجيل الدخول" : "Login failed");
       }
 
-      persistAdminToken(token);
       router.replace(safeNext);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e || "");

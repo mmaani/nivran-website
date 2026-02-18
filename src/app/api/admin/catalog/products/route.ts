@@ -6,6 +6,10 @@ import { requireAdmin } from "@/lib/guards";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function pickMulti(form: FormData, key: string): string[] {
+  return form.getAll(key).map((v) => String(v || "").trim()).filter(Boolean);
+}
+
 function normalizeSlug(v: unknown) {
   return String(v || "")
     .trim()
@@ -35,6 +39,9 @@ export async function POST(req: Request) {
     const inventory = Math.max(0, Number(form.get("inventory_qty") || 0));
     const categoryKey = String(form.get("category_key") || "perfume").trim() || "perfume";
     const isActive = String(form.get("is_active") || "") === "on";
+    const wearTimes = pickMulti(form, "wear_times");
+    const seasons = pickMulti(form, "seasons");
+    const audiences = pickMulti(form, "audiences");
 
     if (!slug || !nameEn || !nameAr || !Number.isFinite(price) || price <= 0) {
       return NextResponse.redirect(new URL("/admin/catalog?error=invalid-product", req.url));
@@ -42,9 +49,9 @@ export async function POST(req: Request) {
 
     await db.query(
       `insert into products
-        (slug, slug_en, slug_ar, category_key, name_en, name_ar, description_en, description_ar, price_jod, compare_at_price_jod, inventory_qty, is_active)
+        (slug, slug_en, slug_ar, category_key, name_en, name_ar, description_en, description_ar, price_jod, compare_at_price_jod, inventory_qty, is_active, wear_times, seasons, audiences)
        values
-        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::text[],$14::text[],$15::text[])
        on conflict (slug) do update
          set slug_en=excluded.slug_en,
              slug_ar=excluded.slug_ar,
@@ -57,6 +64,9 @@ export async function POST(req: Request) {
              compare_at_price_jod=excluded.compare_at_price_jod,
              inventory_qty=excluded.inventory_qty,
              is_active=excluded.is_active,
+             wear_times=excluded.wear_times,
+             seasons=excluded.seasons,
+             audiences=excluded.audiences,
              updated_at=now()`,
       [
         slug,
@@ -71,6 +81,9 @@ export async function POST(req: Request) {
         compareAt ? Number(compareAt) : null,
         inventory,
         isActive,
+        wearTimes,
+        seasons,
+        audiences,
       ]
     );
   }
@@ -82,6 +95,9 @@ export async function POST(req: Request) {
     const inventory = Math.max(0, Number(form.get("inventory_qty") || 0));
     const categoryKey = String(form.get("category_key") || "").trim();
     const isActive = String(form.get("is_active") || "") === "on";
+    const wearTimes = pickMulti(form, "wear_times");
+    const seasons = pickMulti(form, "seasons");
+    const audiences = pickMulti(form, "audiences");
 
     if (id > 0) {
       await db.query(
@@ -91,9 +107,12 @@ export async function POST(req: Request) {
                inventory_qty=$4,
                category_key=coalesce(nullif($5,''), category_key),
                is_active=$6,
+               wear_times=$7::text[],
+               seasons=$8::text[],
+               audiences=$9::text[],
                updated_at=now()
          where id=$1`,
-        [id, price, compareAt ? Number(compareAt) : null, inventory, categoryKey, isActive]
+        [id, price, compareAt ? Number(compareAt) : null, inventory, categoryKey, isActive, wearTimes, seasons, audiences]
       );
     }
   }

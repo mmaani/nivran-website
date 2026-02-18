@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { adminFetch, clearPersistedAdminToken } from "@/app/admin/_components/adminClient";
+import { adminFetch } from "@/app/admin/_components/adminClient";
 
 function T({ en, ar }: { en: string; ar: string }) {
   return (
@@ -66,7 +66,6 @@ export default function AdminShell({
     try {
       await adminFetch("/api/admin/logout", { method: "POST" });
     } finally {
-      clearPersistedAdminToken();
       router.replace("/admin/login");
       router.refresh();
       setLoggingOut(false);
