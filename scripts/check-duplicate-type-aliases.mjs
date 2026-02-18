@@ -3,11 +3,38 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const CRITICAL_FILES = [
-  "src/app/admin/catalog/page.tsx",
+  // Storefront purchase flow (PLP/PDP/cart/checkout)
+  "src/app/(store)/[locale]/cart/CartClient.tsx",
   "src/app/(store)/[locale]/checkout/CheckoutClient.tsx",
   "src/app/(store)/[locale]/product/page.tsx",
+  "src/app/(store)/[locale]/product/ProductCatalogClient.tsx",
   "src/app/(store)/[locale]/product/[slug]/page.tsx",
+  "src/app/(store)/[locale]/product/[slug]/ProductPurchasePanel.tsx",
+  "src/components/AddToCartButton.tsx",
+
+  // Admin UX and auth-sensitive screens
+  "src/app/admin/catalog/page.tsx",
+  "src/app/admin/customers/page.tsx",
+  "src/app/admin/login/LoginClient.tsx",
+  "src/app/admin/_components/adminClient.ts",
+  "src/app/admin/_components/RequireAdmin.tsx",
+
+  // Critical API surfaces (catalog, variants, orders, promos)
+  "src/app/api/admin/catalog/products/route.ts",
+  "src/app/api/admin/catalog/variants/route.ts",
+  "src/app/api/admin/catalog/promotions/route.ts",
+  "src/app/api/admin/customers/export/route.ts",
+  "src/app/api/catalog/product/route.ts",
+  "src/app/api/catalog/product-by-slug/route.ts",
   "src/app/api/orders/route.ts",
+  "src/app/api/promotions/validate/route.ts",
+
+  // Core pricing/cart/catalog libs
+  "src/lib/cartStore.ts",
+  "src/lib/cartStore.server.ts",
+  "src/lib/catalog.ts",
+  "src/lib/orders.ts",
+  "src/lib/pricing.ts",
   "src/lib/promotions.ts",
 ];
 

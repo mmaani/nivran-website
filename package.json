@@ -8,7 +8,8 @@
     "start": "next start -p 3000",
     "lint": "next lint",
     "check:duplicate-types": "node scripts/check-duplicate-type-aliases.mjs",
-    "ci:guard": "pnpm check:duplicate-types"
+    "ci:guard": "pnpm check:duplicate-types",
+    "ci:guard:full": "pnpm check:duplicate-types && pnpm lint && pnpm build"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
