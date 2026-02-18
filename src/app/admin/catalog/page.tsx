@@ -400,7 +400,7 @@ export default async function AdminCatalogPage({
         <div><strong>{outOfStockCount}</strong><div className="muted">{isAr ? "نفدت الكمية" : "Out of stock"}</div></div>
         <div><strong>{data.promos.length}</strong><div className="muted">{isAr ? "العروض" : "Promotions"}</div></div>
         <div><strong>{variantsActive}</strong><div className="muted">{isAr ? "متغيرات مفعلة" : "Active variants"}</div></div>
-              <div><strong>{activeAutoPromos}</strong><div className="muted">{isAr ? "عروض تلقائية مفعلة" : "Active AUTO promos"}</div></div>
+        <div><strong>{activeAutoPromos}</strong><div className="muted">{isAr ? "عروض تلقائية مفعلة" : "Active AUTO promos"}</div></div>
         <div><strong>{activeCodePromos}</strong><div className="muted">{isAr ? "كوبونات مفعلة" : "Active CODE promos"}</div></div>
         <div><strong>{productsWithAutoPromo}</strong><div className="muted">{isAr ? "منتجات مشمولة بعرض تلقائي" : "Products covered by AUTO"}</div></div>
       </section>
