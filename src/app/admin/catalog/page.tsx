@@ -31,20 +31,6 @@ type ProductRow = {
   audiences: string[];
 };
 
-type VariantRow = {
-  id: number;
-  product_id: number;
-  product_slug: string;
-  product_name_en: string;
-  product_name_ar: string;
-  label: string;
-  size_ml: number | null;
-  price_jod: string;
-  compare_at_price_jod: string | null;
-  is_default: boolean;
-  is_active: boolean;
-  sort_order: number;
-};
 
 type VariantRow = {
   id: number;

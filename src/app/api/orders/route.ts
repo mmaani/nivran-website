@@ -60,6 +60,12 @@ function normalizeVariantId(v: unknown): number | null {
   return null;
 }
 
+function normalizeQty(v: unknown): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(1, Math.min(99, Math.trunc(n)));
+}
+
 async function fetchProductsBySlugs(slugs: string[]) {
   await ensureCatalogTables();
   const r = await db.query<ProductRow>(
@@ -71,16 +77,27 @@ async function fetchProductsBySlugs(slugs: string[]) {
   return r.rows || [];
 }
 
-function normalizeItems(items: unknown): { slug: string; qty: number; variantId: number | null }[] {
+function normalizeItems(
+  items: unknown
+): { slug: string; qty: number; variantId: number | null }[] {
   if (!Array.isArray(items)) return [];
-  return items
-    .map((x: IncomingItem) => ({
-      slug: String(x?.slug || "").trim(),
-      qty: Math.max(1, Math.min(99, Number(x?.qty || 1))),
-      variantId: Number.isFinite(Number(x?.variantId)) ? Number(x?.variantId) : null,
-    }))
-    .filter((x) => !!x.slug);
+
+  const arr = items as unknown[];
+
+  return arr
+    .map((raw) => {
+      const obj: Record<string, unknown> =
+        raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+
+      const slug = String(obj.slug ?? "").trim();
+      const qty = normalizeQty(obj.qty);
+      const variantId = normalizeVariantId(obj.variantId);
+
+      return { slug, qty, variantId };
+    })
+    .filter((x) => x.slug.length > 0);
 }
+
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -94,6 +111,7 @@ export async function POST(req: NextRequest) {
   if (!body) return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
 
   const locale = body.locale === "ar" ? "ar" : "en";
+
   const promoCode = String(body.promoCode || "").trim().toUpperCase();
   const discountMode = String(body.discountMode || "NONE").toUpperCase();
   const discountSource = discountMode === "AUTO" ? "AUTO" : discountMode === "CODE" ? "CODE" : null;
@@ -116,10 +134,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
-        error:
-          locale === "ar"
-            ? "الاسم والهاتف والعنوان والبريد الإلكتروني مطلوبة"
-            : "Missing required fields",
+        error: locale === "ar" ? "الاسم والهاتف والعنوان والبريد الإلكتروني مطلوبة" : "Missing required fields",
       },
       { status: 400 }
     );
@@ -128,7 +143,7 @@ export async function POST(req: NextRequest) {
   let items = normalizeItems(body.items);
 
   const legacySlug = String(body.productSlug || body.slug || "").trim();
-  const legacyQty = Math.max(1, Math.min(99, Number(body.qty || 1)));
+  const legacyQty = normalizeQty(body.qty);
 
   if (!items.length && legacySlug) {
     items = [{ slug: legacySlug, qty: legacyQty, variantId: null }];
@@ -154,24 +169,24 @@ export async function POST(req: NextRequest) {
   const productBySlug = new Map<string, ProductRow>();
   for (const p of products) productBySlug.set(String(p.slug), p);
 
-  // Fetch explicit variants (if variantId provided)
-  const variantIds = Array.from(
-    new Set(items.map((i) => i.variantId).filter((id): id is number => typeof id === "number"))
+  // 1) Fetch explicit variants (only where variantId is provided)
+  const explicitVariantIds = Array.from(
+    new Set(items.map((i) => i.variantId).filter((id): id is number => typeof id === "number" && id > 0))
   );
-  const variantMap = new Map<number, VariantRow>();
-  if (variantIds.length) {
+
+  const explicitVariantById = new Map<number, VariantRow>();
+  if (explicitVariantIds.length) {
     const vr = await db.query<VariantRow>(
       `select id, product_id, label, price_jod
          from product_variants
         where id = any($1::bigint[])
           and is_active = true`,
-      [variantIds]
+      [explicitVariantIds]
     );
-    for (const v of vr.rows || []) variantMap.set(v.id, v);
+    for (const v of vr.rows || []) explicitVariantById.set(Number(v.id), v);
   }
 
-  // Default ACTIVE variant fallback (used when variantId is omitted)
-  // This prevents bypassing variant pricing by omitting variantId.
+  // 2) Default ACTIVE variant fallback (used when variantId is omitted)
   const productIdsNeedingDefault: number[] = [];
   for (const it of items) {
     if (it.variantId != null) continue;
@@ -182,7 +197,6 @@ export async function POST(req: NextRequest) {
 
   const defaultVariantByProductId = new Map<number, VariantRow>();
   if (uniqueProductIdsNeedingDefault.length) {
-    // Uses DISTINCT ON to pick one deterministic default ACTIVE variant per product.
     const dr = await db.query<VariantRow>(
       `
       select distinct on (product_id)
@@ -199,25 +213,16 @@ export async function POST(req: NextRequest) {
       `,
       [uniqueProductIdsNeedingDefault]
     );
-
     for (const v of dr.rows || []) defaultVariantByProductId.set(Number(v.product_id), v);
   }
 
-  const variantIds = Array.from(new Set(items.map((i) => i.variantId).filter((id): id is number => typeof id === "number")));
-  const variantMap = new Map<number, VariantRow>();
-  if (variantIds.length) {
-    const vr = await db.query<VariantRow>(`select id, product_id, label, price_jod from product_variants where id = any($1::bigint[]) and is_active=true`, [variantIds]);
-    for (const v of vr.rows) variantMap.set(v.id, v);
-  }
-
+  // 3) Build order lines (always apply variant pricing if default exists)
   const lines: OrderLine[] = [];
+
   for (const it of items) {
     const p = productBySlug.get(it.slug);
     if (!p || !p.is_active) {
-      return NextResponse.json(
-        { ok: false, error: `Unknown or inactive product: ${it.slug}` },
-        { status: 400 }
-      );
+      return NextResponse.json({ ok: false, error: `Unknown or inactive product: ${it.slug}` }, { status: 400 });
     }
 
     let unit = Number(p.price_jod || 0);
@@ -225,39 +230,28 @@ export async function POST(req: NextRequest) {
     let variantLabel: string | null = null;
 
     if (it.variantId != null) {
-      const variant = variantMap.get(it.variantId);
-      if (!variant || Number(variant.product_id) !== Number(p.id)) {
-        return NextResponse.json(
-          { ok: false, error: `Invalid variant for product: ${it.slug}` },
-          { status: 400 }
-        );
+      const v = explicitVariantById.get(it.variantId);
+      if (!v || Number(v.product_id) !== Number(p.id)) {
+        return NextResponse.json({ ok: false, error: `Invalid variant for product: ${it.slug}` }, { status: 400 });
       }
-      unit = Number(variant.price_jod || 0);
-      chosenVariantId = variant.id;
-      variantLabel = String(variant.label || "");
+      unit = Number(v.price_jod || 0);
+      chosenVariantId = Number(v.id);
+      variantLabel = String(v.label || "");
     } else {
       const def = defaultVariantByProductId.get(Number(p.id));
       if (def) {
         unit = Number(def.price_jod || 0);
-        chosenVariantId = def.id;
+        chosenVariantId = Number(def.id);
         variantLabel = String(def.label || "");
       }
-      // else: keep product base price as final fallback
+      // else: keep product base price as fallback
     }
-    let unit = Number(p.price_jod || 0);
-    let variantLabel: string | null = null;
-    if (it.variantId) {
-      const variant = variantMap.get(it.variantId);
-      if (!variant || Number(variant.product_id) !== Number(p.id)) {
-        return NextResponse.json({ ok: false, error: `Invalid variant for product: ${it.slug}` }, { status: 400 });
-      }
-      unit = Number(variant.price_jod || 0);
-      variantLabel = String(variant.label || "");
-    }
+
     const qty = it.qty;
+
     lines.push({
       slug: it.slug,
-      variant_id: it.variantId ?? null,
+      variant_id: chosenVariantId,
       variant_label: variantLabel,
       name_en: String(p.name_en || it.slug),
       name_ar: String(p.name_ar || p.name_en || it.slug),
