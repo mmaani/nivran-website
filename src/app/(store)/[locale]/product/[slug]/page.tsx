@@ -1,5 +1,6 @@
 import ProductImageGallery from "./ProductImageGallery";
 import ProductPurchasePanel from "./ProductPurchasePanel";
+import SafeImg from "@/components/SafeImg";
 import { notFound } from "next/navigation";
 import { db, isDbConnectivityError } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
@@ -7,9 +8,33 @@ import {
   fallbackProductBySlug,
   localizedName,
   syntheticVariantId,
+  fallbackCatalogRows,
 } from "@/lib/catalogFallback";
 import { categoryLabels } from "@/lib/siteContent";
 import styles from "./page.module.css";
+
+
+
+function shuffle<T>(arr: T[]): T[] {
+  const clone = [...arr];
+  for (let i = clone.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = clone[i];
+    clone[i] = clone[j];
+    clone[j] = tmp;
+  }
+  return clone;
+}
+
+type RelatedProductRow = {
+  slug: string;
+  name_en: string;
+  name_ar: string;
+  category_key: string;
+  min_variant_price_jod: string | null;
+  price_jod: string;
+  image_id: number | null;
+};
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -170,6 +195,31 @@ export default async function ProductDetailPage({
     [product.id]
   );
 
+  const relatedRes = await db.query<RelatedProductRow>(
+    `select p.slug,
+            p.name_en,
+            p.name_ar,
+            p.category_key,
+            vm.min_variant_price_jod::text as min_variant_price_jod,
+            p.price_jod::text as price_jod,
+            (
+              select pi.id
+              from product_images pi
+              where pi.product_id=p.id
+              order by pi."position" asc, pi.id asc
+              limit 1
+            ) as image_id
+       from products p
+       left join lateral (
+         select min(v.price_jod) as min_variant_price_jod
+         from product_variants v
+         where v.product_id=p.id and v.is_active=true
+       ) vm on true
+      where p.is_active=true and p.slug <> $1
+      limit 120`,
+    [product.slug]
+  );
+
   const name = isAr ? product.name_ar : product.name_en;
   const desc = isAr ? product.description_ar : product.description_en;
   const catLabel = cat ? (isAr ? cat.name_ar : cat.name_en) : product.category_key;
@@ -197,6 +247,14 @@ export default async function ProductDetailPage({
 
   const imageUrls = imgs.rows.map((img) => `/api/catalog/product-image/${img.id}`);
   const fallbackSrc = fallbackFromSlug(product.slug);
+
+  const relatedPool = relatedRes.rows;
+  const sameCategory = shuffle(relatedPool.filter((r) => r.category_key === product.category_key)).slice(0, 2);
+  const used = new Set(sameCategory.map((r) => r.slug));
+  const differentCategory = shuffle(relatedPool.filter((r) => r.category_key !== product.category_key && !used.has(r.slug))).slice(0, 1);
+  for (const row of differentCategory) used.add(row.slug);
+  const fill = shuffle(relatedPool.filter((r) => !used.has(r.slug))).slice(0, Math.max(0, 3 - sameCategory.length - differentCategory.length));
+  const relatedProducts = [...sameCategory, ...differentCategory, ...fill].slice(0, 3);
 
   return (
     <div style={{ padding: "1.2rem 0" }}>
@@ -253,6 +311,40 @@ export default async function ProductDetailPage({
           />
         </div>
       </div>
+
+      {relatedProducts.length > 0 ? (
+        <section style={{ marginTop: 30 }}>
+          <h2 style={{ marginBottom: 10 }}>{isAr ? "منتجات مقترحة" : "Related products"}</h2>
+          <div className="grid-3">
+            {relatedProducts.map((r) => {
+              const rName = isAr ? r.name_ar : r.name_en;
+              const rPrice = Number(r.min_variant_price_jod || r.price_jod || 0);
+              const rImg = r.image_id ? `/api/catalog/product-image/${r.image_id}` : fallbackFromSlug(r.slug);
+              const rFallback = fallbackFromSlug(r.slug);
+              const rCategory = categoryLabels[r.category_key as keyof typeof categoryLabels]?.[locale] || r.category_key;
+
+              return (
+                <article key={r.slug} className="panel">
+                  <div style={{ position: "relative", width: "100%", aspectRatio: "4 / 3", borderRadius: 12, overflow: "hidden", border: "1px solid #eee", marginBottom: 10 }}>
+                    <SafeImg
+                      src={rImg}
+                      fallbackSrc={rFallback}
+                      alt={rName}
+                      style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+                      loading="lazy"
+                      sizes="(max-width: 900px) 100vw, 33vw"
+                    />
+                  </div>
+                  <p className="muted" style={{ marginTop: 0 }}>{rCategory}</p>
+                  <h3 style={{ margin: "0 0 .35rem" }}>{rName}</h3>
+                  <p style={{ marginTop: 0 }}><strong>{isAr ? `ابتداءً من ${rPrice.toFixed(2)} JOD` : `From ${rPrice.toFixed(2)} JOD`}</strong></p>
+                  <a className="btn" href={`/${locale}/product/${r.slug}`}>{isAr ? "عرض المنتج" : "View product"}</a>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
   } catch (error: unknown) {
@@ -279,6 +371,8 @@ export default async function ProductDetailPage({
       : [{ id: syntheticVariantId(fallback.slug), label: isAr ? "القياسي" : "Standard", priceJod: Number(fallback.priceJod || 0), compareAtPriceJod: null, isDefault: true }];
 
     const fallbackSrc = fallback.images?.[0] || fallbackFromSlug(fallback.slug);
+    const fallbackRelatedPool = fallbackCatalogRows().filter((item) => item.slug !== fallback.slug);
+    const fallbackRelated = shuffle(fallbackRelatedPool).slice(0, 3);
 
     return (
       <div style={{ padding: "1.2rem 0" }}>
@@ -304,6 +398,37 @@ export default async function ProductDetailPage({
             />
           </div>
         </div>
+
+        {fallbackRelated.length > 0 ? (
+          <section style={{ marginTop: 30 }}>
+            <h2 style={{ marginBottom: 10 }}>{isAr ? "منتجات مقترحة" : "Related products"}</h2>
+            <div className="grid-3">
+              {fallbackRelated.map((r) => {
+                const rName = locale === "ar" ? r.name_ar : r.name_en;
+                const rPrice = Number(r.min_variant_price_jod || r.price_jod || 0);
+                const rImage = fallbackFromSlug(r.slug);
+                return (
+                  <article key={r.slug} className="panel">
+                    <div style={{ position: "relative", width: "100%", aspectRatio: "4 / 3", borderRadius: 12, overflow: "hidden", border: "1px solid #eee", marginBottom: 10 }}>
+                      <SafeImg
+                        src={rImage}
+                        fallbackSrc={fallbackFromSlug(r.slug)}
+                        alt={rName}
+                        style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+                        loading="lazy"
+                        sizes="(max-width: 900px) 100vw, 33vw"
+                      />
+                    </div>
+                    <p className="muted" style={{ marginTop: 0 }}>{categoryLabels[r.category_key as keyof typeof categoryLabels]?.[locale] || r.category_key}</p>
+                    <h3 style={{ margin: "0 0 .35rem" }}>{rName}</h3>
+                    <p style={{ marginTop: 0 }}><strong>{isAr ? `ابتداءً من ${rPrice.toFixed(2)} JOD` : `From ${rPrice.toFixed(2)} JOD`}</strong></p>
+                    <a className="btn" href={`/${locale}/product/${r.slug}`}>{isAr ? "عرض المنتج" : "View product"}</a>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
       </div>
     );
   }

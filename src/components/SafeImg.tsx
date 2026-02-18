@@ -3,6 +3,12 @@
 import React, { useEffect, useState } from "react";
 import Image from "next/image";
 
+
+function shouldBypassOptimizer(src: string): boolean {
+  const value = String(src || "").trim();
+  return value.startsWith("/api/catalog/product-image/");
+}
+
 type Props = {
   src: string;
   fallbackSrc: string;
@@ -17,6 +23,7 @@ type Props = {
 
   /** If width/height are unknown, we auto-use `fill`. Provide `sizes` when possible. */
   sizes?: string;
+  unoptimized?: boolean;
 };
 
 export default function SafeImg({
@@ -29,6 +36,7 @@ export default function SafeImg({
   width,
   height,
   sizes,
+  unoptimized,
 }: Props) {
   const initial = (src && src.trim()) || (fallbackSrc && fallbackSrc.trim()) || "/placeholder.png";
   const [current, setCurrent] = useState(initial);
@@ -40,6 +48,7 @@ export default function SafeImg({
   }, [src, fallbackSrc]);
 
   const useFill = !(typeof width === "number" && typeof height === "number");
+  const bypassOptimizer = typeof unoptimized === "boolean" ? unoptimized : shouldBypassOptimizer(current);
 
   return (
     <Image
@@ -51,6 +60,7 @@ export default function SafeImg({
       {...(useFill
         ? { fill: true as const, sizes: sizes ?? "100vw" }
         : { width, height })}
+      unoptimized={bypassOptimizer}
       onError={() => {
         // Prevent infinite loop if fallback also fails
         if (current !== fallbackSrc && fallbackSrc) setCurrent(fallbackSrc);

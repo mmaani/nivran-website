@@ -1,5 +1,4 @@
-import SafeImg from "@/components/SafeImg";
-import AddToCartButton from "@/components/AddToCartButton";
+import ProductGridClient from "./ProductGridClient";
 import { db, isDbConnectivityError } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
 import {
@@ -74,12 +73,6 @@ function tagLabel(locale: "en" | "ar", value: string): string {
   return (map[key] || { en: value, ar: value })[locale];
 }
 
-function promoBadgeText(locale: "en" | "ar", promoType: string | null, promoValue: number): string {
-  if (promoType === "PERCENT") {
-    return locale === "ar" ? `AUTO • وفر ${promoValue}%` : `AUTO • Save ${promoValue}%`;
-  }
-  return locale === "ar" ? `AUTO • وفر ${promoValue.toFixed(2)} د.أ` : `AUTO • Save ${promoValue.toFixed(2)} JOD`;
-}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -192,6 +185,44 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
     return (FALLBACK_CATS[key] || { en: key, ar: key })[locale];
   };
 
+
+  const productCards = productRows.map((p) => {
+    const name = isAr ? p.name_ar : p.name_en;
+    const desc = (isAr ? p.description_ar : p.description_en) || "";
+    const baseFromPrice = Number(p.min_variant_price_jod || p.price_jod || 0);
+    const defaultVariantId = typeof p.default_variant_id === "number" && Number.isFinite(p.default_variant_id) ? p.default_variant_id : null;
+    const defaultVariantLabel = p.default_variant_label ? String(p.default_variant_label) : "";
+    const defaultVariantPrice = Number(p.default_variant_price_jod || p.price_jod || 0);
+    const discounted = p.discounted_price_jod != null ? Number(p.discounted_price_jod) : null;
+    const promoValue = Number(p.promo_value || 0);
+    const hasPromo = discounted != null && discounted < baseFromPrice;
+
+    const apiSrc = p.image_id ? `/api/catalog/product-image/${p.image_id}` : "";
+    const fallbackSrc = fallbackFromSlug(p.slug);
+
+    const tags = [...p.wear_times, ...p.seasons, ...p.audiences].map((chip) => tagLabel(locale, chip));
+
+    return {
+      slug: p.slug,
+      name,
+      description: desc,
+      categoryKey: p.category_key,
+      categoryLabel: catLabel(p.category_key),
+      inventoryQty: Number(p.inventory_qty || 0),
+      fromPrice: baseFromPrice,
+      defaultVariantId,
+      defaultVariantLabel,
+      defaultVariantPrice,
+      hasPromo,
+      promoType: p.promo_type,
+      promoValue,
+      discountedPrice: discounted,
+      imageSrc: apiSrc || fallbackSrc,
+      fallbackSrc,
+      tags,
+    };
+  });
+
   return (
     <div style={{ padding: "1.2rem 0" }}>
       <h1 className="title">{isAr ? "المتجر" : "Shop"}</h1>
@@ -209,114 +240,11 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
         ))}
       </div>
 
-      <div className="grid-3">
-        {productRows.map((p) => {
-          const name = isAr ? p.name_ar : p.name_en;
-          const desc = isAr ? p.description_ar : p.description_en;
-          const baseFromPrice = Number(p.min_variant_price_jod || p.price_jod || 0);
-          const price = baseFromPrice;
-          const defaultVariantId = typeof p.default_variant_id === "number" && Number.isFinite(p.default_variant_id) ? p.default_variant_id : null;
-          const defaultVariantLabel = p.default_variant_label ? String(p.default_variant_label) : "";
-          const defaultVariantPrice = Number(p.default_variant_price_jod || p.price_jod || 0);
-          const discounted = p.discounted_price_jod != null ? Number(p.discounted_price_jod) : null;
-          const promoValue = Number(p.promo_value || 0);
-          const hasPromo = discounted != null && discounted < price;
-          const outOfStock = Number(p.inventory_qty || 0) <= 0;
-
-          const apiSrc = p.image_id ? `/api/catalog/product-image/${p.image_id}` : "";
-          const fallbackSrc = fallbackFromSlug(p.slug);
-          const imgSrc = apiSrc || fallbackSrc;
-
-          return (
-            <article key={p.slug} className="panel">
-              <p className="muted" style={{ marginTop: 0 }}>
-                {catLabel(p.category_key)}
-                {outOfStock ? (isAr ? " · غير متوفر" : " · Out of stock") : ""}
-              </p>
-
-              <div
-                style={{
-                  position: "relative",
-                  width: "100%",
-                  aspectRatio: "4 / 3",
-                  overflow: "hidden",
-                  borderRadius: 14,
-                  marginBottom: 10,
-                  background: "#f7f7f8",
-                  border: "1px solid #eee",
-                }}
-              >
-                <SafeImg
-                  src={imgSrc}
-                  fallbackSrc={fallbackSrc}
-                  alt={name}
-                  style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
-                  loading="lazy"
-                />
-                {hasPromo ? (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: 10,
-                      insetInlineStart: 10,
-                      background: "linear-gradient(135deg, #141414, #2a2622)",
-                      color: "#fff",
-                      fontSize: 12,
-                      fontWeight: 700,
-                      padding: "6px 10px",
-                      borderRadius: 999,
-                    }}
-                  >
-                    {promoBadgeText(locale, p.promo_type, promoValue)}
-                  </div>
-                ) : null}
-              </div>
-
-              <h3 style={{ margin: "0 0 .35rem" }}>{name}</h3>
-              {desc ? <p className="muted">{desc}</p> : null}
-
-              <p style={{ marginBottom: 4 }}>
-                <strong>{isAr ? `ابتداءً من ${price.toFixed(2)} JOD` : `From ${price.toFixed(2)} JOD`}</strong>
-              </p>
-              <p className="muted" style={{ marginTop: 0 }}>
-                {hasPromo
-                  ? isAr
-                    ? `السعر الحالي (${defaultVariantLabel || "Default"}): ${discounted.toFixed(2)} JOD`
-                    : `Current price (${defaultVariantLabel || "Default"}): ${discounted.toFixed(2)} JOD`
-                  : isAr
-                    ? `السعر الحالي (${defaultVariantLabel || "Default"}): ${defaultVariantPrice.toFixed(2)} JOD`
-                    : `Current price (${defaultVariantLabel || "Default"}): ${defaultVariantPrice.toFixed(2)} JOD`}
-              </p>
-
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
-                {[...p.wear_times, ...p.seasons, ...p.audiences].slice(0, 2).map((chip) => (
-                  <span key={`${p.slug}-${chip}`} className="badge" style={{ fontSize: 11, padding: "2px 8px" }}>{tagLabel(locale, chip)}</span>
-                ))}
-              </div>
-
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
-                <a className="btn" href={`/${locale}/product/${p.slug}`}>
-                  {isAr ? "عرض المنتج" : "View product"}
-                </a>
-
-                <AddToCartButton
-                  locale={locale}
-                  slug={p.slug}
-                  name={name}
-                  variantId={defaultVariantId}
-                  variantLabel={defaultVariantLabel}
-                  priceJod={defaultVariantPrice}
-                  label={outOfStock ? (isAr ? "غير متوفر" : "Out of stock") : (isAr ? "أضف إلى السلة" : "Add to cart")}
-                  addedLabel={isAr ? "تمت الإضافة ✓" : "Added ✓"}
-                  updatedLabel={isAr ? "تم التحديث ✓" : "Updated ✓"}
-                  className={"btn btn-outline" + (outOfStock ? " btn-disabled" : "")}
-                  disabled={outOfStock}
-                />
-              </div>
-            </article>
-          );
-        })}
-      </div>
+      <ProductGridClient
+        locale={locale}
+        categories={cats}
+        products={productCards}
+      />
 
       {productRows.length === 0 ? (
         <p className="muted" style={{ marginTop: 14 }}>
