@@ -241,6 +241,9 @@ export default function CheckoutClient() {
     return { subtotal, discount, subtotalAfterDiscount, shipping, total };
   }, [items, selectedPromo]);
 
+  const showAutoAvailability = !promoOpen && discountMode !== "CODE";
+  const shouldShowPromoMsg = Boolean(promoMsg) && !(promoMsg === COPY.autoUnavailable && showAutoAvailability);
+
   function validate() {
     if (!items.length) {
       setErr(COPY.empty);
@@ -485,22 +488,22 @@ export default function CheckoutClient() {
               </div>
 
               {discountMode === "AUTO" ? (
-                <button type="button" className="btn btn-outline" onClick={() => { setPromoOpen(true); setDiscountMode("NONE"); setSelectedPromo(null); }}>
+                <button type="button" className="btn btn-outline" onClick={() => { setPromoOpen(true); setDiscountMode("NONE"); setSelectedPromo(null); setPromoMsg(null); }}>
                   {COPY.useCodeInstead}
                 </button>
               ) : (
-                <button type="button" className="btn btn-outline" onClick={() => setPromoOpen((v) => !v)}>
+                <button type="button" className="btn btn-outline" onClick={() => { setPromoOpen((v) => !v); setPromoMsg(null); }}>
                   {COPY.havePromo}
                 </button>
               )}
 
-              {autoPromoCandidate ? (
+              {showAutoAvailability ? autoPromoCandidate ? (
                 <p className="muted" style={{ margin: 0 }}>
                   {COPY.autoAvailable}: <strong>{autoPromoCandidate.discountJod.toFixed(2)} JOD</strong>
                 </p>
               ) : (
                 <p className="muted" style={{ margin: 0 }}>{COPY.autoUnavailable}</p>
-              )}
+              ) : null}
 
               {promoOpen ? (
                 <>
@@ -523,7 +526,7 @@ export default function CheckoutClient() {
                   </div>
                 </>
               ) : null}
-              {promoMsg ? <p className="muted" style={{ margin: 0 }}>{promoMsg}</p> : null}
+              {shouldShowPromoMsg ? <p className="muted" style={{ margin: 0 }}>{promoMsg}</p> : null}
               {selectedPromo ? (
                 <p className="muted" style={{ margin: 0 }}>
                   <strong>{selectedPromo.mode === "AUTO" ? "AUTO" : "CODE"}</strong> · {selectedPromo.title}
