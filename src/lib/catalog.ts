@@ -245,3 +245,43 @@ export async function ensureCatalogTables() {
   await db.query(`create index if not exists idx_product_variants_active on product_variants(product_id, is_active);`);
   await db.query(`create index if not exists idx_product_variants_sort on product_variants(product_id, sort_order asc, id asc);`);
 }
+
+
+function errorCodeOf(error: unknown): string {
+  if (!error || typeof error !== "object") return "";
+  const value = (error as { code?: unknown }).code;
+  return typeof value === "string" ? value : "";
+}
+
+function errorMessageOf(error: unknown): string {
+  if (error instanceof Error) return String(error.message || "");
+  return String(error || "");
+}
+
+export function isRecoverableCatalogSetupError(error: unknown): boolean {
+  const code = errorCodeOf(error);
+  const message = errorMessageOf(error).toLowerCase();
+
+  if (code === "42501" || code === "25006" || code === "28P01") return true; // permission denied, read-only, auth
+
+  return (
+    message.includes("permission denied")
+    || message.includes("must be owner")
+    || message.includes("read-only")
+    || message.includes("cannot execute")
+  );
+}
+
+export async function ensureCatalogTablesSafe(): Promise<{ ok: true } | { ok: false; reason: string }> {
+  try {
+    await ensureCatalogTables();
+    return { ok: true };
+  } catch (error: unknown) {
+    if (isRecoverableCatalogSetupError(error)) {
+      const reason = errorMessageOf(error).slice(0, 180);
+      console.warn(`[catalog] ensureCatalogTables skipped: ${reason}`);
+      return { ok: false, reason };
+    }
+    throw error;
+  }
+}
