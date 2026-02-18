@@ -2,11 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureCatalogTablesSafe } from "@/lib/catalog";
 import { requireAdmin } from "@/lib/guards";
-import {
-  catalogErrorRedirect,
-  catalogSavedRedirect,
-  catalogUnauthorizedRedirect,
-} from "../redirects";
+import { catalogErrorRedirect, catalogSavedRedirect, catalogUnauthorizedRedirect } from "../redirects";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +14,18 @@ function toBool(v: FormDataEntryValue | null): boolean {
 function toNum(v: FormDataEntryValue | null): number {
   const n = Number(v || 0);
   return Number.isFinite(n) ? n : 0;
+}
+
+async function hasDuplicateVariantLabel(productId: number, label: string, excludeId?: number): Promise<boolean> {
+  const params: Array<number | string> = [productId, label.trim().toLowerCase()];
+  let sql = `select id from product_variants where product_id=$1 and lower(label)=\$2`;
+  if (excludeId && excludeId > 0) {
+    params.push(excludeId);
+    sql += ` and id<>\$3`;
+  }
+  sql += ` limit 1`;
+  const found = await db.query<{ id: number }>(sql, params);
+  return Boolean(found.rows[0]);
 }
 
 export async function POST(req: Request) {
@@ -46,6 +54,9 @@ export async function POST(req: Request) {
 
       if (productId <= 0 || !label || price <= 0) {
         return catalogErrorRedirect(req, form, "invalid-variant");
+      }
+      if (await hasDuplicateVariantLabel(productId, label)) {
+        return catalogErrorRedirect(req, form, "duplicate-variant-label");
       }
 
       await db.withTransaction(async (trx) => {
@@ -83,6 +94,9 @@ export async function POST(req: Request) {
       const isDefault = toBool(form.get("is_default"));
 
       if (id > 0 && productId > 0 && label && price > 0) {
+        if (await hasDuplicateVariantLabel(productId, label, id)) {
+          return catalogErrorRedirect(req, form, "duplicate-variant-label");
+        }
         await db.withTransaction(async (trx) => {
           if (isDefault) {
             await trx.query(`update product_variants set is_default=false where product_id=$1`, [productId]);
@@ -111,6 +125,18 @@ export async function POST(req: Request) {
               sortOrder,
             ]
           );
+        });
+      }
+    }
+
+
+    if (action === "set-default") {
+      const id = Number(form.get("id") || 0);
+      const productId = Number(form.get("product_id") || 0);
+      if (id > 0 && productId > 0) {
+        await db.withTransaction(async (trx) => {
+          await trx.query(`update product_variants set is_default=false where product_id=$1`, [productId]);
+          await trx.query(`update product_variants set is_default=true, updated_at=now() where id=$1 and product_id=$2`, [id, productId]);
         });
       }
     }

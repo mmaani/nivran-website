@@ -21,6 +21,8 @@ type ProductRow = {
   slug: string;
   name_en: string;
   name_ar: string;
+  description_en: string | null;
+  description_ar: string | null;
   price_jod: string;
   compare_at_price_jod: string | null;
   inventory_qty: number;
@@ -96,12 +98,15 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
                 p.slug,
                 p.name_en,
                 p.name_ar,
+                p.description_en,
+                p.description_ar,
                 p.price_jod::text as price_jod,
                 p.compare_at_price_jod::text as compare_at_price_jod,
                 p.inventory_qty,
                 p.category_key,
                 p.is_active,
                 coalesce(i.image_count,0)::int as image_count,
+                coalesce(ap.auto_promo_count,0)::int as auto_promo_count,
                 coalesce(p.wear_times, '{}'::text[]) as wear_times,
                 coalesce(p.seasons, '{}'::text[]) as seasons,
                 coalesce(p.audiences, '{}'::text[]) as audiences
@@ -195,6 +200,7 @@ export default async function AdminCatalogPage({
   const saved = String(params.saved || "") === "1";
   const errorCode = String(params.error || "").trim();
   const variantError = errorCode === "invalid-variant";
+  const duplicateVariantLabelError = errorCode === "duplicate-variant-label";
   const uploaded = String(params.uploaded || "") === "1";
   const data = await loadCatalogPageData();
 
@@ -276,6 +282,9 @@ export default async function AdminCatalogPage({
   const productActive = data.products.filter((p) => p.is_active).length;
   const outOfStockCount = data.products.filter((p) => Number(p.inventory_qty || 0) <= 0).length;
   const variantsActive = data.variants.filter((v) => v.is_active).length;
+  const activeAutoPromos = data.promos.filter((r) => String(r.promo_kind || "CODE").toUpperCase() === "AUTO" && r.is_active).length;
+  const activeCodePromos = data.promos.filter((r) => String(r.promo_kind || "CODE").toUpperCase() === "CODE" && r.is_active).length;
+  const productsWithAutoPromo = data.products.filter((p) => Number(p.auto_promo_count || 0) > 0).length;
 
   const qProducts = String(params.qProducts || "").trim().toLowerCase();
   const qVariants = String(params.qVariants || "").trim().toLowerCase();
@@ -324,14 +333,29 @@ export default async function AdminCatalogPage({
     ? filteredVariants.filter((v) => v.product_id === selectedProduct.id)
     : [];
 
+  const selectedEditProductId = Number(params.productEditId || selectedProduct?.id || 0);
+  const selectedEditProduct = data.products.find((p) => p.id === selectedEditProductId) || null;
+
   const returnQuery = new URLSearchParams();
   const carry = ["qProducts", "qVariants", "qPromos", "productState", "variantState", "promoState"] as const;
   for (const key of carry) {
     const value = String(params[key] || "").trim();
     if (value) returnQuery.set(key, value);
   }
-  if (selectedProduct) returnQuery.set("variantProductId", String(selectedProduct.id));
-  const returnTo = returnQuery.size ? `/admin/catalog?${returnQuery.toString()}` : "/admin/catalog";
+
+  const buildCatalogPath = (extra?: Record<string, string | number>) => {
+    const query = new URLSearchParams(returnQuery);
+    if (selectedProduct) query.set("variantProductId", String(selectedProduct.id));
+    if (extra) {
+      for (const [key, value] of Object.entries(extra)) query.set(key, String(value));
+    }
+    return query.size ? `/admin/catalog?${query.toString()}` : "/admin/catalog";
+  };
+
+  const returnTo = buildCatalogPath(selectedEditProduct ? { productEditId: selectedEditProduct.id } : undefined);
+  const editReturnTo = selectedEditProduct
+    ? buildCatalogPath({ productEditId: selectedEditProduct.id, variantProductId: selectedEditProduct.id })
+    : returnTo;
 
   return (
     <main className={styles.adminGrid}>
@@ -346,6 +370,11 @@ export default async function AdminCatalogPage({
         {variantError ? (
           <p style={{ marginTop: 10, marginBottom: 0, color: "crimson", fontWeight: 600 }}>
             {isAr ? "تحقق من المتغير: الاسم والسعر مطلوبة والسعر يجب أن يكون أكبر من صفر." : "Variant validation failed: label and price are required, and price must be greater than zero."}
+          </p>
+        ) : null}
+        {duplicateVariantLabelError ? (
+          <p style={{ marginTop: 10, marginBottom: 0, color: "crimson", fontWeight: 600 }}>
+            {isAr ? "يوجد متغير بنفس الاسم لهذا المنتج. يرجى اختيار اسم مختلف." : "A variant with the same label already exists for this product. Please use a different label."}
           </p>
         ) : null}
         {uploaded ? (
@@ -371,6 +400,9 @@ export default async function AdminCatalogPage({
         <div><strong>{outOfStockCount}</strong><div className="muted">{isAr ? "نفدت الكمية" : "Out of stock"}</div></div>
         <div><strong>{data.promos.length}</strong><div className="muted">{isAr ? "العروض" : "Promotions"}</div></div>
         <div><strong>{variantsActive}</strong><div className="muted">{isAr ? "متغيرات مفعلة" : "Active variants"}</div></div>
+        <div><strong>{activeAutoPromos}</strong><div className="muted">{isAr ? "عروض تلقائية مفعلة" : "Active AUTO promos"}</div></div>
+        <div><strong>{activeCodePromos}</strong><div className="muted">{isAr ? "كوبونات مفعلة" : "Active CODE promos"}</div></div>
+        <div><strong>{productsWithAutoPromo}</strong><div className="muted">{isAr ? "منتجات مشمولة بعرض تلقائي" : "Products covered by AUTO"}</div></div>
       </section>
       <section className={styles.adminCard}>
         <div className={styles.anchorRow}>
@@ -492,6 +524,70 @@ export default async function AdminCatalogPage({
         </form>
       </section>
 
+      <section className={styles.adminCard}>
+        <h2 style={{ marginTop: 0 }}>{isAr ? "مساحة عمل المنتج" : "Product workspace"}</h2>
+        <p className="muted" style={{ marginTop: -4 }}>
+          {isAr ? "اختر منتجًا واحدًا لتحديث الاسم/الوصف/السعر/الوسوم دون فقدان السياق." : "Pick one product and update name/description/pricing/tags without losing your current admin context."}
+        </p>
+        <form method="get" action="/admin/catalog" className={styles.adminGrid} style={{ marginBottom: 12 }}>
+          <div style={{ display: "grid", gap: 8, gridTemplateColumns: "minmax(0,1fr) auto" }}>
+            <select name="productEditId" className={styles.adminSelect} defaultValue={selectedEditProduct ? String(selectedEditProduct.id) : ""}>
+              {data.products.map((p) => (
+                <option key={`edit-${p.id}`} value={p.id}>{p.slug} — {isAr ? p.name_ar : p.name_en}</option>
+              ))}
+            </select>
+            <button className={styles.adminBtn} type="submit">{isAr ? "تحميل المنتج" : "Load product"}</button>
+          </div>
+          <input type="hidden" name="qProducts" value={qProducts} />
+          <input type="hidden" name="qVariants" value={qVariants} />
+          <input type="hidden" name="qPromos" value={qPromos} />
+          <input type="hidden" name="productState" value={productState} />
+          <input type="hidden" name="variantState" value={variantState} />
+          <input type="hidden" name="promoState" value={promoState} />
+          {selectedProduct ? <input type="hidden" name="variantProductId" value={selectedProduct.id} /> : null}
+        </form>
+
+        {selectedEditProduct ? (
+          <form action="/api/admin/catalog/products" method="post" className={styles.adminGrid}>
+            <input type="hidden" name="return_to" value={editReturnTo} />
+            <input type="hidden" name="action" value="update" />
+            <input type="hidden" name="id" value={selectedEditProduct.id} />
+            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
+              <input name="name_en" defaultValue={selectedEditProduct.name_en} required className={styles.adminInput} />
+              <input name="name_ar" defaultValue={selectedEditProduct.name_ar} required className={styles.adminInput} />
+              <input name="price_jod" type="number" min="0.01" step="0.01" defaultValue={Number(selectedEditProduct.price_jod || "0")} className={`${styles.adminInput} ${styles.ltr}`} />
+              <input name="compare_at_price_jod" type="number" min="0" step="0.01" defaultValue={selectedEditProduct.compare_at_price_jod ? Number(selectedEditProduct.compare_at_price_jod) : ""} className={`${styles.adminInput} ${styles.ltr}`} />
+              <input name="inventory_qty" type="number" min="0" defaultValue={selectedEditProduct.inventory_qty} className={`${styles.adminInput} ${styles.ltr}`} />
+              <select name="category_key" defaultValue={selectedEditProduct.category_key} className={styles.adminSelect}>
+                {data.categories.map((c) => (
+                  <option key={`cat-edit-${c.key}`} value={c.key}>{labelCategory(lang, c)} ({c.key})</option>
+                ))}
+              </select>
+              <textarea name="description_en" defaultValue={selectedEditProduct.description_en || ""} className={styles.adminTextarea} rows={3} />
+              <textarea name="description_ar" defaultValue={selectedEditProduct.description_ar || ""} className={styles.adminTextarea} rows={3} />
+            </div>
+            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(3,minmax(0,1fr))" }}>
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>{L.wearTime}</div>
+                {["day","night","anytime"].map((key) => (<label key={`ws-${key}`} style={{ marginInlineEnd: 8 }}><input type="checkbox" name="wear_times" value={key} defaultChecked={selectedEditProduct.wear_times.includes(key)} /> {key}</label>))}
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>{L.season}</div>
+                {["spring","summer","fall","winter","all-season"].map((key) => (<label key={`ss-${key}`} style={{ marginInlineEnd: 8 }}><input type="checkbox" name="seasons" value={key} defaultChecked={selectedEditProduct.seasons.includes(key)} /> {key}</label>))}
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>{L.audience}</div>
+                {["unisex","unisex-men-leaning","unisex-women-leaning","men","women"].map((key) => (<label key={`as-${key}`} style={{ marginInlineEnd: 8 }}><input type="checkbox" name="audiences" value={key} defaultChecked={selectedEditProduct.audiences.includes(key)} /> {key}</label>))}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" name="is_active" defaultChecked={selectedEditProduct.is_active} /> {L.active}</label>
+              <button className={`${styles.adminBtn} ${styles.adminBtnPrimary}`} type="submit">{isAr ? "تحديث المنتج بالكامل" : "Update full product"}</button>
+            </div>
+          </form>
+        ) : null}
+      </section>
+
       <section id="products-section" className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{L.products}</h2>
         <p className="muted" style={{ marginTop: -4 }}>{isAr ? `نتائج: ${filteredProducts.length}` : `Results: ${filteredProducts.length}`}</p>
@@ -538,6 +634,13 @@ export default async function AdminCatalogPage({
                         <input type="checkbox" name="is_active" defaultChecked={p.is_active} /> {L.active}
                       </label>
                       <button className={styles.adminBtn} type="submit">{L.update}</button>
+                      <Link className={styles.adminBtn} href={buildCatalogPath({ productEditId: p.id, variantProductId: p.id })}>{isAr ? "إدارة" : "Manage"}</Link>
+                    </form>
+                    <form action="/api/admin/catalog/products" method="post" style={{ marginTop: 8 }}>
+                <input type="hidden" name="return_to" value={returnTo} />
+                      <input type="hidden" name="action" value="clone" />
+                      <input type="hidden" name="id" value={p.id} />
+                      <button className={styles.adminBtn} type="submit">{isAr ? "نسخ" : "Clone"}</button>
                     </form>
                     <form action="/api/admin/catalog/products" method="post" style={{ marginTop: 8 }}>
                 <input type="hidden" name="return_to" value={returnTo} />
@@ -635,6 +738,13 @@ export default async function AdminCatalogPage({
                     <div style={{ display: "flex", gap: 8 }}>
                       <button className={styles.adminBtn} type="submit">{L.update}</button>
                     </div>
+                  </form>
+                  <form action="/api/admin/catalog/variants" method="post" style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <input type="hidden" name="return_to" value={returnTo} />
+                    <input type="hidden" name="action" value="set-default" />
+                    <input type="hidden" name="id" value={v.id} />
+                    <input type="hidden" name="product_id" value={selectedProduct.id} />
+                    <button className={styles.adminBtn} type="submit">{isAr ? "تعيين كافتراضي" : "Set default"}</button>
                   </form>
                   <form action="/api/admin/catalog/variants" method="post" style={{ marginTop: 8 }}>
                     <input type="hidden" name="return_to" value={returnTo} />

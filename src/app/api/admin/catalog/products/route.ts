@@ -2,11 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureCatalogTablesSafe } from "@/lib/catalog";
 import { requireAdmin } from "@/lib/guards";
-import {
-  catalogErrorRedirect,
-  catalogSavedRedirect,
-  catalogUnauthorizedRedirect,
-} from "../redirects";
+import { catalogErrorRedirect, catalogSavedRedirect, catalogUnauthorizedRedirect } from "../redirects";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,7 +32,7 @@ export async function POST(req: Request) {
     if (!auth.ok) {
       const accept = req.headers.get("accept") || "";
       if (accept.includes("text/html")) return catalogUnauthorizedRedirect(req, form);
-      return NextResponse.json({ ok: false, error: auth.error }, { status: 401 });
+      return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
     }
 
     await ensureCatalogTablesSafe();
@@ -104,6 +100,10 @@ export async function POST(req: Request) {
 
     if (action === "update") {
       const id = Number(form.get("id") || 0);
+      const nameEn = String(form.get("name_en") || "").trim();
+      const nameAr = String(form.get("name_ar") || "").trim();
+      const descriptionEn = String(form.get("description_en") || "").trim();
+      const descriptionAr = String(form.get("description_ar") || "").trim();
       const price = Number(form.get("price_jod") || 0);
       const compareAt = String(form.get("compare_at_price_jod") || "").trim();
       const inventory = Math.max(0, Number(form.get("inventory_qty") || 0));
@@ -116,18 +116,26 @@ export async function POST(req: Request) {
       if (id > 0) {
         await db.query(
           `update products
-             set price_jod=$2,
-                 compare_at_price_jod=$3,
-                 inventory_qty=$4,
-                 category_key=coalesce(nullif($5,''), category_key),
-                 is_active=$6,
-                 wear_times=$7::text[],
-                 seasons=$8::text[],
-                 audiences=$9::text[],
+             set name_en=case when nullif($2,'') is null then name_en else $2 end,
+                 name_ar=case when nullif($3,'') is null then name_ar else $3 end,
+                 description_en=case when $4 is null then description_en else $4 end,
+                 description_ar=case when $5 is null then description_ar else $5 end,
+                 price_jod=case when $6 > 0 then $6 else price_jod end,
+                 compare_at_price_jod=$7,
+                 inventory_qty=$8,
+                 category_key=coalesce(nullif($9,''), category_key),
+                 is_active=$10,
+                 wear_times=$11::text[],
+                 seasons=$12::text[],
+                 audiences=$13::text[],
                  updated_at=now()
            where id=$1`,
           [
             id,
+            nameEn,
+            nameAr,
+            descriptionEn || null,
+            descriptionAr || null,
             price,
             compareAt ? Number(compareAt) : null,
             inventory,
@@ -136,6 +144,64 @@ export async function POST(req: Request) {
             wearTimes,
             seasons,
             audiences,
+          ]
+        );
+      }
+    }
+
+    if (action === "clone") {
+      const id = Number(form.get("id") || 0);
+      if (id > 0) {
+        const source = await db.query<{
+          slug: string;
+          slug_en: string | null;
+          slug_ar: string | null;
+          category_key: string;
+          name_en: string;
+          name_ar: string;
+          description_en: string | null;
+          description_ar: string | null;
+          price_jod: string;
+          compare_at_price_jod: string | null;
+          inventory_qty: number;
+          is_active: boolean;
+          wear_times: string[];
+          seasons: string[];
+          audiences: string[];
+        }>(`select slug, slug_en, slug_ar, category_key, name_en, name_ar, description_en, description_ar, price_jod::text, compare_at_price_jod::text, inventory_qty, is_active, coalesce(wear_times, '{}'::text[]) as wear_times, coalesce(seasons, '{}'::text[]) as seasons, coalesce(audiences, '{}'::text[]) as audiences from products where id=$1`, [id]);
+
+        const base = source.rows[0];
+        if (!base) return catalogErrorRedirect(req, form, "product-not-found");
+
+        let nextSlug = `${base.slug}-copy`;
+        let suffix = 2;
+        while (true) {
+          const exists = await db.query<{ id: number }>(`select id from products where slug=$1 limit 1`, [nextSlug]);
+          if (!exists.rows[0]) break;
+          nextSlug = `${base.slug}-copy-${suffix}`;
+          suffix += 1;
+        }
+
+        await db.query(
+          `insert into products
+            (slug, slug_en, slug_ar, category_key, name_en, name_ar, description_en, description_ar, price_jod, compare_at_price_jod, inventory_qty, is_active, wear_times, seasons, audiences)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::text[],$14::text[],$15::text[])`,
+          [
+            nextSlug,
+            nextSlug,
+            nextSlug,
+            base.category_key,
+            `${base.name_en} (Copy)`,
+            `${base.name_ar} (نسخة)`,
+            base.description_en,
+            base.description_ar,
+            Number(base.price_jod || 0),
+            base.compare_at_price_jod ? Number(base.compare_at_price_jod) : null,
+            0,
+            false,
+            base.wear_times,
+            base.seasons,
+            base.audiences,
           ]
         );
       }
