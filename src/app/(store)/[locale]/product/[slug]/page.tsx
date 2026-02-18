@@ -1,5 +1,5 @@
 import ProductImageGallery from "./ProductImageGallery";
-import AddToCartButton from "@/components/AddToCartButton";
+import ProductPurchasePanel from "./ProductPurchasePanel";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
@@ -39,6 +39,15 @@ type ProductRow = {
 };
 
 type CategoryRow = { key: string; name_en: string; name_ar: string };
+
+type VariantRow = {
+  id: number;
+  label: string;
+  price_jod: string;
+  compare_at_price_jod: string | null;
+  is_default: boolean;
+  sort_order: number;
+};
 
 export default async function ProductDetailPage({
   params,
@@ -118,17 +127,38 @@ export default async function ProductDetailPage({
     [product.id]
   );
 
+  const variantsRes = await db.query<VariantRow>(
+    `select id, label, price_jod::text as price_jod, compare_at_price_jod::text as compare_at_price_jod, is_default, sort_order
+       from product_variants
+      where product_id=$1 and is_active=true
+      order by is_default desc, sort_order asc, id asc`,
+    [product.id]
+  );
+
   const name = isAr ? product.name_ar : product.name_en;
   const desc = isAr ? product.description_ar : product.description_en;
   const catLabel = cat ? (isAr ? cat.name_ar : cat.name_en) : product.category_key;
 
-  const price = Number(product.price_jod || 0);
-  const compareAt = product.compare_at_price_jod ? Number(product.compare_at_price_jod) : null;
-  const discounted = product.discounted_price_jod ? Number(product.discounted_price_jod) : null;
   const promoType = product.promo_type;
   const promoValue = Number(product.promo_value || 0);
-  const hasPromo = discounted != null && discounted < price && (promoType === "PERCENT" || promoType === "FIXED");
+  const hasPromo = promoType === "PERCENT" || promoType === "FIXED";
   const outOfStock = Number(product.inventory_qty || 0) <= 0;
+
+  const variants = variantsRes.rows.length
+    ? variantsRes.rows.map((v) => ({
+        id: v.id,
+        label: v.label,
+        priceJod: Number(v.price_jod || 0),
+        compareAtPriceJod: v.compare_at_price_jod ? Number(v.compare_at_price_jod) : null,
+        isDefault: v.is_default,
+      }))
+    : [{
+        id: 0,
+        label: isAr ? "القياسي" : "Standard",
+        priceJod: Number(product.price_jod || 0),
+        compareAtPriceJod: product.compare_at_price_jod ? Number(product.compare_at_price_jod) : null,
+        isDefault: true,
+      }];
 
   const imageUrls = imgs.rows.map((img) => `/api/catalog/product-image/${img.id}`);
   const fallbackSrc = fallbackFromSlug(product.slug);
@@ -167,50 +197,19 @@ export default async function ProductDetailPage({
             {name}
           </h1>
 
-          <p style={{ marginTop: 0 }}>
-            {hasPromo ? (
-              <>
-                <span style={{ textDecoration: "line-through", opacity: 0.7, marginInlineEnd: 10 }}>
-                  {price.toFixed(2)} JOD
-                </span>
-                <strong>{discounted.toFixed(2)} JOD</strong>
-              </>
-            ) : compareAt && compareAt > price ? (
-              <>
-                <span style={{ textDecoration: "line-through", opacity: 0.7, marginInlineEnd: 10 }}>
-                  {compareAt.toFixed(2)} JOD
-                </span>
-                <strong>{price.toFixed(2)} JOD</strong>
-              </>
-            ) : (
-              <strong>{price.toFixed(2)} JOD</strong>
-            )}
-          </p>
-
           {outOfStock ? <p className="muted">{isAr ? "غير متوفر حالياً." : "Currently out of stock."}</p> : null}
 
           {desc ? <p className="muted">{desc}</p> : null}
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14, alignItems: "center" }}>
-            <AddToCartButton
-              locale={locale}
-              slug={product.slug}
-              name={name}
-              priceJod={hasPromo ? discounted ?? price : price}
-              label={outOfStock ? (isAr ? "غير متوفر" : "Out of stock") : (isAr ? "أضف إلى السلة" : "Add to cart")}
-              addedLabel={isAr ? "تمت الإضافة ✓" : "Added ✓"}
-              updatedLabel={isAr ? "تم التحديث ✓" : "Updated ✓"}
-              className={"btn btn-outline" + (outOfStock ? " btn-disabled" : "")}
-              disabled={outOfStock}
-              minQty={1}
-              maxQty={99}
-              buyNowLabel={isAr ? "شراء الآن" : "Buy now"}
-            />
-
-            <a className="btn btn-outline" href={`/${locale}/product`}>
-              {isAr ? "العودة للمتجر" : "Back to shop"}
-            </a>
-          </div>
+          <ProductPurchasePanel
+            locale={locale}
+            slug={product.slug}
+            name={name}
+            variants={variants}
+            promoType={promoType}
+            promoValue={promoValue}
+            outOfStock={outOfStock}
+          />
         </div>
       </div>
     </div>

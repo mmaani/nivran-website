@@ -5,6 +5,19 @@ import { ensureCatalogTables } from "@/lib/catalog";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type ProductRow = {
+  slug: string;
+  name_en: string;
+  name_ar: string;
+  description_en: string | null;
+  description_ar: string | null;
+  price_jod: string | number;
+  is_active: boolean;
+  variant_id: number | null;
+  variant_label: string | null;
+  variant_price_jod: string | number | null;
+};
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const slug = String(searchParams.get("slug") || "").trim();
@@ -12,10 +25,20 @@ export async function GET(req: NextRequest) {
 
   await ensureCatalogTables();
 
-  const r = await db.query(
-    `select slug, name_en, name_ar, description_en, description_ar, price_jod, is_active
-       from products
-      where slug=$1
+  const r = await db.query<ProductRow>(
+    `select p.slug, p.name_en, p.name_ar, p.description_en, p.description_ar, p.price_jod, p.is_active,
+            dv.id as variant_id,
+            dv.label as variant_label,
+            dv.price_jod::text as variant_price_jod
+       from products p
+       left join lateral (
+         select v.id, v.label, v.price_jod
+           from product_variants v
+          where v.product_id=p.id and v.is_active=true
+          order by v.is_default desc, v.price_jod asc, v.sort_order asc, v.id asc
+          limit 1
+       ) dv on true
+      where p.slug=$1
       limit 1`,
     [slug]
   );
@@ -32,7 +55,9 @@ export async function GET(req: NextRequest) {
         name_ar: p.name_ar,
         description_en: p.description_en,
         description_ar: p.description_ar,
-        price_jod: Number(p.price_jod || 0),
+        price_jod: Number((p.variant_price_jod ?? p.price_jod) || 0),
+        variant_id: p.variant_id,
+        variant_label: p.variant_label,
         is_active: !!p.is_active,
       },
     },

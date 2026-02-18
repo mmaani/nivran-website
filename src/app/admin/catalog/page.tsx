@@ -28,6 +28,21 @@ type ProductRow = {
   image_count: number;
 };
 
+type VariantRow = {
+  id: number;
+  product_id: number;
+  product_slug: string;
+  product_name_en: string;
+  product_name_ar: string;
+  label: string;
+  size_ml: number | null;
+  price_jod: string;
+  compare_at_price_jod: string | null;
+  is_default: boolean;
+  is_active: boolean;
+  sort_order: number;
+};
+
 type PromoRow = {
   id: number;
   promo_kind: "AUTO" | "CODE" | string;
@@ -79,6 +94,25 @@ export default async function AdminCatalogPage() {
        ) i on i.product_id = p.id
       order by p.created_at desc
       limit 300`
+  );
+
+  const variantsRes = await db.query<VariantRow>(
+    `select v.id,
+            v.product_id,
+            p.slug as product_slug,
+            p.name_en as product_name_en,
+            p.name_ar as product_name_ar,
+            v.label,
+            v.size_ml,
+            v.price_jod::text as price_jod,
+            v.compare_at_price_jod::text as compare_at_price_jod,
+            v.is_default,
+            v.is_active,
+            v.sort_order
+       from product_variants v
+       join products p on p.id=v.product_id
+      order by p.created_at desc, v.sort_order asc, v.id asc
+      limit 1200`
   );
 
   const promosRes = await db.query<PromoRow>(
@@ -238,11 +272,59 @@ export default async function AdminCatalogPage() {
 
       <section className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{isAr ? "المتغيرات" : "Variants"}</h2>
-        <p style={{ margin: 0, opacity: 0.82 }}>
-          {isAr
-            ? "لا يوجد نموذج متغيرات مستقل حالياً. يتم إدارة الاختيارات/التركيزات من خلال Slug منفصل لكل منتج."
-            : "There is no separate variants table yet. Manage variants as separate product slugs for now."}
-        </p>
+        <div style={{ display: "grid", gap: 16 }}>
+          {productsRes.rows.map((product) => {
+            const variants = variantsRes.rows.filter((v) => v.product_id === product.id);
+            return (
+              <div key={product.id} style={{ border: "1px solid #ececec", borderRadius: 12, padding: 12 }}>
+                <div style={{ fontWeight: 700, marginBottom: 10 }}>
+                  <span className={styles.ltr}>{product.slug}</span> — {isAr ? product.name_ar : product.name_en}
+                </div>
+
+                <form action="/api/admin/catalog/variants" method="post" style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(7,minmax(0,1fr))", marginBottom: 10 }}>
+                  <input type="hidden" name="action" value="create" />
+                  <input type="hidden" name="product_id" value={product.id} />
+                  <input name="label" required placeholder={isAr ? "الاسم (مثال 50 ml)" : "Label (e.g. 50 ml)"} className={styles.adminInput} />
+                  <input name="size_ml" type="number" min="0" placeholder="ml" className={`${styles.adminInput} ${styles.ltr}`} />
+                  <input name="price_jod" type="number" min="0" step="0.01" required placeholder="Price" className={`${styles.adminInput} ${styles.ltr}`} />
+                  <input name="compare_at_price_jod" type="number" min="0" step="0.01" placeholder="Compare" className={`${styles.adminInput} ${styles.ltr}`} />
+                  <input name="sort_order" type="number" min="0" defaultValue={variants.length * 10} placeholder="Sort" className={`${styles.adminInput} ${styles.ltr}`} />
+                  <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" name="is_default" /> {isAr ? "افتراضي" : "Default"}</label>
+                  <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" name="is_active" defaultChecked /> {L.active}</label>
+                  <button className={styles.adminBtn} type="submit" style={{ gridColumn: "1 / -1", width: "fit-content" }}>{isAr ? "إضافة متغير" : "Add variant"}</button>
+                </form>
+
+                <div style={{ display: "grid", gap: 8 }}>
+                  {variants.map((v) => (
+                    <form key={v.id} action="/api/admin/catalog/variants" method="post" style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(8,minmax(0,1fr))", alignItems: "center", borderTop: "1px dashed #eee", paddingTop: 8 }}>
+                      <input type="hidden" name="action" value="update" />
+                      <input type="hidden" name="id" value={v.id} />
+                      <input type="hidden" name="product_id" value={product.id} />
+                      <input name="label" defaultValue={v.label} className={styles.adminInput} />
+                      <input name="size_ml" type="number" min="0" defaultValue={v.size_ml ?? ""} className={`${styles.adminInput} ${styles.ltr}`} />
+                      <input name="price_jod" type="number" min="0" step="0.01" defaultValue={Number(v.price_jod || "0")} className={`${styles.adminInput} ${styles.ltr}`} />
+                      <input name="compare_at_price_jod" type="number" min="0" step="0.01" defaultValue={v.compare_at_price_jod ? Number(v.compare_at_price_jod) : ""} className={`${styles.adminInput} ${styles.ltr}`} />
+                      <input name="sort_order" type="number" min="0" defaultValue={v.sort_order} className={`${styles.adminInput} ${styles.ltr}`} />
+                      <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" name="is_default" defaultChecked={v.is_default} /> {isAr ? "افتراضي" : "Default"}</label>
+                      <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" name="is_active" defaultChecked={v.is_active} /> {L.active}</label>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button className={styles.adminBtn} type="submit">{L.update}</button>
+                      </div>
+                    </form>
+                  ))}
+                  {variants.length === 0 ? <p style={{ margin: 0, opacity: 0.7 }}>{isAr ? "لا توجد متغيرات" : "No variants yet"}</p> : null}
+                  {variants.map((v) => (
+                    <form key={`del-${v.id}`} action="/api/admin/catalog/variants" method="post" style={{ display: "inline" }}>
+                      <input type="hidden" name="action" value="delete" />
+                      <input type="hidden" name="id" value={v.id} />
+                      <button className={styles.adminBtn} type="submit">{isAr ? `حذف ${v.label}` : `Delete ${v.label}`}</button>
+                    </form>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </section>
 
       <section className={styles.adminCard}>
