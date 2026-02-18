@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, isDbConnectivityError } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
-import { products as staticProducts } from "@/lib/siteContent";
+import { fallbackProductBySlug, syntheticVariantId } from "@/lib/catalogFallback";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,8 +68,10 @@ export async function GET(req: NextRequest) {
   } catch (error: unknown) {
     if (!isDbConnectivityError(error)) throw error;
 
-    const p = staticProducts.find((item) => item.slug === slug);
+    const p = fallbackProductBySlug(slug);
     if (!p) return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
+
+    console.warn("[api/catalog/product-by-slug] Serving fallback payload due to DB connectivity issue.");
 
     const defaultVariant = p.variants?.find((v) => v.isDefault) || p.variants?.[0] || null;
     return NextResponse.json(
@@ -82,7 +84,7 @@ export async function GET(req: NextRequest) {
           description_en: p.description.en,
           description_ar: p.description.ar,
           price_jod: Number(defaultVariant?.priceJod ?? p.priceJod),
-          variant_id: defaultVariant ? 10000 : null,
+          variant_id: defaultVariant ? syntheticVariantId(p.slug) : null,
           variant_label: defaultVariant?.sizeLabel ?? null,
           is_active: true,
         },

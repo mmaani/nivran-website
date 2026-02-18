@@ -2,7 +2,10 @@ import SafeImg from "@/components/SafeImg";
 import AddToCartButton from "@/components/AddToCartButton";
 import { db, isDbConnectivityError } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
-import { categoryLabels, products as staticProducts } from "@/lib/siteContent";
+import {
+  fallbackCatalogRows,
+  fallbackCategories,
+} from "@/lib/catalogFallback";
 
 type CategoryRow = {
   key: string;
@@ -174,41 +177,9 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
   } catch (error: unknown) {
     if (!isDbConnectivityError(error)) throw error;
 
-    categoriesRows = Object.entries(categoryLabels).map(([key, labels], index) => ({
-      key,
-      name_en: labels.en,
-      name_ar: labels.ar,
-      is_active: true,
-      is_promoted: false,
-      sort_order: index,
-    }));
-
-    productRows = staticProducts.map((p, index) => {
-      const defaultVariant = p.variants?.find((v) => v.isDefault) || p.variants?.[0] || null;
-      const minVariantPrice = (p.variants || []).reduce((min, v) => Math.min(min, Number(v.priceJod || 0)), Number.POSITIVE_INFINITY);
-      return {
-        id: index + 1,
-        slug: p.slug,
-        name_en: p.name.en,
-        name_ar: p.name.ar,
-        description_en: p.description.en,
-        description_ar: p.description.ar,
-        price_jod: String(p.priceJod),
-        min_variant_price_jod: Number.isFinite(minVariantPrice) ? String(minVariantPrice) : String(p.priceJod),
-        default_variant_id: defaultVariant ? index + 10000 : null,
-        default_variant_label: defaultVariant?.sizeLabel ?? null,
-        default_variant_price_jod: String(defaultVariant?.priceJod ?? p.priceJod),
-        category_key: p.category,
-        inventory_qty: 99,
-        image_id: null,
-        promo_type: null,
-        promo_value: null,
-        discounted_price_jod: null,
-        wear_times: [],
-        seasons: [],
-        audiences: [p.audience],
-      };
-    });
+    categoriesRows = fallbackCategories();
+    productRows = fallbackCatalogRows();
+    console.warn("[catalog] Falling back to static product catalog due to DB connectivity issue.");
   }
 
   const cats: Array<{ key: string; label: string }> = categoriesRows.length

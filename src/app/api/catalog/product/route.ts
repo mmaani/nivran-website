@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db, isDbConnectivityError } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
-import { products as staticProducts } from "@/lib/siteContent";
+import { fallbackProductBySlug } from "@/lib/catalogFallback";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -149,13 +149,13 @@ export async function GET(req: Request) {
   } catch (error: unknown) {
     if (!isDbConnectivityError(error)) throw error;
 
-    const fallback = id
-      ? staticProducts[id - 1] ?? null
-      : staticProducts.find((p) => p.slug === slug);
+    const fallback = slug ? fallbackProductBySlug(slug) : null;
 
     if (!fallback) {
       return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
     }
+
+    console.warn("[api/catalog/product] Serving fallback payload due to DB connectivity issue.");
 
     const base = Number(fallback.priceJod || 0);
     const image = fallback.images?.[0] || "";

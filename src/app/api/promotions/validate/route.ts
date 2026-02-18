@@ -37,6 +37,7 @@ export async function POST(req: Request) {
 
   if (!normalized.length) return NextResponse.json({ ok: false, error: locale === "ar" ? "السلة فارغة" : "Cart items are required" }, { status: 400 });
   if (mode === "CODE" && !promoCode) return NextResponse.json({ ok: false, error: locale === "ar" ? "أدخل كود الخصم" : "Promo code is required" }, { status: 400 });
+  if (mode === "AUTO" && promoCode) return NextResponse.json({ ok: false, error: locale === "ar" ? "لا يمكن استخدام كود مع خصم AUTO" : "Promo code cannot be used with AUTO mode" }, { status: 400 });
 
   const slugs = Array.from(new Set(normalized.map((i) => i.slug)));
   const productRes = await db.query<ProductRow>(`select slug, category_key, is_active from products where slug = any($1::text[])`, [slugs]);

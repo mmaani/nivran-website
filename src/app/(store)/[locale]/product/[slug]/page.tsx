@@ -3,7 +3,12 @@ import ProductPurchasePanel from "./ProductPurchasePanel";
 import { notFound } from "next/navigation";
 import { db, isDbConnectivityError } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
-import { categoryLabels, products as staticProducts } from "@/lib/siteContent";
+import {
+  fallbackProductBySlug,
+  localizedName,
+  syntheticVariantId,
+} from "@/lib/catalogFallback";
+import { categoryLabels } from "@/lib/siteContent";
 import styles from "./page.module.css";
 
 export const runtime = "nodejs";
@@ -253,14 +258,16 @@ export default async function ProductDetailPage({
   } catch (error: unknown) {
     if (!isDbConnectivityError(error)) throw error;
 
-    const fallback = staticProducts.find((p) => p.slug === slug);
+    const fallback = fallbackProductBySlug(slug);
     if (!fallback) return notFound();
 
-    const name = fallback.name[locale];
+    console.warn("[pdp] Falling back to static product details due to DB connectivity issue.");
+
+    const name = localizedName(fallback.name, locale);
     const desc = fallback.description[locale];
     const catLabel = categoryLabels[fallback.category][locale];
     const variants = (fallback.variants || []).map((v, index) => ({
-      id: 20000 + index,
+      id: syntheticVariantId(fallback.slug, index),
       label: v.sizeLabel,
       priceJod: Number(v.priceJod || 0),
       compareAtPriceJod: null,
@@ -269,7 +276,7 @@ export default async function ProductDetailPage({
 
     const safeVariants = variants.length
       ? variants
-      : [{ id: 20000, label: isAr ? "القياسي" : "Standard", priceJod: Number(fallback.priceJod || 0), compareAtPriceJod: null, isDefault: true }];
+      : [{ id: syntheticVariantId(fallback.slug), label: isAr ? "القياسي" : "Standard", priceJod: Number(fallback.priceJod || 0), compareAtPriceJod: null, isDefault: true }];
 
     const fallbackSrc = fallback.images?.[0] || fallbackFromSlug(fallback.slug);
 

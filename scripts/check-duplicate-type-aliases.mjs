@@ -28,6 +28,7 @@ const CRITICAL_FILES = [
   "src/app/api/catalog/product-by-slug/route.ts",
   "src/app/api/orders/route.ts",
   "src/app/api/promotions/validate/route.ts",
+  "src/app/api/health/route.ts",
 
   // Core pricing/cart/catalog libs
   "src/lib/cartStore.ts",
@@ -35,6 +36,7 @@ const CRITICAL_FILES = [
   "src/lib/catalog.ts",
   "src/lib/orders.ts",
   "src/lib/pricing.ts",
+  "src/lib/catalogFallback.ts",
   "src/lib/promotions.ts",
 ];
 
