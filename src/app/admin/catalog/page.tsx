@@ -26,6 +26,24 @@ type ProductRow = {
   category_key: string;
   is_active: boolean;
   image_count: number;
+  wear_times: string[];
+  seasons: string[];
+  audiences: string[];
+};
+
+type VariantRow = {
+  id: number;
+  product_id: number;
+  product_slug: string;
+  product_name_en: string;
+  product_name_ar: string;
+  label: string;
+  size_ml: number | null;
+  price_jod: string;
+  compare_at_price_jod: string | null;
+  is_default: boolean;
+  is_active: boolean;
+  sort_order: number;
 };
 
 type VariantRow = {
@@ -85,7 +103,10 @@ export default async function AdminCatalogPage() {
             p.inventory_qty,
             p.category_key,
             p.is_active,
-            coalesce(i.image_count,0)::int as image_count
+            coalesce(i.image_count,0)::int as image_count,
+            coalesce(p.wear_times, "{}"::text[]) as wear_times,
+            coalesce(p.seasons, "{}"::text[]) as seasons,
+            coalesce(p.audiences, "{}"::text[]) as audiences
        from products p
   left join (
          select product_id, count(*)::int as image_count
@@ -153,6 +174,10 @@ export default async function AdminCatalogPage() {
         promoType: "نوع الخصم",
         autoPromo: "تلقائي",
         codePromo: "كوبون",
+        tags: "الوسوم",
+        wearTime: "وقت الاستخدام",
+        season: "الموسم",
+        audience: "الفئة",
       }
     : {
         title: "Catalog",
@@ -184,6 +209,10 @@ export default async function AdminCatalogPage() {
         promoType: "Type",
         autoPromo: "Automatic",
         codePromo: "Promo code",
+        tags: "Tags",
+        wearTime: "Wear time",
+        season: "Season",
+        audience: "Audience",
       };
 
   const byKey = new Map(categoriesRes.rows.map((c) => [c.key, c]));
@@ -215,6 +244,30 @@ export default async function AdminCatalogPage() {
             <textarea name="description_en" placeholder="Description (EN)" className={styles.adminTextarea} rows={3} />
             <textarea name="description_ar" placeholder="Description (AR)" className={styles.adminTextarea} rows={3} />
           </div>
+          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(3,minmax(0,1fr))" }}>
+            <div>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>{L.wearTime}</div>
+              <label><input type="checkbox" name="wear_times" value="day" /> Day</label>
+              <label style={{ marginInlineStart: 8 }}><input type="checkbox" name="wear_times" value="night" /> Night</label>
+              <label style={{ marginInlineStart: 8 }}><input type="checkbox" name="wear_times" value="anytime" /> Anytime</label>
+            </div>
+            <div>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>{L.season}</div>
+              <label><input type="checkbox" name="seasons" value="spring" /> Spring</label>
+              <label style={{ marginInlineStart: 8 }}><input type="checkbox" name="seasons" value="summer" /> Summer</label>
+              <label style={{ marginInlineStart: 8 }}><input type="checkbox" name="seasons" value="fall" /> Fall</label>
+              <label style={{ marginInlineStart: 8 }}><input type="checkbox" name="seasons" value="winter" /> Winter</label>
+              <label style={{ marginInlineStart: 8 }}><input type="checkbox" name="seasons" value="all-season" /> All-season</label>
+            </div>
+            <div>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>{L.audience}</div>
+              <label><input type="checkbox" name="audiences" value="unisex" /> Unisex</label>
+              <label style={{ marginInlineStart: 8 }}><input type="checkbox" name="audiences" value="unisex-men-leaning" /> Unisex (Men-leaning)</label>
+              <label style={{ marginInlineStart: 8 }}><input type="checkbox" name="audiences" value="unisex-women-leaning" /> Unisex (Women-leaning)</label>
+              <label style={{ marginInlineStart: 8 }}><input type="checkbox" name="audiences" value="men" /> Men</label>
+              <label style={{ marginInlineStart: 8 }}><input type="checkbox" name="audiences" value="women" /> Women</label>
+            </div>
+          </div>
           <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <input type="checkbox" name="is_active" defaultChecked /> {L.active}
           </label>
@@ -234,7 +287,7 @@ export default async function AdminCatalogPage() {
                 <tr key={p.id}>
                   <td className={styles.ltr}>{p.slug}</td>
                   <td>{p.name_en}<br />{p.name_ar}</td>
-                  <td>{byKey.get(p.category_key) ? labelCategory(lang, byKey.get(p.category_key)!) : p.category_key}</td>
+                  <td>{byKey.get(p.category_key) ? labelCategory(lang, byKey.get(p.category_key)!) : p.category_key}<div style={{ fontSize: 12, opacity: 0.78, marginTop: 4 }}>{[...p.wear_times, ...p.seasons, ...p.audiences].slice(0,4).join(" • ")}</div></td>
                   <td className={styles.ltr}>{p.price_jod} JOD {p.compare_at_price_jod ? `(was ${p.compare_at_price_jod})` : ""}</td>
                   <td className={styles.ltr}>{p.inventory_qty}</td>
                   <td className={styles.ltr}>{p.image_count}/5</td>
@@ -250,6 +303,18 @@ export default async function AdminCatalogPage() {
                       </select>
                       <input name="price_jod" type="number" step="0.01" defaultValue={Number(p.price_jod || "0")} className={`${styles.adminInput} ${styles.ltr}`} style={{ width: 120 }} />
                       <input name="inventory_qty" type="number" min="0" defaultValue={p.inventory_qty} className={`${styles.adminInput} ${styles.ltr}`} style={{ width: 100 }} />
+                      <div style={{ display: "grid", gap: 6 }}>
+                        <div style={{ fontSize: 12, opacity: 0.8 }}>{L.tags}</div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {["day","night","anytime"].map((key) => (<label key={`wt-${p.id}-${key}`}><input type="checkbox" name="wear_times" value={key} defaultChecked={p.wear_times.includes(key)} /> {key}</label>))}
+                        </div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {["spring","summer","fall","winter","all-season"].map((key) => (<label key={`ss-${p.id}-${key}`}><input type="checkbox" name="seasons" value={key} defaultChecked={p.seasons.includes(key)} /> {key}</label>))}
+                        </div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {["unisex","unisex-men-leaning","unisex-women-leaning","men","women"].map((key) => (<label key={`au-${p.id}-${key}`}><input type="checkbox" name="audiences" value={key} defaultChecked={p.audiences.includes(key)} /> {key}</label>))}
+                        </div>
+                      </div>
                       <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
                         <input type="checkbox" name="is_active" defaultChecked={p.is_active} /> {L.active}
                       </label>

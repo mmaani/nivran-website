@@ -14,6 +14,27 @@ function fallbackFromSlug(slug: string) {
   return `/products/${family}-1.svg`;
 }
 
+
+function tagLabel(locale: "en" | "ar", value: string): string {
+  const key = String(value || "").trim().toLowerCase();
+  const map: Record<string, { en: string; ar: string }> = {
+    day: { en: "Day", ar: "نهاري" },
+    night: { en: "Night", ar: "ليلي" },
+    anytime: { en: "Anytime", ar: "أي وقت" },
+    spring: { en: "Spring", ar: "ربيع" },
+    summer: { en: "Summer", ar: "صيف" },
+    fall: { en: "Fall", ar: "خريف" },
+    winter: { en: "Winter", ar: "شتاء" },
+    "all-season": { en: "All-season", ar: "كل المواسم" },
+    unisex: { en: "Unisex", ar: "للجنسين" },
+    "unisex-men-leaning": { en: "Unisex (Men-leaning)", ar: "للجنسين (يميل للرجال)" },
+    "unisex-women-leaning": { en: "Unisex (Women-leaning)", ar: "للجنسين (يميل للنساء)" },
+    men: { en: "Men", ar: "رجالي" },
+    women: { en: "Women", ar: "نسائي" },
+  };
+  return (map[key] || { en: value, ar: value })[locale];
+}
+
 function promoBadgeText(locale: "en" | "ar", promoType: "PERCENT" | "FIXED", promoValue: number): string {
   if (promoType === "PERCENT") {
     return locale === "ar" ? `خصم ${promoValue}%` : `-${promoValue}%`;
@@ -36,6 +57,9 @@ type ProductRow = {
   promo_type: "PERCENT" | "FIXED" | null;
   promo_value: string | null;
   discounted_price_jod: string | null;
+  wear_times: string[];
+  seasons: string[];
+  audiences: string[];
 };
 
 type CategoryRow = { key: string; name_en: string; name_ar: string };
@@ -81,7 +105,10 @@ export default async function ProductDetailPage({
                 when bp.discount_type='FIXED' then greatest(0, p.price_jod - bp.discount_value)
                 else null
               end
-            )::text as discounted_price_jod
+            )::text as discounted_price_jod,
+            coalesce(p.wear_times, "{}"::text[]) as wear_times,
+            coalesce(p.seasons, "{}"::text[]) as seasons,
+            coalesce(p.audiences, "{}"::text[]) as audiences
        from products p
        left join lateral (
          select pr.id, pr.discount_type, pr.discount_value, pr.priority
@@ -200,6 +227,12 @@ export default async function ProductDetailPage({
           {outOfStock ? <p className="muted">{isAr ? "غير متوفر حالياً." : "Currently out of stock."}</p> : null}
 
           {desc ? <p className="muted">{desc}</p> : null}
+
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+            {[...product.wear_times, ...product.seasons, ...product.audiences].map((chip) => (
+              <span key={`${product.slug}-${chip}`} className="badge" style={{ fontSize: 11 }}>{tagLabel(locale, chip)}</span>
+            ))}
+          </div>
 
           <ProductPurchasePanel
             locale={locale}

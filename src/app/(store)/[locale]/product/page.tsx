@@ -30,6 +30,9 @@ type ProductRow = {
   promo_type: "PERCENT" | "FIXED" | null;
   promo_value: string | null;
   discounted_price_jod: string | null;
+  wear_times: string[];
+  seasons: string[];
+  audiences: string[];
 };
 
 const FALLBACK_CATS: Record<string, { en: string; ar: string }> = {
@@ -44,6 +47,27 @@ function fallbackFromSlug(slug: string) {
   const s = String(slug || "").toLowerCase();
   const family = s.includes("noir") ? "noir" : s.includes("bloom") ? "bloom" : "calm";
   return `/products/${family}-1.svg`;
+}
+
+
+function tagLabel(locale: "en" | "ar", value: string): string {
+  const key = String(value || "").trim().toLowerCase();
+  const map: Record<string, { en: string; ar: string }> = {
+    day: { en: "Day", ar: "نهاري" },
+    night: { en: "Night", ar: "ليلي" },
+    anytime: { en: "Anytime", ar: "أي وقت" },
+    spring: { en: "Spring", ar: "ربيع" },
+    summer: { en: "Summer", ar: "صيف" },
+    fall: { en: "Fall", ar: "خريف" },
+    winter: { en: "Winter", ar: "شتاء" },
+    "all-season": { en: "All-season", ar: "كل المواسم" },
+    unisex: { en: "Unisex", ar: "للجنسين" },
+    "unisex-men-leaning": { en: "Unisex (Men-leaning)", ar: "للجنسين (يميل للرجال)" },
+    "unisex-women-leaning": { en: "Unisex (Women-leaning)", ar: "للجنسين (يميل للنساء)" },
+    men: { en: "Men", ar: "رجالي" },
+    women: { en: "Women", ar: "نسائي" },
+  };
+  return (map[key] || { en: value, ar: value })[locale];
 }
 
 function promoBadgeText(locale: "en" | "ar", promoType: string | null, promoValue: number): string {
@@ -100,7 +124,10 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
                 when bp.discount_type='FIXED' then greatest(0, coalesce(vm.min_variant_price_jod, p.price_jod) - bp.discount_value)
                 else null
               end
-            )::text as discounted_price_jod
+            )::text as discounted_price_jod,
+            coalesce(p.wear_times, "{}"::text[]) as wear_times,
+            coalesce(p.seasons, "{}"::text[]) as seasons,
+            coalesce(p.audiences, "{}"::text[]) as audiences
        from products p
        left join lateral (
          select min(v.price_jod) as min_variant_price_jod
@@ -243,6 +270,12 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
                   <strong>{isAr ? `ابتداءً من ${price.toFixed(2)} JOD` : `From ${price.toFixed(2)} JOD`}</strong>
                 )}
               </p>
+
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                {[...p.wear_times, ...p.seasons, ...p.audiences].slice(0, 2).map((chip) => (
+                  <span key={`${p.slug}-${chip}`} className="badge" style={{ fontSize: 11, padding: "2px 8px" }}>{tagLabel(locale, chip)}</span>
+                ))}
+              </div>
 
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
                 <a className="btn" href={`/${locale}/product/${p.slug}`}>
