@@ -8,7 +8,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function pickMulti(form: FormData, key: string): string[] {
-  return form.getAll(key).map((v) => String(v || "").trim()).filter(Boolean);
+  return form
+    .getAll(key)
+    .map((v) => String(v || "").trim())
+    .filter(Boolean);
 }
 
 function normalizeSlug(v: unknown) {
