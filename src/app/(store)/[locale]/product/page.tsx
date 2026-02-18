@@ -1,7 +1,8 @@
 import SafeImg from "@/components/SafeImg";
 import AddToCartButton from "@/components/AddToCartButton";
-import { db } from "@/lib/db";
+import { db, isDbConnectivityError } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
+import { categoryLabels, products as staticProducts } from "@/lib/siteContent";
 
 type CategoryRow = {
   key: string;
@@ -85,16 +86,21 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
   const locale = rawLocale === "ar" ? "ar" : "en";
   const isAr = locale === "ar";
 
-  await ensureCatalogTables();
+  let categoriesRows: CategoryRow[] = [];
+  let productRows: ProductRow[] = [];
 
-  const categoriesRes = await db.query<CategoryRow>(
+  try {
+    await ensureCatalogTables();
+
+    const categoriesRes = await db.query<CategoryRow>(
     `select key, name_en, name_ar, is_active, is_promoted, sort_order
        from categories
       where is_active=true
       order by sort_order asc, key asc`
-  );
+    );
+    categoriesRows = categoriesRes.rows;
 
-  const productsRes = await db.query<ProductRow>(
+    const productsRes = await db.query<ProductRow>(
     `select p.id,
             p.slug,
             p.name_en,
@@ -163,14 +169,54 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
       where p.is_active=true
       order by p.created_at desc
       limit 500`
-  );
+    );
+    productRows = productsRes.rows;
+  } catch (error: unknown) {
+    if (!isDbConnectivityError(error)) throw error;
 
-  const cats: Array<{ key: string; label: string }> = categoriesRes.rows.length
-    ? categoriesRes.rows.map((c) => ({ key: c.key, label: locale === "ar" ? c.name_ar : c.name_en }))
+    categoriesRows = Object.entries(categoryLabels).map(([key, labels], index) => ({
+      key,
+      name_en: labels.en,
+      name_ar: labels.ar,
+      is_active: true,
+      is_promoted: false,
+      sort_order: index,
+    }));
+
+    productRows = staticProducts.map((p, index) => {
+      const defaultVariant = p.variants?.find((v) => v.isDefault) || p.variants?.[0] || null;
+      const minVariantPrice = (p.variants || []).reduce((min, v) => Math.min(min, Number(v.priceJod || 0)), Number.POSITIVE_INFINITY);
+      return {
+        id: index + 1,
+        slug: p.slug,
+        name_en: p.name.en,
+        name_ar: p.name.ar,
+        description_en: p.description.en,
+        description_ar: p.description.ar,
+        price_jod: String(p.priceJod),
+        min_variant_price_jod: Number.isFinite(minVariantPrice) ? String(minVariantPrice) : String(p.priceJod),
+        default_variant_id: defaultVariant ? index + 10000 : null,
+        default_variant_label: defaultVariant?.sizeLabel ?? null,
+        default_variant_price_jod: String(defaultVariant?.priceJod ?? p.priceJod),
+        category_key: p.category,
+        inventory_qty: 99,
+        image_id: null,
+        promo_type: null,
+        promo_value: null,
+        discounted_price_jod: null,
+        wear_times: [],
+        seasons: [],
+        audiences: [p.audience],
+      };
+    });
+  }
+
+  const cats: Array<{ key: string; label: string }> = categoriesRows.length
+    ? categoriesRows.map((c) => ({ key: c.key, label: locale === "ar" ? c.name_ar : c.name_en }))
     : Object.entries(FALLBACK_CATS).map(([key, v]) => ({ key, label: v[locale] }));
 
   const catLabel = (key: string) => {
-    const found = categoriesRes.rows.find((c) => c.key === key);
+    const found = categoriesRows.find((c) => c.key === key);
     if (found) return locale === "ar" ? found.name_ar : found.name_en;
     return (FALLBACK_CATS[key] || { en: key, ar: key })[locale];
   };
@@ -193,7 +239,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
       </div>
 
       <div className="grid-3">
-        {productsRes.rows.map((p) => {
+        {productRows.map((p) => {
           const name = isAr ? p.name_ar : p.name_en;
           const desc = isAr ? p.description_ar : p.description_en;
           const baseFromPrice = Number(p.min_variant_price_jod || p.price_jod || 0);
@@ -301,7 +347,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
         })}
       </div>
 
-      {productsRes.rows.length === 0 ? (
+      {productRows.length === 0 ? (
         <p className="muted" style={{ marginTop: 14 }}>
           {isAr ? "لا توجد منتجات بعد. أضف المنتجات من لوحة الإدارة." : "No products yet. Add products from Admin."}
         </p>
