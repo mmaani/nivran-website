@@ -1,6 +1,6 @@
 import SafeImg from "@/components/SafeImg";
 import AddToCartButton from "@/components/AddToCartButton";
-import { db } from "@/lib/db";
+import { db, isDbConnectivityError } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
 import { categoryLabels, products as staticProducts } from "@/lib/siteContent";
 
@@ -171,7 +171,9 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
       limit 500`
     );
     productRows = productsRes.rows;
-  } catch {
+  } catch (error: unknown) {
+    if (!isDbConnectivityError(error)) throw error;
+
     categoriesRows = Object.entries(categoryLabels).map(([key, labels], index) => ({
       key,
       name_en: labels.en,

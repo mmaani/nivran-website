@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { db, isDbConnectivityError } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
 import { products as staticProducts } from "@/lib/siteContent";
 
@@ -65,7 +65,9 @@ export async function GET(req: NextRequest) {
       },
       { status: 200 }
     );
-  } catch {
+  } catch (error: unknown) {
+    if (!isDbConnectivityError(error)) throw error;
+
     const p = staticProducts.find((item) => item.slug === slug);
     if (!p) return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
 

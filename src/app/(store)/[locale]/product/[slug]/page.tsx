@@ -1,7 +1,7 @@
 import ProductImageGallery from "./ProductImageGallery";
 import ProductPurchasePanel from "./ProductPurchasePanel";
 import { notFound } from "next/navigation";
-import { db } from "@/lib/db";
+import { db, isDbConnectivityError } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
 import { categoryLabels, products as staticProducts } from "@/lib/siteContent";
 import styles from "./page.module.css";
@@ -250,7 +250,9 @@ export default async function ProductDetailPage({
       </div>
     </div>
   );
-  } catch {
+  } catch (error: unknown) {
+    if (!isDbConnectivityError(error)) throw error;
+
     const fallback = staticProducts.find((p) => p.slug === slug);
     if (!fallback) return notFound();
 

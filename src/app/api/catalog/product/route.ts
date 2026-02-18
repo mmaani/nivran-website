@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { db, isDbConnectivityError } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
 import { products as staticProducts } from "@/lib/siteContent";
 
@@ -146,7 +146,9 @@ export async function GET(req: Request) {
           }
         : null,
     });
-  } catch {
+  } catch (error: unknown) {
+    if (!isDbConnectivityError(error)) throw error;
+
     const fallback = id
       ? staticProducts[id - 1] ?? null
       : staticProducts.find((p) => p.slug === slug);
