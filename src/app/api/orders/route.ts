@@ -59,6 +59,12 @@ function normalizeVariantId(v: unknown): number | null {
   }
   return null;
 }
+function normalizeQty(v: unknown): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(1, Math.min(99, Math.trunc(n)));
+}
+
 
 async function fetchProductsBySlugs(slugs: string[]) {
   await ensureCatalogTables();
