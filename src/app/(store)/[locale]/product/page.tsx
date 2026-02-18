@@ -72,9 +72,9 @@ function tagLabel(locale: "en" | "ar", value: string): string {
 
 function promoBadgeText(locale: "en" | "ar", promoType: string | null, promoValue: number): string {
   if (promoType === "PERCENT") {
-    return locale === "ar" ? `خصم ${promoValue}%` : `-${promoValue}%`;
+    return locale === "ar" ? `AUTO • وفر ${promoValue}%` : `AUTO • Save ${promoValue}%`;
   }
-  return locale === "ar" ? `وفر ${promoValue.toFixed(2)} د.أ` : `Save ${promoValue.toFixed(2)} JOD`;
+  return locale === "ar" ? `AUTO • وفر ${promoValue.toFixed(2)} د.أ` : `AUTO • Save ${promoValue.toFixed(2)} JOD`;
 }
 
 export const runtime = "nodejs";
@@ -258,17 +258,17 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
               <h3 style={{ margin: "0 0 .35rem" }}>{name}</h3>
               {desc ? <p className="muted">{desc}</p> : null}
 
-              <p>
-                {hasPromo ? (
-                  <>
-                    <span style={{ textDecoration: "line-through", opacity: 0.7, marginInlineEnd: 8 }}>
-                      {price.toFixed(2)} JOD
-                    </span>
-                    <strong>{discounted.toFixed(2)} JOD</strong>
-                  </>
-                ) : (
-                  <strong>{isAr ? `ابتداءً من ${price.toFixed(2)} JOD` : `From ${price.toFixed(2)} JOD`}</strong>
-                )}
+              <p style={{ marginBottom: 4 }}>
+                <strong>{isAr ? `ابتداءً من ${price.toFixed(2)} JOD` : `From ${price.toFixed(2)} JOD`}</strong>
+              </p>
+              <p className="muted" style={{ marginTop: 0 }}>
+                {hasPromo
+                  ? isAr
+                    ? `السعر الحالي (${defaultVariantLabel || "Default"}): ${discounted.toFixed(2)} JOD`
+                    : `Current price (${defaultVariantLabel || "Default"}): ${discounted.toFixed(2)} JOD`
+                  : isAr
+                    ? `السعر الحالي (${defaultVariantLabel || "Default"}): ${defaultVariantPrice.toFixed(2)} JOD`
+                    : `Current price (${defaultVariantLabel || "Default"}): ${defaultVariantPrice.toFixed(2)} JOD`}
               </p>
 
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>

@@ -58,8 +58,8 @@ export function normalizeCartItems(items: unknown): CartItem[] {
 
     out.push({
       slug,
-      variantId: Number.isFinite(toNum(it.variantId)) ? Math.trunc(toNum(it.variantId)) : null,
-      variantLabel: toStr(it.variantLabel).trim(),
+      variantId,
+      variantLabel,
       name: toStr(it.name).trim(),
       priceJod: toNum(it.priceJod),
       qty: clampQty(it.qty),
@@ -68,7 +68,10 @@ export function normalizeCartItems(items: unknown): CartItem[] {
 
   // de-dupe by slug + variant
   const map = new Map<string, CartItem>();
-  for (const i of out) map.set(`${i.slug}::${i.variantId ?? "base"}`, i);
+  for (const i of out) {
+    const key = `${i.slug}::${i.variantId ?? "base"}`;
+    map.set(key, i);
+  }
   return Array.from(map.values());
 }
 
@@ -113,15 +116,20 @@ export function cartSubtotalJod(items: CartItem[]): number {
 export function mergeCartSum(a: CartItem[], b: CartItem[]): CartItem[] {
   const map = new Map<string, CartItem>();
 
-  for (const it of normalizeCartItems(a)) map.set(`${it.slug}::${it.variantId ?? "base"}`, { ...it });
+  for (const it of normalizeCartItems(a)) {
+    const key = `${it.slug}::${it.variantId ?? "base"}`;
+    map.set(key, { ...it });
+  }
 
   for (const it of normalizeCartItems(b)) {
     const key = `${it.slug}::${it.variantId ?? "base"}`;
     const prev = map.get(key);
+
     if (!prev) {
       map.set(key, { ...it });
       continue;
     }
+
     map.set(key, {
       slug: it.slug,
       variantId: it.variantId,

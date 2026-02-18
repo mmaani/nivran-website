@@ -31,8 +31,7 @@ type ProductRow = {
   audiences: string[];
 };
 
-
-type VariantRow = {
+type CatalogVariantRow = {
   id: number;
   product_id: number;
   product_slug: string;
@@ -68,10 +67,18 @@ function labelCategory(lang: "en" | "ar", c: CategoryRow) {
   return lang === "ar" ? c.name_ar : c.name_en;
 }
 
-export default async function AdminCatalogPage() {
+export default async function AdminCatalogPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   await ensureCatalogTables();
   const lang = await getAdminLang();
   const isAr = lang === "ar";
+  const params = (await searchParams) || {};
+  const saved = String(params.saved || "") === "1";
+  const variantError = String(params.error || "") === "invalid-variant";
+
 
   const categoriesRes = await db.query<CategoryRow>(
     `select key, name_en, name_ar, sort_order, is_active, is_promoted
@@ -103,7 +110,7 @@ export default async function AdminCatalogPage() {
       limit 300`
   );
 
-  const variantsRes = await db.query<VariantRow>(
+  const variantsRes = await db.query<CatalogVariantRow>(
     `select v.id,
             v.product_id,
             p.slug as product_slug,
@@ -208,6 +215,16 @@ export default async function AdminCatalogPage() {
       <header className={styles.adminCard}>
         <h1 style={{ marginTop: 0 }}>{L.title}</h1>
         <p style={{ marginBottom: 0, opacity: 0.8 }}>{L.sub}</p>
+        {saved ? (
+          <p style={{ marginTop: 10, marginBottom: 0, color: "seagreen", fontWeight: 600 }}>
+            {isAr ? "تم الحفظ بنجاح." : "Saved successfully."}
+          </p>
+        ) : null}
+        {variantError ? (
+          <p style={{ marginTop: 10, marginBottom: 0, color: "crimson", fontWeight: 600 }}>
+            {isAr ? "تحقق من المتغير: الاسم والسعر مطلوبة والسعر يجب أن يكون أكبر من صفر." : "Variant validation failed: label and price are required, and price must be greater than zero."}
+          </p>
+        ) : null}
       </header>
 
       <section className={styles.adminCard}>
@@ -223,7 +240,7 @@ export default async function AdminCatalogPage() {
             </select>
             <input name="name_en" required placeholder="Product name (EN)" className={styles.adminInput} />
             <input name="name_ar" required placeholder="اسم المنتج (AR)" className={styles.adminInput} />
-            <input name="price_jod" type="number" min="0" step="0.01" required placeholder="Price" className={`${styles.adminInput} ${styles.ltr}`} />
+            <input name="price_jod" type="number" min="0.01" step="0.01" required placeholder="Price" className={`${styles.adminInput} ${styles.ltr}`} />
             <input name="compare_at_price_jod" type="number" step="0.01" placeholder="Compare at price" className={`${styles.adminInput} ${styles.ltr}`} />
             <input name="inventory_qty" type="number" min="0" defaultValue={0} placeholder="Inventory" className={`${styles.adminInput} ${styles.ltr}`} />
             <span />
@@ -332,15 +349,16 @@ export default async function AdminCatalogPage() {
                   <span className={styles.ltr}>{product.slug}</span> — {isAr ? product.name_ar : product.name_en}
                 </div>
 
-                <form action="/api/admin/catalog/variants" method="post" style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(7,minmax(0,1fr))", marginBottom: 10 }}>
+                <form action="/api/admin/catalog/variants" method="post" style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(8,minmax(0,1fr))", marginBottom: 10 }}>
                   <input type="hidden" name="action" value="create" />
                   <input type="hidden" name="product_id" value={product.id} />
-                  <input name="label" required placeholder={isAr ? "الاسم (مثال 50 ml)" : "Label (e.g. 50 ml)"} className={styles.adminInput} />
+                  <input name="label" required minLength={2} placeholder={isAr ? "الاسم (مثال 50 ml)" : "Label (e.g. 50 ml)"} className={styles.adminInput} />
                   <input name="size_ml" type="number" min="0" placeholder="ml" className={`${styles.adminInput} ${styles.ltr}`} />
-                  <input name="price_jod" type="number" min="0" step="0.01" required placeholder="Price" className={`${styles.adminInput} ${styles.ltr}`} />
+                  <input name="price_jod" type="number" min="0.01" step="0.01" required placeholder="Price" className={`${styles.adminInput} ${styles.ltr}`} />
                   <input name="compare_at_price_jod" type="number" min="0" step="0.01" placeholder="Compare" className={`${styles.adminInput} ${styles.ltr}`} />
                   <input name="sort_order" type="number" min="0" defaultValue={variants.length * 10} placeholder="Sort" className={`${styles.adminInput} ${styles.ltr}`} />
                   <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" name="is_default" /> {isAr ? "افتراضي" : "Default"}</label>
+                  <span className="muted" style={{ fontSize: 12 }}>{isAr ? "عند تفعيل الافتراضي سيتم إلغاء الافتراضي القديم تلقائياً." : "When Default is enabled, the previous default is automatically unset."}</span>
                   <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" name="is_active" defaultChecked /> {L.active}</label>
                   <button className={styles.adminBtn} type="submit" style={{ gridColumn: "1 / -1", width: "fit-content" }}>{isAr ? "إضافة متغير" : "Add variant"}</button>
                 </form>
@@ -351,9 +369,9 @@ export default async function AdminCatalogPage() {
                       <input type="hidden" name="action" value="update" />
                       <input type="hidden" name="id" value={v.id} />
                       <input type="hidden" name="product_id" value={product.id} />
-                      <input name="label" defaultValue={v.label} className={styles.adminInput} />
+                      <input name="label" required minLength={2} defaultValue={v.label} className={styles.adminInput} />
                       <input name="size_ml" type="number" min="0" defaultValue={v.size_ml ?? ""} className={`${styles.adminInput} ${styles.ltr}`} />
-                      <input name="price_jod" type="number" min="0" step="0.01" defaultValue={Number(v.price_jod || "0")} className={`${styles.adminInput} ${styles.ltr}`} />
+                      <input name="price_jod" type="number" min="0.01" step="0.01" required defaultValue={Number(v.price_jod || "0")} className={`${styles.adminInput} ${styles.ltr}`} />
                       <input name="compare_at_price_jod" type="number" min="0" step="0.01" defaultValue={v.compare_at_price_jod ? Number(v.compare_at_price_jod) : ""} className={`${styles.adminInput} ${styles.ltr}`} />
                       <input name="sort_order" type="number" min="0" defaultValue={v.sort_order} className={`${styles.adminInput} ${styles.ltr}`} />
                       <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" name="is_default" defaultChecked={v.is_default} /> {isAr ? "افتراضي" : "Default"}</label>

@@ -37,9 +37,9 @@ function tagLabel(locale: "en" | "ar", value: string): string {
 
 function promoBadgeText(locale: "en" | "ar", promoType: "PERCENT" | "FIXED", promoValue: number): string {
   if (promoType === "PERCENT") {
-    return locale === "ar" ? `خصم ${promoValue}%` : `-${promoValue}%`;
+    return locale === "ar" ? `AUTO • وفر ${promoValue}%` : `AUTO • Save ${promoValue}%`;
   }
-  return locale === "ar" ? `وفر ${promoValue.toFixed(2)} د.أ` : `Save ${promoValue.toFixed(2)} JOD`;
+  return locale === "ar" ? `AUTO • وفر ${promoValue.toFixed(2)} د.أ` : `AUTO • Save ${promoValue.toFixed(2)} JOD`;
 }
 
 type ProductRow = {

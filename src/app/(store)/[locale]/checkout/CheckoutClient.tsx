@@ -95,16 +95,16 @@ export default function CheckoutClient() {
       notes: isAr ? "ملاحظات" : "Notes",
       placed: isAr ? "تم إنشاء الطلب." : "Order created.",
       promoLabel: isAr ? "كود الخصم" : "Promo code",
-      havePromo: isAr ? "لديك كود خصم؟" : "Have a promo code?",
-      useCodeInstead: isAr ? "استخدم كود خصم بدلاً من العرض التلقائي" : "Use a promo code instead",
+      havePromo: isAr ? "استخدام كود خصم" : "Use promo code",
+      useCodeInstead: isAr ? "التبديل إلى كود خصم (سيتم إلغاء التلقائي)" : "Switch to promo code (AUTO will be removed)",
       promoPlaceholder: isAr ? "أدخل الكود" : "Enter code",
       promoApply: isAr ? "تطبيق" : "Apply",
       promoRemove: isAr ? "إزالة" : "Remove",
-      promoApplied: isAr ? "تم تطبيق الخصم" : "Promo applied",
-      autoPromo: isAr ? "عرض تلقائي" : "Automatic promotion",
-      useAutoPromo: isAr ? "تفعيل العرض التلقائي" : "Use automatic promotion",
-      removeAutoPromo: isAr ? "إلغاء العرض التلقائي" : "Remove automatic promotion",
-      oneDiscountRule: isAr ? "يمكنك استخدام نوع خصم واحد فقط (تلقائي أو كود)." : "Only one discount type can be used (automatic OR promo code).",
+      promoApplied: isAr ? "تم تطبيق الخصم (CODE)" : "Promo code applied (CODE)",
+      autoPromo: isAr ? "خصم تلقائي (AUTO)" : "Automatic discount (AUTO)",
+      useAutoPromo: isAr ? "تفعيل الخصم التلقائي" : "Apply AUTO discount",
+      removeAutoPromo: isAr ? "إلغاء الخصم التلقائي" : "Remove AUTO discount",
+      oneDiscountRule: isAr ? "لا يمكن الجمع بين AUTO و CODE. اختر نوع خصم واحد فقط." : "AUTO and CODE cannot be combined. Choose one discount type only.",
     }),
     [isAr]
   );
@@ -457,7 +457,11 @@ export default function CheckoutClient() {
                 </>
               ) : null}
               {promoMsg ? <p className="muted" style={{ margin: 0 }}>{promoMsg}</p> : null}
-              {selectedPromo ? <p className="muted" style={{ margin: 0 }}>{selectedPromo.title}</p> : null}
+              {selectedPromo ? (
+                <p className="muted" style={{ margin: 0 }}>
+                  <strong>{selectedPromo.mode === "AUTO" ? "AUTO" : "CODE"}</strong> · {selectedPromo.title}
+                </p>
+              ) : null}
             </div>
 
             <hr style={{ margin: "14px 0", border: "none", borderTop: "1px solid #eee" }} />

@@ -52,6 +52,8 @@ export default function ProductPurchasePanel({
         ? round2(Math.max(0, basePrice - promoValue))
         : basePrice;
   const hasPromo = promoType != null && discountedPrice < basePrice;
+  const minVariantPrice = variants.reduce((min, variant) => Math.min(min, Number(variant.priceJod || 0)), Number.POSITIVE_INFINITY);
+  const displayFromPrice = Number.isFinite(minVariantPrice) ? minVariantPrice : basePrice;
 
   return (
     <>
@@ -76,7 +78,13 @@ export default function ProductPurchasePanel({
         })}
       </div>
 
-      <p style={{ marginTop: 10 }}>
+      <p style={{ marginTop: 10, marginBottom: 4 }}>
+        <strong>{isAr ? `ابتداءً من ${displayFromPrice.toFixed(2)} JOD` : `From ${displayFromPrice.toFixed(2)} JOD`}</strong>
+      </p>
+      <p className="muted" style={{ marginTop: 0 }}>
+        {isAr ? `المحدد الآن: ${selected.label}` : `Selected: ${selected.label}`}
+      </p>
+      <p style={{ marginTop: 6 }}>
         {hasPromo ? (
           <>
             <span style={{ textDecoration: "line-through", opacity: 0.7, marginInlineEnd: 10 }}>
