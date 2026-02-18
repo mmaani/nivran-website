@@ -7,6 +7,10 @@ import { catalogErrorRedirect, catalogSavedRedirect, catalogUnauthorizedRedirect
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function catalogErrorRedirect(req: Request, code: string) {
+  return NextResponse.redirect(new URL(`/admin/catalog?error=${encodeURIComponent(code)}`, req.url), 303);
+}
+
 function toBool(v: FormDataEntryValue | null): boolean {
   return String(v || "") === "on";
 }
