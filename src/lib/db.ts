@@ -52,6 +52,38 @@ function toExecutor(client: PoolClient): DbExecutor {
   };
 }
 
+
+
+export function isDbConnectivityError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  const nodeError = error as Error & { code?: unknown; errno?: unknown };
+  const code = typeof nodeError.code === "string" ? nodeError.code.toUpperCase() : "";
+  const errno = typeof nodeError.errno === "string" ? nodeError.errno.toUpperCase() : "";
+  const message = String(error.message || "").toUpperCase();
+
+  const connectivityCodes = new Set([
+    "ENETUNREACH",
+    "ETIMEDOUT",
+    "ECONNREFUSED",
+    "ECONNRESET",
+    "EHOSTUNREACH",
+    "EAI_AGAIN",
+    "EPIPE",
+  ]);
+
+  if (connectivityCodes.has(code) || connectivityCodes.has(errno)) return true;
+
+  return (
+    message.includes("ENETUNREACH")
+    || message.includes("ECONNREFUSED")
+    || message.includes("CONNECTION TERMINATED")
+    || message.includes("TIMED OUT")
+    || message.includes("NO PG_HBA.CONF ENTRY")
+    || message.includes("COULD NOT CONNECT TO SERVER")
+  );
+}
+
 export const db: DbExecutor & {
   withTransaction: <T>(fn: (trx: DbExecutor) => Promise<T>) => Promise<T>;
 } = {
