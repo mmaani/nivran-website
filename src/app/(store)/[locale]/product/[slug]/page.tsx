@@ -139,9 +139,9 @@ export default async function ProductDetailPage({
                 else null
               end
             )::text as discounted_price_jod,
-            coalesce(p.wear_times, "{}"::text[]) as wear_times,
-            coalesce(p.seasons, "{}"::text[]) as seasons,
-            coalesce(p.audiences, "{}"::text[]) as audiences
+            coalesce(p.wear_times, '{}'::text[]) as wear_times,
+            coalesce(p.seasons, '{}'::text[]) as seasons,
+            coalesce(p.audiences, '{}'::text[]) as audiences
        from products p
        left join lateral (
          select pr.id, pr.discount_type, pr.discount_value, pr.priority
