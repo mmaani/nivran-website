@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { db } from "@/lib/db";
+import { db, isDbConnectivityError } from "@/lib/db";
 import { ensureOrdersTables } from "@/lib/orders";
 import { ensureInboxTables } from "@/lib/inbox";
 import { getAdminLang } from "@/lib/admin-lang";
@@ -33,7 +33,10 @@ type RecentCallbackRow = {
   created_at: string;
 };
 
+type SystemHealth = "db" | "fallback";
+
 type DashboardStats = {
+  health: SystemHealth;
   totalOrders: number;
   paidOrders: number;
   pendingPayment: number;
@@ -53,64 +56,84 @@ function toNum(v: string | null | undefined): number {
 }
 
 async function getStats(): Promise<DashboardStats> {
-  await Promise.all([ensureOrdersTables(), ensureInboxTables()]);
+  try {
+    await Promise.all([ensureOrdersTables(), ensureInboxTables()]);
 
-  const [
-    totalOrders,
-    paidOrders,
-    pendingPayment,
-    failedOrCanceled,
-    subscribers,
-    messages,
-    callbacks,
-    revenue,
-    recentOrders,
-    recentContacts,
-    recentCallbacks,
-  ] = await Promise.all([
-    db.query<CountRow>(`select count(*)::text as count from orders`),
-    db.query<CountRow>(`select count(*)::text as count from orders where status='PAID'`),
-    db.query<CountRow>(`select count(*)::text as count from orders where status='PENDING_PAYMENT'`),
-    db.query<CountRow>(`select count(*)::text as count from orders where status in ('FAILED','CANCELED')`),
-    db.query<CountRow>(`select count(*)::text as count from newsletter_subscribers`),
-    db.query<CountRow>(`select count(*)::text as count from contact_submissions`),
-    db.query<CountRow>(`select count(*)::text as count from paytabs_callbacks`),
-    db.query<RevenueRow>(
-      `select coalesce(sum(coalesce(total_jod, amount::numeric)),0)::text as total from orders where status in ('PAID','PAID_COD')`
-    ),
-    db.query<RecentOrderRow>(
-      `select id, cart_id, status, amount::text, currency, created_at::text
-       from orders
-       order by created_at desc
-       limit 6`
-    ),
-    db.query<RecentContactRow>(
-      `select id, name, email, subject, created_at::text
-       from contact_submissions
-       order by created_at desc
-       limit 5`
-    ),
-    db.query<RecentCallbackRow>(
-      `select id, cart_id, tran_ref, signature_valid, created_at::text
-       from paytabs_callbacks
-       order by created_at desc
-       limit 5`
-    ),
-  ]);
+    const [
+      totalOrders,
+      paidOrders,
+      pendingPayment,
+      failedOrCanceled,
+      subscribers,
+      messages,
+      callbacks,
+      revenue,
+      recentOrders,
+      recentContacts,
+      recentCallbacks,
+    ] = await Promise.all([
+      db.query<CountRow>(`select count(*)::text as count from orders`),
+      db.query<CountRow>(`select count(*)::text as count from orders where status='PAID'`),
+      db.query<CountRow>(`select count(*)::text as count from orders where status='PENDING_PAYMENT'`),
+      db.query<CountRow>(`select count(*)::text as count from orders where status in ('FAILED','CANCELED')`),
+      db.query<CountRow>(`select count(*)::text as count from newsletter_subscribers`),
+      db.query<CountRow>(`select count(*)::text as count from contact_submissions`),
+      db.query<CountRow>(`select count(*)::text as count from paytabs_callbacks`),
+      db.query<RevenueRow>(
+        `select coalesce(sum(coalesce(total_jod, amount::numeric)),0)::text as total from orders where status in ('PAID','PAID_COD')`
+      ),
+      db.query<RecentOrderRow>(
+        `select id, cart_id, status, amount::text, currency, created_at::text
+         from orders
+         order by created_at desc
+         limit 6`
+      ),
+      db.query<RecentContactRow>(
+        `select id, name, email, subject, created_at::text
+         from contact_submissions
+         order by created_at desc
+         limit 5`
+      ),
+      db.query<RecentCallbackRow>(
+        `select id, cart_id, tran_ref, signature_valid, created_at::text
+         from paytabs_callbacks
+         order by created_at desc
+         limit 5`
+      ),
+    ]);
 
-  return {
-    totalOrders: toNum(totalOrders.rows[0]?.count),
-    paidOrders: toNum(paidOrders.rows[0]?.count),
-    pendingPayment: toNum(pendingPayment.rows[0]?.count),
-    failedOrCanceled: toNum(failedOrCanceled.rows[0]?.count),
-    subscribers: toNum(subscribers.rows[0]?.count),
-    messages: toNum(messages.rows[0]?.count),
-    callbacks: toNum(callbacks.rows[0]?.count),
-    revenueJod: toNum(revenue.rows[0]?.total),
-    recentOrders: recentOrders.rows,
-    recentContacts: recentContacts.rows,
-    recentCallbacks: recentCallbacks.rows,
-  };
+    return {
+      health: "db",
+      totalOrders: toNum(totalOrders.rows[0]?.count),
+      paidOrders: toNum(paidOrders.rows[0]?.count),
+      pendingPayment: toNum(pendingPayment.rows[0]?.count),
+      failedOrCanceled: toNum(failedOrCanceled.rows[0]?.count),
+      subscribers: toNum(subscribers.rows[0]?.count),
+      messages: toNum(messages.rows[0]?.count),
+      callbacks: toNum(callbacks.rows[0]?.count),
+      revenueJod: toNum(revenue.rows[0]?.total),
+      recentOrders: recentOrders.rows,
+      recentContacts: recentContacts.rows,
+      recentCallbacks: recentCallbacks.rows,
+    };
+  } catch (error: unknown) {
+    if (!isDbConnectivityError(error)) throw error;
+
+    return {
+      health: "fallback",
+      totalOrders: 0,
+      paidOrders: 0,
+      pendingPayment: 0,
+      failedOrCanceled: 0,
+      subscribers: 0,
+      messages: 0,
+      callbacks: 0,
+      revenueJod: 0,
+      recentOrders: [],
+      recentContacts: [],
+      recentCallbacks: [],
+    };
+  }
 }
 
 function fmtDate(value: string, locale: "en" | "ar"): string {
@@ -128,6 +151,7 @@ export default async function AdminDashboardPage() {
 
   const cards = [
     { label: ar ? "إجمالي الطلبات" : "Total orders", value: s.totalOrders, hint: ar ? "منذ البداية" : "All-time", tone: "indigo" },
+    { label: ar ? "حالة قاعدة البيانات" : "Database status", value: s.health === "db" ? (ar ? "متصل" : "Connected") : (ar ? "Fallback" : "Fallback"), hint: s.health === "db" ? (ar ? "وضع طبيعي" : "Normal mode") : (ar ? "اتصال الشبكة غير متاح" : "Connectivity degraded"), tone: s.health === "db" ? "green" : "amber" },
     { label: ar ? "الإيراد" : "Revenue", value: `${s.revenueJod.toFixed(2)} JOD`, hint: ar ? "مدفوع + COD" : "Paid + COD paid", tone: "gold" },
     { label: ar ? "طلبات مدفوعة" : "Paid orders", value: s.paidOrders, hint: ar ? "مدفوعات مؤكدة" : "Confirmed payments", tone: "green" },
     { label: ar ? "بانتظار الدفع" : "Pending payment", value: s.pendingPayment, hint: ar ? "تحتاج متابعة" : "Needs reconciliation", tone: "amber" },
@@ -162,6 +186,14 @@ export default async function AdminDashboardPage() {
             </Link>
           </div>
         </div>
+
+        {s.health === "fallback" ? (
+          <div className="admin-card" style={{ borderColor: "#f59e0b", background: "#fffbeb" }}>
+            <p className="admin-muted" style={{ margin: 0 }}>
+              {ar ? "تنبيه: لوحة التحكم تعمل حالياً في وضع Fallback بسبب مشكلة اتصال قاعدة البيانات." : "Notice: Dashboard is currently running in fallback mode due to database connectivity issues."}
+            </p>
+          </div>
+        ) : null}
 
         <div className="admin-kpi-grid">
           {cards.map((card) => (

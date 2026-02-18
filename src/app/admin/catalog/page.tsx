@@ -1,5 +1,6 @@
-import { db } from "@/lib/db";
-import { ensureCatalogTables } from "@/lib/catalog";
+import Link from "next/link";
+import { db, isDbConnectivityError } from "@/lib/db";
+import { ensureCatalogTablesSafe } from "@/lib/catalog";
 import { getAdminLang } from "@/lib/admin-lang";
 import styles from "./page.module.css";
 
@@ -67,74 +68,124 @@ function labelCategory(lang: "en" | "ar", c: CategoryRow) {
   return lang === "ar" ? c.name_ar : c.name_en;
 }
 
+
+type CatalogPageData = {
+  health: "db" | "fallback" | "error";
+  categories: CategoryRow[];
+  products: ProductRow[];
+  variants: CatalogVariantRow[];
+  promos: PromoRow[];
+  bootstrapNote?: string;
+  errorMessage?: string;
+};
+
+async function loadCatalogPageData(): Promise<CatalogPageData> {
+  const bootstrap = await ensureCatalogTablesSafe();
+  const bootstrapNote = bootstrap.ok ? undefined : bootstrap.reason;
+
+  try {
+    const [categoriesRes, productsRes, variantsRes, promosRes] = await Promise.all([
+      db.query<CategoryRow>(
+        `select key, name_en, name_ar, sort_order, is_active, is_promoted
+           from categories
+          order by sort_order asc, key asc`
+      ),
+      db.query<ProductRow>(
+        `select p.id,
+                p.slug,
+                p.name_en,
+                p.name_ar,
+                p.price_jod::text as price_jod,
+                p.compare_at_price_jod::text as compare_at_price_jod,
+                p.inventory_qty,
+                p.category_key,
+                p.is_active,
+                coalesce(i.image_count,0)::int as image_count,
+                coalesce(p.wear_times, "{}"::text[]) as wear_times,
+                coalesce(p.seasons, "{}"::text[]) as seasons,
+                coalesce(p.audiences, "{}"::text[]) as audiences
+           from products p
+      left join (
+             select product_id, count(*)::int as image_count
+               from product_images
+              group by product_id
+           ) i on i.product_id = p.id
+          order by p.created_at desc
+          limit 300`
+      ),
+      db.query<CatalogVariantRow>(
+        `select v.id,
+                v.product_id,
+                p.slug as product_slug,
+                p.name_en as product_name_en,
+                p.name_ar as product_name_ar,
+                v.label,
+                v.size_ml,
+                v.price_jod::text as price_jod,
+                v.compare_at_price_jod::text as compare_at_price_jod,
+                v.is_default,
+                v.is_active,
+                v.sort_order
+           from product_variants v
+           join products p on p.id=v.product_id
+          order by p.created_at desc, v.sort_order asc, v.id asc
+          limit 1200`
+      ),
+      db.query<PromoRow>(
+        `select id, promo_kind, code, title_en, title_ar, discount_type, discount_value::text,
+                is_active, category_keys, usage_limit, used_count, min_order_jod::text, priority, product_slugs
+           from promotions
+          order by created_at desc`
+      ),
+    ]);
+
+    return {
+      health: "db",
+      categories: categoriesRes.rows,
+      products: productsRes.rows,
+      variants: variantsRes.rows,
+      promos: promosRes.rows,
+      bootstrapNote,
+    };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error || "Unknown catalog error");
+    if (!isDbConnectivityError(error)) {
+      return {
+        health: "error",
+        categories: [],
+        products: [],
+        variants: [],
+        promos: [],
+        bootstrapNote,
+        errorMessage: message,
+      };
+    }
+
+    return {
+      health: "fallback",
+      categories: [],
+      products: [],
+      variants: [],
+      promos: [],
+      bootstrapNote,
+      errorMessage: message,
+    };
+  }
+}
+
 export default async function AdminCatalogPage({
   searchParams,
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await ensureCatalogTables();
   const lang = await getAdminLang();
   const isAr = lang === "ar";
   const params = (await searchParams) || {};
   const saved = String(params.saved || "") === "1";
-  const variantError = String(params.error || "") === "invalid-variant";
-
-
-  const categoriesRes = await db.query<CategoryRow>(
-    `select key, name_en, name_ar, sort_order, is_active, is_promoted
-       from categories
-      order by sort_order asc, key asc`
-  );
-
-  const productsRes = await db.query<ProductRow>(
-    `select p.id,
-            p.slug,
-            p.name_en,
-            p.name_ar,
-            p.price_jod::text as price_jod,
-            p.compare_at_price_jod::text as compare_at_price_jod,
-            p.inventory_qty,
-            p.category_key,
-            p.is_active,
-            coalesce(i.image_count,0)::int as image_count,
-            coalesce(p.wear_times, "{}"::text[]) as wear_times,
-            coalesce(p.seasons, "{}"::text[]) as seasons,
-            coalesce(p.audiences, "{}"::text[]) as audiences
-       from products p
-  left join (
-         select product_id, count(*)::int as image_count
-           from product_images
-          group by product_id
-       ) i on i.product_id = p.id
-      order by p.created_at desc
-      limit 300`
-  );
-
-  const variantsRes = await db.query<CatalogVariantRow>(
-    `select v.id,
-            v.product_id,
-            p.slug as product_slug,
-            p.name_en as product_name_en,
-            p.name_ar as product_name_ar,
-            v.label,
-            v.size_ml,
-            v.price_jod::text as price_jod,
-            v.compare_at_price_jod::text as compare_at_price_jod,
-            v.is_default,
-            v.is_active,
-            v.sort_order
-       from product_variants v
-       join products p on p.id=v.product_id
-      order by p.created_at desc, v.sort_order asc, v.id asc
-      limit 1200`
-  );
-
-  const promosRes = await db.query<PromoRow>(
-    `select id, promo_kind, code, title_en, title_ar, discount_type, discount_value::text,
-            is_active, category_keys, usage_limit, used_count, min_order_jod::text, priority, product_slugs
-       from promotions
-      order by created_at desc`
-  );
+  const errorCode = String(params.error || "").trim();
+  const variantError = errorCode === "invalid-variant";
+  const uploaded = String(params.uploaded || "") === "1";
+  const data = await loadCatalogPageData();
 
   const L = isAr
     ? {
@@ -208,7 +259,12 @@ export default async function AdminCatalogPage({
         audience: "Audience",
       };
 
-  const byKey = new Map(categoriesRes.rows.map((c) => [c.key, c]));
+  const byKey = new Map(data.categories.map((c) => [c.key, c]));
+
+  const productTotal = data.products.length;
+  const productActive = data.products.filter((p) => p.is_active).length;
+  const outOfStockCount = data.products.filter((p) => Number(p.inventory_qty || 0) <= 0).length;
+  const variantsActive = data.variants.filter((v) => v.is_active).length;
 
   return (
     <main className={styles.adminGrid}>
@@ -225,8 +281,56 @@ export default async function AdminCatalogPage({
             {isAr ? "تحقق من المتغير: الاسم والسعر مطلوبة والسعر يجب أن يكون أكبر من صفر." : "Variant validation failed: label and price are required, and price must be greater than zero."}
           </p>
         ) : null}
+        {uploaded ? (
+          <p style={{ marginTop: 10, marginBottom: 0, color: "seagreen", fontWeight: 600 }}>
+            {isAr ? "تم رفع الصور بنجاح." : "Images uploaded successfully."}
+          </p>
+        ) : null}
+        {errorCode && !variantError ? (
+          <p style={{ marginTop: 10, marginBottom: 0, color: "crimson", fontWeight: 600 }}>
+            {isAr ? `حدث خطأ في العملية: ${errorCode}` : `Catalog action error: ${errorCode}`}
+          </p>
+        ) : null}
+        {data.bootstrapNote ? (
+          <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
+            {isAr ? "ملاحظة: تهيئة الجداول تم تجاوزها بسبب صلاحيات قاعدة البيانات، وتم الاستمرار بالوضع المتاح." : "Note: schema bootstrap was skipped due to DB privileges; running in compatibility mode."}
+          </p>
+        ) : null}
       </header>
 
+      <section className={styles.adminCard} style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))" }}>
+        <div><strong>{productTotal}</strong><div className="muted">{isAr ? "إجمالي المنتجات" : "Total products"}</div></div>
+        <div><strong>{productActive}</strong><div className="muted">{isAr ? "منتجات مفعلة" : "Active products"}</div></div>
+        <div><strong>{outOfStockCount}</strong><div className="muted">{isAr ? "نفدت الكمية" : "Out of stock"}</div></div>
+        <div><strong>{data.promos.length}</strong><div className="muted">{isAr ? "العروض" : "Promotions"}</div></div>
+        <div><strong>{variantsActive}</strong><div className="muted">{isAr ? "متغيرات مفعلة" : "Active variants"}</div></div>
+      </section>
+
+      {data.health === "error" ? (
+        <section className={styles.adminCard} style={{ borderColor: "#b91c1c", background: "#fef2f2" }}>
+          <h2 style={{ marginTop: 0 }}>{isAr ? "خطأ في تحميل الكتالوج" : "Catalog load error"}</h2>
+          <p style={{ marginBottom: 0 }}>{isAr ? "تعذر تحميل بيانات الكتالوج. تم تعطيل العمليات لحين التحقق من قاعدة البيانات." : "Catalog data could not be loaded. Mutations are disabled until database issues are fixed."}</p>
+          {data.errorMessage ? <p className="muted" style={{ marginTop: 8, marginBottom: 0 }}>{data.errorMessage}</p> : null}
+        </section>
+      ) : null}
+
+      {data.health === "fallback" ? (
+        <section className={styles.adminCard} style={{ borderColor: "#f59e0b", background: "#fffbeb" }}>
+          <h2 style={{ marginTop: 0 }}>{isAr ? "وضع الطوارئ" : "Fallback mode"}</h2>
+          <p style={{ marginBottom: 0 }}>
+            {isAr
+              ? "تعذّر تحميل بيانات الكتالوج من قاعدة البيانات حالياً. الصفحة في وضع عرض فقط حتى عودة الاتصال."
+              : "Catalog data could not be loaded from the database right now. The page is in read-only mode until connectivity is restored."}
+          </p>
+          <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Link href="/admin" className="btn btn-outline">{isAr ? "العودة للوحة" : "Back to dashboard"}</Link>
+            <Link href="/admin/catalog" className="btn">{isAr ? "إعادة المحاولة" : "Retry"}</Link>
+          </div>
+        </section>
+      ) : null}
+
+{data.health === "db" ? (
+      <>
       <section className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{L.addProduct}</h2>
         <form action="/api/admin/catalog/products" method="post" className={styles.adminGrid}>
@@ -234,7 +338,7 @@ export default async function AdminCatalogPage({
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
             <input name="slug" required placeholder="e.g. nivran-care-hand-gel-60ml" className={`${styles.adminInput} ${styles.ltr}`} />
             <select name="category_key" defaultValue="perfume" className={styles.adminSelect}>
-              {categoriesRes.rows.map((c) => (
+              {data.categories.map((c) => (
                 <option key={c.key} value={c.key}>{labelCategory(lang, c)} ({c.key})</option>
               ))}
             </select>
@@ -286,7 +390,7 @@ export default async function AdminCatalogPage({
               <tr><th>Slug</th><th>Name</th><th>Category</th><th>Price</th><th>Inventory</th><th>Images</th><th>Status</th><th>Actions</th></tr>
             </thead>
             <tbody>
-              {productsRes.rows.map((p) => (
+              {data.products.map((p) => (
                 <tr key={p.id}>
                   <td className={styles.ltr}>{p.slug}</td>
                   <td>{p.name_en}<br />{p.name_ar}</td>
@@ -300,7 +404,7 @@ export default async function AdminCatalogPage({
                       <input type="hidden" name="action" value="update" />
                       <input type="hidden" name="id" value={p.id} />
                       <select name="category_key" defaultValue={p.category_key} className={styles.adminSelect}>
-                        {categoriesRes.rows.map((c) => (
+                        {data.categories.map((c) => (
                           <option key={c.key} value={c.key}>{labelCategory(lang, c)} ({c.key})</option>
                         ))}
                       </select>
@@ -331,7 +435,7 @@ export default async function AdminCatalogPage({
                   </td>
                 </tr>
               ))}
-              {productsRes.rows.length === 0 ? <tr><td colSpan={8} style={{ padding: 12, opacity: 0.7 }}>{L.noProducts}</td></tr> : null}
+              {data.products.length === 0 ? <tr><td colSpan={8} style={{ padding: 12, opacity: 0.7 }}>{L.noProducts}</td></tr> : null}
             </tbody>
           </table>
         </div>
@@ -341,8 +445,8 @@ export default async function AdminCatalogPage({
       <section className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{isAr ? "المتغيرات" : "Variants"}</h2>
         <div style={{ display: "grid", gap: 16 }}>
-          {productsRes.rows.map((product) => {
-            const variants = variantsRes.rows.filter((v) => v.product_id === product.id);
+          {data.products.map((product) => {
+            const variants = data.variants.filter((v) => v.product_id === product.id);
             return (
               <div key={product.id} style={{ border: "1px solid #ececec", borderRadius: 12, padding: 12 }}>
                 <div style={{ fontWeight: 700, marginBottom: 10 }}>
@@ -427,7 +531,7 @@ export default async function AdminCatalogPage({
               <input type="checkbox" name="category_keys" value="__ALL__" defaultChecked /> {L.allCats}
             </label>
             <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-              {categoriesRes.rows.map((c) => (
+              {data.categories.map((c) => (
                 <label key={c.key} style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <input type="checkbox" name="category_keys" value={c.key} /> {labelCategory(lang, c)}
                 </label>
@@ -446,7 +550,7 @@ export default async function AdminCatalogPage({
       <section className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{L.promos}</h2>
         <ul style={{ margin: 0, paddingInlineStart: 18 }}>
-          {promosRes.rows.map((r) => (
+          {data.promos.map((r) => (
             <li key={r.id} style={{ marginBottom: 12 }}>
               <strong className={styles.ltr}>{r.code || "(AUTO)"}</strong> — <span className={styles.ltr}>{r.discount_type === "PERCENT" ? `${r.discount_value}%` : `${r.discount_value} JOD`}</span>
               <div style={{ fontSize: 12, opacity: 0.82, marginTop: 4 }}>
@@ -476,7 +580,7 @@ export default async function AdminCatalogPage({
               </form>
             </li>
           ))}
-          {promosRes.rows.length === 0 ? <li style={{ opacity: 0.7 }}>{L.noPromos}</li> : null}
+          {data.promos.length === 0 ? <li style={{ opacity: 0.7 }}>{L.noPromos}</li> : null}
         </ul>
       </section>
 
@@ -504,7 +608,7 @@ export default async function AdminCatalogPage({
               <tr><th>Key</th><th>Name EN</th><th>Name AR</th><th>Sort</th><th>{L.active}</th><th>Promoted</th><th>Actions</th></tr>
             </thead>
             <tbody>
-              {categoriesRes.rows.map((c) => (
+              {data.categories.map((c) => (
                 <tr key={c.key}>
                   <td className={styles.ltr}>{c.key}</td><td>{c.name_en}</td><td>{c.name_ar}</td><td className={styles.ltr}>{c.sort_order}</td><td>{c.is_active ? "✓" : "—"}</td><td>{c.is_promoted ? "✓" : "—"}</td>
                   <td>
@@ -530,6 +634,8 @@ export default async function AdminCatalogPage({
           </table>
         </div>
       </section>
+      </>
+      ) : null}
     </main>
   );
 }
