@@ -13,12 +13,13 @@ function xmlEscape(input: string): string {
     .replaceAll("'", "&apos;");
 }
 
-function cell(v: string): string {
-  return `<Cell><Data ss:Type="String">${xmlEscape(v)}</Data></Cell>`;
+function cell(v: string, type: "String" | "Number" = "String"): string {
+  return `<Cell><Data ss:Type="${type}">${xmlEscape(v)}</Data></Cell>`;
 }
 
-function row(values: string[]): string {
-  return `<Row>${values.map(cell).join("")}</Row>`;
+function row(cells: Array<{ value: string; type?: "String" | "Number" }>, styleId?: string): string {
+  const styleAttr = styleId ? ` ss:StyleID="${styleId}"` : "";
+  return `<Row${styleAttr}>${cells.map((c) => cell(c.value, c.type || "String")).join("")}</Row>`;
 }
 
 function toInt(v: string | null, fallback: number): number {
@@ -40,15 +41,15 @@ export async function GET(req: Request) {
 
   const headers = ["ID", "Email", "Name", "Phone", "Address", "Orders", "Total Spent (JOD)", "Last Order", "Created"];
   const dataRows = exportRows.map((r) => [
-    String(r.id),
-    r.email,
-    r.full_name || "",
-    r.phone || "",
-    [r.address_line1, r.city, r.country].filter(Boolean).join(", "),
-    String(r.orders_count),
-    Number(r.total_spent || 0).toFixed(2),
-    r.last_order_at ? new Date(r.last_order_at).toISOString() : "",
-    new Date(r.created_at).toISOString(),
+    { value: String(r.id), type: "Number" as const },
+    { value: r.email },
+    { value: r.full_name || "" },
+    { value: r.phone || "" },
+    { value: [r.address_line1, r.city, r.country].filter(Boolean).join(", ") },
+    { value: String(r.orders_count), type: "Number" as const },
+    { value: Number(r.total_spent || 0).toFixed(2), type: "Number" as const },
+    { value: r.last_order_at ? new Date(r.last_order_at).toISOString() : "" },
+    { value: new Date(r.created_at).toISOString() },
   ]);
 
   const worksheet = `
@@ -63,8 +64,8 @@ export async function GET(req: Request) {
         <Column ss:Width="120"/>
         <Column ss:Width="180"/>
         <Column ss:Width="140"/>
-        ${row(headers)}
-        ${dataRows.map(row).join("\n")}
+        ${row(headers.map((h) => ({ value: h })), "Header")}
+        ${dataRows.map((r) => row(r)).join("\n")}
       </Table>
       <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
         <FreezePanes/>
@@ -97,7 +98,7 @@ export async function GET(req: Request) {
         <Interior ss:Color="#F3EBDD" ss:Pattern="Solid"/>
       </Style>
     </Styles>
-    ${worksheet.replace("<Row>", '<Row ss:StyleID="Header">')}
+    ${worksheet}
   </Workbook>`;
 
   const timestamp = new Date().toISOString().replaceAll(":", "-").replace(/\.\d{3}Z$/, "Z");
