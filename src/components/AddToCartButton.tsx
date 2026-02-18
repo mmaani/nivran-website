@@ -79,7 +79,7 @@ export default function AddToCartButton({
     const found = items.find((i) => i.slug === slug && (i.variantId ?? null) === (variantId ?? null));
     if (found?.qty) setQty(Math.min(safeMax, Math.max(safeMin, found.qty)));
     else setQty(safeMin);
-  }, [slug, safeMin, safeMax]);
+  }, [slug, variantId, safeMin, safeMax]);
 
   useEffect(() => () => {
     if (timerRef.current) clearTimeout(timerRef.current);

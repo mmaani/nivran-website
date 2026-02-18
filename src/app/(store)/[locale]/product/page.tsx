@@ -20,6 +20,10 @@ type ProductRow = {
   description_en: string | null;
   description_ar: string | null;
   price_jod: string;
+  min_variant_price_jod: string | null;
+  default_variant_id: number | null;
+  default_variant_label: string | null;
+  default_variant_price_jod: string | null;
   category_key: string;
   inventory_qty: number;
   image_id: number | null;
@@ -74,6 +78,10 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
             p.description_en,
             p.description_ar,
             p.price_jod::text as price_jod,
+            vm.min_variant_price_jod::text as min_variant_price_jod,
+            dv.id as default_variant_id,
+            dv.label as default_variant_label,
+            dv.price_jod::text as default_variant_price_jod,
             p.category_key,
             p.inventory_qty,
             (
@@ -88,12 +96,24 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
             (
               case
                 when bp.id is null then null
-                when bp.discount_type='PERCENT' then greatest(0, p.price_jod - (p.price_jod * (bp.discount_value / 100)))
-                when bp.discount_type='FIXED' then greatest(0, p.price_jod - bp.discount_value)
+                when bp.discount_type='PERCENT' then greatest(0, coalesce(vm.min_variant_price_jod, p.price_jod) - (coalesce(vm.min_variant_price_jod, p.price_jod) * (bp.discount_value / 100)))
+                when bp.discount_type='FIXED' then greatest(0, coalesce(vm.min_variant_price_jod, p.price_jod) - bp.discount_value)
                 else null
               end
             )::text as discounted_price_jod
        from products p
+       left join lateral (
+         select min(v.price_jod) as min_variant_price_jod
+         from product_variants v
+         where v.product_id=p.id and v.is_active=true
+       ) vm on true
+       left join lateral (
+         select v.id, v.label, v.price_jod
+         from product_variants v
+         where v.product_id=p.id and v.is_active=true
+         order by v.is_default desc, v.price_jod asc, v.sort_order asc, v.id asc
+         limit 1
+       ) dv on true
        left join lateral (
          select pr.id, pr.discount_type, pr.discount_value, pr.priority
          from promotions pr
@@ -103,10 +123,10 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
            and (pr.ends_at is null or pr.ends_at >= now())
            and (pr.category_keys is null or array_length(pr.category_keys, 1) is null or p.category_key = any(pr.category_keys))
            and (pr.product_slugs is null or array_length(pr.product_slugs, 1) is null or p.slug = any(pr.product_slugs))
-           and (pr.min_order_jod is null or pr.min_order_jod <= p.price_jod)
+           and (pr.min_order_jod is null or pr.min_order_jod <= coalesce(vm.min_variant_price_jod, p.price_jod))
          order by pr.priority desc,
                   case
-                    when pr.discount_type='PERCENT' then (p.price_jod * (pr.discount_value / 100))
+                    when pr.discount_type='PERCENT' then (coalesce(vm.min_variant_price_jod, p.price_jod) * (pr.discount_value / 100))
                     when pr.discount_type='FIXED' then pr.discount_value
                     else 0
                   end desc,
@@ -149,7 +169,11 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
         {productsRes.rows.map((p) => {
           const name = isAr ? p.name_ar : p.name_en;
           const desc = isAr ? p.description_ar : p.description_en;
-          const price = Number(p.price_jod || 0);
+          const baseFromPrice = Number(p.min_variant_price_jod || p.price_jod || 0);
+          const price = baseFromPrice;
+          const defaultVariantId = typeof p.default_variant_id === "number" && Number.isFinite(p.default_variant_id) ? p.default_variant_id : null;
+          const defaultVariantLabel = p.default_variant_label ? String(p.default_variant_label) : "";
+          const defaultVariantPrice = Number(p.default_variant_price_jod || p.price_jod || 0);
           const discounted = p.discounted_price_jod != null ? Number(p.discounted_price_jod) : null;
           const promoValue = Number(p.promo_value || 0);
           const hasPromo = discounted != null && discounted < price;
@@ -216,7 +240,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
                     <strong>{discounted.toFixed(2)} JOD</strong>
                   </>
                 ) : (
-                  <strong>{price.toFixed(2)} JOD</strong>
+                  <strong>{isAr ? `ابتداءً من ${price.toFixed(2)} JOD` : `From ${price.toFixed(2)} JOD`}</strong>
                 )}
               </p>
 
@@ -229,7 +253,9 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
                   locale={locale}
                   slug={p.slug}
                   name={name}
-                  priceJod={hasPromo ? discounted ?? price : price}
+                  variantId={defaultVariantId}
+                  variantLabel={defaultVariantLabel}
+                  priceJod={defaultVariantPrice}
                   label={outOfStock ? (isAr ? "غير متوفر" : "Out of stock") : (isAr ? "أضف إلى السلة" : "Add to cart")}
                   addedLabel={isAr ? "تمت الإضافة ✓" : "Added ✓"}
                   updatedLabel={isAr ? "تم التحديث ✓" : "Updated ✓"}

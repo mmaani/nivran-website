@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { type CartItem } from "@/lib/cartStore";
+import { normalizeCartItems, type CartItem } from "@/lib/cartStore";
 
 type Locale = "en" | "ar";
 
@@ -11,19 +11,8 @@ function readCart(): CartItem[] {
   try {
     const raw = localStorage.getItem(CART_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((x: unknown) => {
-        const item = typeof x === "object" && x !== null ? (x as Record<string, unknown>) : {};
-        return ({
-        slug: String(item.slug || "").trim(),
-        name: String(item.name || "").trim(),
-        priceJod: Number(item.priceJod || 0),
-        qty: Math.max(1, Math.min(99, Number(item.qty || 1))),
-      });
-      })
-      .filter((x: CartItem) => !!x.slug);
+    const parsed: unknown = JSON.parse(raw);
+    return normalizeCartItems(parsed);
   } catch {
     return [];
   }

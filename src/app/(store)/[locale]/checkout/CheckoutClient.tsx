@@ -157,7 +157,7 @@ export default function CheckoutClient() {
       const res = await fetch("/api/promotions/validate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mode: "AUTO", locale, items: items.map((i) => ({ slug: i.slug, qty: i.qty })) }),
+        body: JSON.stringify({ mode: "AUTO", locale, items: items.map((i) => ({ slug: i.slug, qty: i.qty, variantId: i.variantId })) }),
       });
 
       const data: unknown = await res.json().catch(() => null);

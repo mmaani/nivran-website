@@ -14,13 +14,6 @@ export function readAdminLangCookie(): AdminLang {
   return value === "ar" ? "ar" : "en";
 }
 
-export function getStoredAdminToken(): string {
-  return "";
-}
-
-export function persistAdminToken(_rawToken: string): void {}
-
-export function clearPersistedAdminToken(): void {}
 
 export function adminFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   return fetch(input, {
