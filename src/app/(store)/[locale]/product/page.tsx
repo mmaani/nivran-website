@@ -21,6 +21,9 @@ type ProductRow = {
   description_ar: string | null;
   price_jod: string;
   min_variant_price_jod: string | null;
+  default_variant_id: number | null;
+  default_variant_label: string | null;
+  default_variant_price_jod: string | null;
   category_key: string;
   inventory_qty: number;
   image_id: number | null;
@@ -76,6 +79,9 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
             p.description_ar,
             p.price_jod::text as price_jod,
             vm.min_variant_price_jod::text as min_variant_price_jod,
+            dv.id as default_variant_id,
+            dv.label as default_variant_label,
+            dv.price_jod::text as default_variant_price_jod,
             p.category_key,
             p.inventory_qty,
             (
@@ -101,6 +107,13 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
          from product_variants v
          where v.product_id=p.id and v.is_active=true
        ) vm on true
+       left join lateral (
+         select v.id, v.label, v.price_jod
+         from product_variants v
+         where v.product_id=p.id and v.is_active=true
+         order by v.is_default desc, v.price_jod asc, v.sort_order asc, v.id asc
+         limit 1
+       ) dv on true
        left join lateral (
          select pr.id, pr.discount_type, pr.discount_value, pr.priority
          from promotions pr
@@ -158,6 +171,9 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
           const desc = isAr ? p.description_ar : p.description_en;
           const baseFromPrice = Number(p.min_variant_price_jod || p.price_jod || 0);
           const price = baseFromPrice;
+          const defaultVariantId = typeof p.default_variant_id === "number" && Number.isFinite(p.default_variant_id) ? p.default_variant_id : null;
+          const defaultVariantLabel = p.default_variant_label ? String(p.default_variant_label) : "";
+          const defaultVariantPrice = Number(p.default_variant_price_jod || p.price_jod || 0);
           const discounted = p.discounted_price_jod != null ? Number(p.discounted_price_jod) : null;
           const promoValue = Number(p.promo_value || 0);
           const hasPromo = discounted != null && discounted < price;
@@ -237,7 +253,9 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
                   locale={locale}
                   slug={p.slug}
                   name={name}
-                  priceJod={price}
+                  variantId={defaultVariantId}
+                  variantLabel={defaultVariantLabel}
+                  priceJod={defaultVariantPrice}
                   label={outOfStock ? (isAr ? "غير متوفر" : "Out of stock") : (isAr ? "أضف إلى السلة" : "Add to cart")}
                   addedLabel={isAr ? "تمت الإضافة ✓" : "Added ✓"}
                   updatedLabel={isAr ? "تم التحديث ✓" : "Updated ✓"}
