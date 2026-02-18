@@ -50,9 +50,13 @@ type CatalogVariantRow = {
   sort_order: number;
 };
 
+type StoreSettingsRow = {
+  free_shipping_threshold_jod: string | null;
+};
+
 type PromoRow = {
   id: number;
-  promo_kind: "AUTO" | "CODE" | string;
+  promo_kind: "SEASONAL" | "PROMO" | "REFERRAL" | string;
   code: string | null;
   title_en: string;
   title_ar: string;
@@ -100,6 +104,7 @@ type CatalogPageData = {
   products: ProductRow[];
   variants: CatalogVariantRow[];
   promos: PromoRow[];
+  freeShippingThresholdJod: number;
   bootstrapNote?: string;
   errorMessage?: string;
 };
@@ -109,7 +114,7 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
   const bootstrapNote = bootstrap.ok ? undefined : bootstrap.reason;
 
   try {
-    const [categoriesRes, productsRes, variantsRes, promosRes] = await Promise.all([
+    const [categoriesRes, productsRes, variantsRes, promosRes, settingsRes] = await Promise.all([
       db.query<CategoryRow>(
         `select key, name_en, name_ar, sort_order, is_active, is_promoted
            from categories
@@ -142,7 +147,7 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
              select count(*)::int as auto_promo_count
                from promotions pr
               where pr.is_active=true
-                and pr.promo_kind='AUTO'
+                and pr.promo_kind='SEASONAL'
                 and (pr.starts_at is null or pr.starts_at <= now())
                 and (pr.ends_at is null or pr.ends_at >= now())
                 and (pr.category_keys is null or array_length(pr.category_keys,1) is null or p.category_key = any(pr.category_keys))
@@ -176,6 +181,12 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
            from promotions
           order by created_at desc`
       ),
+      db.query<StoreSettingsRow>(
+        `select value_number::text as free_shipping_threshold_jod
+           from store_settings
+          where key='free_shipping_threshold_jod'
+          limit 1`
+      ),
     ]);
 
     return {
@@ -184,6 +195,7 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
       products: productsRes.rows,
       variants: variantsRes.rows,
       promos: promosRes.rows,
+      freeShippingThresholdJod: Number(settingsRes.rows[0]?.free_shipping_threshold_jod || 35),
       bootstrapNote,
     };
   } catch (error: unknown) {
@@ -195,6 +207,7 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
         products: [],
         variants: [],
         promos: [],
+        freeShippingThresholdJod: 35,
         bootstrapNote,
         errorMessage: message,
       };
@@ -206,6 +219,7 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
       products: [],
       variants: [],
       promos: [],
+      freeShippingThresholdJod: 35,
       bootstrapNote,
       errorMessage: message,
     };
@@ -262,6 +276,7 @@ export default async function AdminCatalogPage({
         wearTime: "وقت الاستخدام",
         season: "الموسم",
         audience: "الفئة",
+        freeShipping: "الحد المجاني للتوصيل",
       }
     : {
         title: "Catalog",
@@ -297,6 +312,7 @@ export default async function AdminCatalogPage({
         wearTime: "Wear time",
         season: "Season",
         audience: "Audience",
+        freeShipping: "Free-shipping threshold",
       };
 
   const byKey = new Map(data.categories.map((c) => [c.key, c]));
@@ -305,9 +321,10 @@ export default async function AdminCatalogPage({
   const productActive = data.products.filter((p) => p.is_active).length;
   const outOfStockCount = data.products.filter((p) => Number(p.inventory_qty || 0) <= 0).length;
   const variantsActive = data.variants.filter((v) => v.is_active).length;
-  const activeAutoPromos = data.promos.filter((r) => String(r.promo_kind || "CODE").toUpperCase() === "AUTO" && r.is_active).length;
-  const activeCodePromos = data.promos.filter((r) => String(r.promo_kind || "CODE").toUpperCase() === "CODE" && r.is_active).length;
-  const productsWithAutoPromo = data.products.filter((p) => Number(p.auto_promo_count || 0) > 0).length;
+  const activeSeasonalPromos = data.promos.filter((r) => String(r.promo_kind || "PROMO").toUpperCase() === "SEASONAL" && r.is_active).length;
+  const activePromoCodes = data.promos.filter((r) => String(r.promo_kind || "PROMO").toUpperCase() === "PROMO" && r.is_active).length;
+  const activeReferralCodes = data.promos.filter((r) => String(r.promo_kind || "PROMO").toUpperCase() === "REFERRAL" && r.is_active).length;
+  const productsWithSeasonalCampaign = data.products.filter((p) => Number(p.auto_promo_count || 0) > 0).length;
 
   const qProducts = String(params.qProducts || "").trim().toLowerCase();
   const qVariants = String(params.qVariants || "").trim().toLowerCase();
@@ -338,11 +355,12 @@ export default async function AdminCatalogPage({
     : data.products;
 
   const filteredPromos = data.promos.filter((r) => {
-    const kind = String(r.promo_kind || "CODE").toUpperCase();
+    const kind = String(r.promo_kind || "PROMO").toUpperCase();
     if (promoState === "active" && !r.is_active) return false;
     if (promoState === "inactive" && r.is_active) return false;
-    if (promoState === "auto" && kind !== "AUTO") return false;
-    if (promoState === "code" && kind !== "CODE") return false;
+    if (promoState === "seasonal" && kind !== "SEASONAL") return false;
+    if (promoState === "promo" && kind !== "PROMO") return false;
+    if (promoState === "referral" && kind !== "REFERRAL") return false;
     if (!qPromos) return true;
     const haystack = [r.code || "", r.title_en, r.title_ar, ...(r.category_keys || []), ...(r.product_slugs || [])].join(" ").toLowerCase();
     return haystack.includes(qPromos);
@@ -429,9 +447,10 @@ export default async function AdminCatalogPage({
         <div><strong>{outOfStockCount}</strong><div className="muted">{isAr ? "نفدت الكمية" : "Out of stock"}</div></div>
         <div><strong>{data.promos.length}</strong><div className="muted">{isAr ? "العروض" : "Promotions"}</div></div>
         <div><strong>{variantsActive}</strong><div className="muted">{isAr ? "متغيرات مفعلة" : "Active variants"}</div></div>
-              <div><strong>{activeAutoPromos}</strong><div className="muted">{isAr ? "عروض تلقائية مفعلة" : "Active AUTO promos"}</div></div>
-        <div><strong>{activeCodePromos}</strong><div className="muted">{isAr ? "كوبونات مفعلة" : "Active CODE promos"}</div></div>
-        <div><strong>{productsWithAutoPromo}</strong><div className="muted">{isAr ? "منتجات مشمولة بعرض تلقائي" : "Products covered by AUTO"}</div></div>
+              <div><strong>{activeSeasonalPromos}</strong><div className="muted">{isAr ? "حملات موسمية مفعلة" : "Active seasonal campaigns"}</div></div>
+        <div><strong>{activePromoCodes}</strong><div className="muted">{isAr ? "أكواد ترويجية مفعلة" : "Active promo codes"}</div></div>
+        <div><strong>{productsWithSeasonalCampaign}</strong><div className="muted">{isAr ? "منتجات مشمولة بحملة موسمية" : "Products covered by seasonal campaign"}</div></div>
+        <div><strong>{activeReferralCodes}</strong><div className="muted">{isAr ? "أكواد إحالة مفعلة" : "Active referral codes"}</div></div>
       </section>
       <section className={styles.adminCard}>
         <div className={styles.anchorRow}>
@@ -468,8 +487,9 @@ export default async function AdminCatalogPage({
               <option value="all">{isAr ? "كل الأنواع" : "All types"}</option>
               <option value="active">{isAr ? "مفعّل" : "Active"}</option>
               <option value="inactive">{isAr ? "مخفي" : "Hidden"}</option>
-              <option value="auto">AUTO</option>
-              <option value="code">CODE</option>
+              <option value="seasonal">Seasonal</option>
+              <option value="promo">Promo</option>
+              <option value="referral">Referral</option>
             </select>
             <button className={styles.adminBtn} type="submit">{isAr ? "تصفية العروض" : "Filter promotions"}</button>
           </form>
@@ -501,6 +521,15 @@ export default async function AdminCatalogPage({
 
 {data.health === "db" ? (
       <>
+      <section className={styles.adminCard}>
+        <h2 style={{ marginTop: 0 }}>{L.freeShipping}</h2>
+        <form action="/api/admin/catalog/settings" method="post" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <input type="hidden" name="return_to" value={returnTo} />
+          <input name="free_shipping_threshold_jod" type="number" min="0" step="0.01" defaultValue={Number(data.freeShippingThresholdJod || 35)} className={`${styles.adminInput} ${styles.ltr}`} style={{ width: 220 }} />
+          <button className={`${styles.adminBtn} ${styles.adminBtnPrimary}`} type="submit">{L.update}</button>
+          <span className="muted">{isAr ? "عند هذا الحد يصبح الشحن مجانياً في صفحة الدفع." : "At this threshold, shipping becomes free in checkout."}</span>
+        </form>
+      </section>
       <section className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{L.addProduct}</h2>
         <form action="/api/admin/catalog/products" method="post" className={styles.adminGrid}>
@@ -798,11 +827,12 @@ export default async function AdminCatalogPage({
                 <input type="hidden" name="return_to" value={returnTo} />
           <input type="hidden" name="action" value="create" />
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
-            <select name="promo_kind" defaultValue="CODE" className={styles.adminSelect}>
-              <option value="CODE">{L.codePromo}</option>
-              <option value="AUTO">{L.autoPromo}</option>
+            <select name="promo_kind" defaultValue="PROMO" className={styles.adminSelect}>
+              <option value="SEASONAL">Seasonal</option>
+              <option value="PROMO">Promo</option>
+              <option value="REFERRAL">Referral</option>
             </select>
-            <input name="code" placeholder="NIVRAN10 (for promo code type)" className={`${styles.adminInput} ${styles.ltr}`} />
+            <input name="code" required placeholder="NIVRAN10" className={`${styles.adminInput} ${styles.ltr}`} />
             <select name="discount_type" defaultValue="PERCENT" className={styles.adminSelect}>
               <option value="PERCENT">{L.percent}</option>
               <option value="FIXED">{L.fixed}</option>
@@ -857,7 +887,7 @@ export default async function AdminCatalogPage({
                 const insight = promoInsights.find((x) => x.id === promo.id);
                 return (
                   <tr key={`insight-${promo.id}`}>
-                    <td>{(isAr ? promo.title_ar : promo.title_en) || promo.code || "AUTO"}</td>
+                    <td>{(isAr ? promo.title_ar : promo.title_en) || promo.code || "PROMO"}</td>
                     <td>{insight?.status}</td>
                     <td>{insight?.estimatedCoverage || 0} {isAr ? "منتج" : "products"}</td>
                     <td>{promo.used_count || 0}{promo.usage_limit ? ` / ${promo.usage_limit}` : ""}</td>
@@ -874,7 +904,7 @@ export default async function AdminCatalogPage({
         <ul style={{ margin: 0, paddingInlineStart: 18 }}>
           {filteredPromos.map((r) => (
             <li key={r.id} style={{ marginBottom: 12 }}>
-              <strong className={styles.ltr}>{r.code || "(AUTO)"}</strong> — <span className={styles.ltr}>{r.discount_type === "PERCENT" ? `${r.discount_value}%` : `${r.discount_value} JOD`}</span>
+              <strong className={styles.ltr}>{r.code || "(PROMO)"}</strong> — <span className={styles.ltr}>{r.discount_type === "PERCENT" ? `${r.discount_value}%` : `${r.discount_value} JOD`}</span>
               <div style={{ fontSize: 12, opacity: 0.82, marginTop: 4 }}>
                 {isAr ? r.title_ar : r.title_en}
               </div>
@@ -885,7 +915,7 @@ export default async function AdminCatalogPage({
                 {L.promoProducts}: {!r.product_slugs || r.product_slugs.length === 0 ? L.allCats : r.product_slugs.join(", ")}
               </div>
               <div style={{ fontSize: 12, opacity: 0.82 }}>
-                {L.promoType}: {String(r.promo_kind || "CODE").toUpperCase() === "AUTO" ? L.autoPromo : L.codePromo} • {L.promoPriority}: {r.priority || 0} • {L.promoUsage}: {r.used_count || 0}{r.usage_limit ? ` / ${r.usage_limit}` : ""} • {L.promoMin}: {r.min_order_jod || "0"} JOD
+                {L.promoType}: {String(r.promo_kind || "PROMO").toUpperCase()} • {L.promoPriority}: {r.priority || 0} • {L.promoUsage}: {r.used_count || 0}{r.usage_limit ? ` / ${r.usage_limit}` : ""} • {L.promoMin}: {r.min_order_jod || "0"} JOD
               </div>
               <form action="/api/admin/catalog/promotions" method="post" style={{ marginTop: 8 }}>
                 <input type="hidden" name="return_to" value={returnTo} />

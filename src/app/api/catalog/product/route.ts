@@ -97,7 +97,7 @@ export async function GET(req: Request) {
     const promoRes = await db.query<PromotionRow>(
     `select id, promo_kind, code, title_en, title_ar, discount_type, discount_value, category_keys
        from promotions
-      where is_active=true and promo_kind='AUTO'
+      where is_active=true and promo_kind='SEASONAL'
         and (starts_at is null or starts_at <= ${nowSql()})
         and (ends_at is null or ends_at >= ${nowSql()})
         and (

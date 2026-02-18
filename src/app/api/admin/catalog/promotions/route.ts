@@ -37,9 +37,10 @@ export async function POST(req: Request) {
     const action = String(form.get("action") || "create");
 
     if (action === "create") {
-      const promoKind = String(form.get("promo_kind") || "CODE").toUpperCase() === "AUTO" ? "AUTO" : "CODE";
+      const rawKind = String(form.get("promo_kind") || "PROMO").trim().toUpperCase();
+      const promoKind = rawKind === "SEASONAL" || rawKind === "REFERRAL" ? rawKind : "PROMO";
       const codeRaw = String(form.get("code") || "").trim().toUpperCase();
-      const code = promoKind === "CODE" ? codeRaw : null;
+      const code = codeRaw || null;
       const titleEn = String(form.get("title_en") || "").trim();
       const titleAr = String(form.get("title_ar") || "").trim();
       const discountType = String(form.get("discount_type") || "PERCENT").toUpperCase() === "FIXED" ? "FIXED" : "PERCENT";
@@ -64,7 +65,7 @@ export async function POST(req: Request) {
         return catalogErrorRedirect(req, form, "invalid-promo");
       }
 
-      if (promoKind === "CODE" && !code) {
+      if (!code) {
         return catalogErrorRedirect(req, form, "missing-code");
       }
 
@@ -77,7 +78,7 @@ export async function POST(req: Request) {
           (promo_kind, code, title_en, title_ar, discount_type, discount_value, starts_at, ends_at, usage_limit, min_order_jod, priority, product_slugs, is_active, category_keys)
          values
           ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-         on conflict (code) where promo_kind='CODE'
+         on conflict (code)
          do update
            set promo_kind=excluded.promo_kind,
                title_en=excluded.title_en,

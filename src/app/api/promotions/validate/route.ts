@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
 import {
-  evaluateAutomaticPromotionForLines,
   evaluatePromoCodeForLines,
   type PricedOrderLine,
 } from "@/lib/promotions";
@@ -31,7 +30,7 @@ export async function POST(req: Request) {
   if (!body) return NextResponse.json({ ok: false, error: "Invalid request" }, { status: 400 });
 
   const locale = body.locale === "ar" ? "ar" : "en";
-  const mode = String(body.mode || "CODE").toUpperCase() === "AUTO" ? "AUTO" : "CODE";
+  const mode = "CODE";
   const promoCode = String(body.promoCode || "").trim().toUpperCase();
   const normalized = normalizeItems(body.items);
 
@@ -78,7 +77,7 @@ export async function POST(req: Request) {
   }
 
   const subtotal = Number(lines.reduce((sum, line) => sum + line.line_total_jod, 0).toFixed(2));
-  const result = mode === "AUTO" ? await evaluateAutomaticPromotionForLines(db, lines, subtotal) : await evaluatePromoCodeForLines(db, promoCode, lines, subtotal);
+  const result = await evaluatePromoCodeForLines(db, promoCode, lines, subtotal);
 
   if (!result.ok) return NextResponse.json({ ok: false, error: locale === "ar" ? "الخصم غير صالح أو غير متاح" : "Discount is invalid or not eligible", reason: result.code }, { status: mode === "AUTO" ? 200 : 400 });
   return NextResponse.json({ ok: true, promo: { mode, promotionId: result.promotionId, code: result.promoCode, discountJod: result.discountJod, subtotalAfterDiscountJod: result.subtotalAfterDiscountJod, eligibleSubtotalJod: result.eligibleSubtotalJod, ...result.meta } });

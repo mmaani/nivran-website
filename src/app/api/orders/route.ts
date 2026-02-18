@@ -7,7 +7,6 @@ import { ensureCatalogTables } from "@/lib/catalog";
 import { getCustomerIdFromRequest } from "@/lib/identity";
 import {
   consumePromotionUsage,
-  evaluateAutomaticPromotionForLines,
   evaluatePromoCodeForLines,
 } from "@/lib/promotions";
 
@@ -104,7 +103,7 @@ export async function POST(req: NextRequest) {
 
   const promoCode = String(body.promoCode || "").trim().toUpperCase();
   const discountMode = String(body.discountMode || "NONE").toUpperCase();
-  const discountSource = discountMode === "AUTO" ? "AUTO" : discountMode === "CODE" ? "CODE" : null;
+  const discountSource = discountMode === "CODE" ? "CODE" : null;
 
   const paymentMethod: PaymentMethod =
     String(body.paymentMethod || body.mode || "").toUpperCase() === "COD" ? "COD" : "PAYTABS";
@@ -278,16 +277,6 @@ export async function POST(req: NextRequest) {
   let promotionId: number | null = null;
   let finalPromoCode: string | null = null;
 
-  if (discountSource === "AUTO") {
-    const autoEval = await evaluateAutomaticPromotionForLines(db, lines, subtotalBeforeDiscount);
-    if (autoEval.ok) {
-      discount = autoEval.discountJod;
-      subtotalAfterDiscount = autoEval.subtotalAfterDiscountJod;
-      promotionId = autoEval.promotionId;
-      finalPromoCode = null;
-    }
-  }
-
   if (discountSource === "CODE") {
     const codeEval = await evaluatePromoCodeForLines(db, promoCode, lines, subtotalBeforeDiscount);
     if (!codeEval.ok) {
@@ -302,7 +291,12 @@ export async function POST(req: NextRequest) {
     finalPromoCode = codeEval.promoCode || promoCode;
   }
 
-  const shippingJod = lines.length ? 3.5 : 0;
+  const shippingBaseJod = lines.length ? 3.5 : 0;
+  const shippingSettingsRes = await db.query<{ value_number: string | number | null }>(
+    `select value_number from store_settings where key='free_shipping_threshold_jod' limit 1`
+  );
+  const freeShippingThresholdJod = Number(shippingSettingsRes.rows[0]?.value_number || 0);
+  const shippingJod = shippingBaseJod > 0 && freeShippingThresholdJod > 0 && subtotalAfterDiscount >= freeShippingThresholdJod ? 0 : shippingBaseJod;
   const totalJod = Number((subtotalAfterDiscount + shippingJod).toFixed(2));
 
   const status = paymentMethod === "PAYTABS" ? "PENDING_PAYMENT" : "PENDING_COD_CONFIRM";
@@ -467,6 +461,7 @@ export async function POST(req: NextRequest) {
         discountJod: discount,
         subtotalAfterDiscount,
         shippingJod,
+        freeShippingThresholdJod,
         totalJod,
       },
       discount: {

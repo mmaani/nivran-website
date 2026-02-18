@@ -81,9 +81,9 @@ function promoTimingLabel(locale: "en" | "ar", startsAt: string | null, endsAt: 
 
 function promoBadgeText(locale: "en" | "ar", promoType: "PERCENT" | "FIXED", promoValue: number): string {
   if (promoType === "PERCENT") {
-    return locale === "ar" ? `AUTO • وفر ${promoValue}%` : `AUTO • Save ${promoValue}%`;
+    return locale === "ar" ? `Campaign • وفر ${promoValue}%` : `Campaign • Save ${promoValue}%`;
   }
-  return locale === "ar" ? `AUTO • وفر ${promoValue.toFixed(2)} د.أ` : `AUTO • Save ${promoValue.toFixed(2)} JOD`;
+  return locale === "ar" ? `Campaign • وفر ${promoValue.toFixed(2)} د.أ` : `Campaign • Save ${promoValue.toFixed(2)} JOD`;
 }
 
 type ProductRow = {
@@ -163,7 +163,7 @@ export default async function ProductDetailPage({
        left join lateral (
          select pr.id, pr.discount_type, pr.discount_value, pr.priority, pr.ends_at, pr.starts_at
          from promotions pr
-         where pr.promo_kind='AUTO'
+         where pr.promo_kind='SEASONAL'
            and pr.is_active=true
            and (pr.starts_at is null or pr.starts_at <= now())
            and (pr.ends_at is null or pr.ends_at >= now())

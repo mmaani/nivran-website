@@ -40,7 +40,7 @@ type ProductRow = {
 
 type CampaignRow = {
   id: number;
-  promo_kind: "AUTO" | "CODE" | string;
+  promo_kind: "SEASONAL" | "PROMO" | "REFERRAL" | string;
   title_en: string | null;
   title_ar: string | null;
   discount_type: "PERCENT" | "FIXED" | null;
@@ -161,7 +161,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
        left join lateral (
          select pr.id, pr.discount_type, pr.discount_value, pr.priority
          from promotions pr
-         where pr.promo_kind='AUTO'
+         where pr.promo_kind='SEASONAL'
            and pr.is_active=true
            and (pr.starts_at is null or pr.starts_at <= now())
            and (pr.ends_at is null or pr.ends_at >= now())
@@ -204,9 +204,14 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
     console.warn("[catalog] Falling back to static product catalog due to DB connectivity issue.");
   }
 
-  const cats: Array<{ key: string; label: string }> = categoriesRows.length
+  const catsMap = new Map<string, { key: string; label: string }>();
+  const catSource = categoriesRows.length
     ? categoriesRows.map((c) => ({ key: c.key, label: locale === "ar" ? c.name_ar : c.name_en }))
     : Object.entries(FALLBACK_CATS).map(([key, v]) => ({ key, label: v[locale] }));
+  for (const cat of catSource) {
+    if (!catsMap.has(cat.key)) catsMap.set(cat.key, cat);
+  }
+  const cats = Array.from(catsMap.values());
 
   const catLabel = (key: string) => {
     const found = categoriesRows.find((c) => c.key === key);
