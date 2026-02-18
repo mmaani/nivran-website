@@ -82,6 +82,7 @@ function normalizeItems(items: unknown): { slug: string; qty: number; variantId:
     .filter((x) => !!x.slug);
 }
 
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -94,6 +95,7 @@ export async function POST(req: NextRequest) {
   if (!body) return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
 
   const locale = body.locale === "ar" ? "ar" : "en";
+
   const promoCode = String(body.promoCode || "").trim().toUpperCase();
   const discountMode = String(body.discountMode || "NONE").toUpperCase();
   const discountSource = discountMode === "AUTO" ? "AUTO" : discountMode === "CODE" ? "CODE" : null;
@@ -128,7 +130,7 @@ export async function POST(req: NextRequest) {
   let items = normalizeItems(body.items);
 
   const legacySlug = String(body.productSlug || body.slug || "").trim();
-  const legacyQty = Math.max(1, Math.min(99, Number(body.qty || 1)));
+  const legacyQty = normalizeQty(body.qty);
 
   if (!items.length && legacySlug) {
     items = [{ slug: legacySlug, qty: legacyQty, variantId: null }];
@@ -203,7 +205,9 @@ export async function POST(req: NextRequest) {
     for (const v of dr.rows || []) defaultVariantByProductId.set(Number(v.product_id), v);
   }
 
+  // 3) Build order lines (always apply variant pricing if default exists)
   const lines: OrderLine[] = [];
+
   for (const it of items) {
     const p = productBySlug.get(it.slug);
     if (!p || !p.is_active) {
@@ -239,6 +243,7 @@ export async function POST(req: NextRequest) {
     }
 
     const qty = it.qty;
+
     lines.push({
       slug: it.slug,
       variant_id: chosenVariantId,
