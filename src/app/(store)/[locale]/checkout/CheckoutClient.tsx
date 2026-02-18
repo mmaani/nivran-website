@@ -62,8 +62,10 @@ export default function CheckoutClient() {
   const [promoOpen, setPromoOpen] = useState(false);
   const [discountMode, setDiscountMode] = useState<DiscountMode>("NONE");
   const [selectedPromo, setSelectedPromo] = useState<PromoState | null>(null);
+  const [autoPromoCandidate, setAutoPromoCandidate] = useState<PromoState | null>(null);
   const [promoBusy, setPromoBusy] = useState(false);
   const [promoMsg, setPromoMsg] = useState<string | null>(null);
+  const [healthMode, setHealthMode] = useState<"checking" | "db" | "fallback" | "error">("checking");
 
   const [cartId, setCartId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -105,9 +107,40 @@ export default function CheckoutClient() {
       useAutoPromo: isAr ? "تفعيل الخصم التلقائي" : "Apply AUTO discount",
       removeAutoPromo: isAr ? "إلغاء الخصم التلقائي" : "Remove AUTO discount",
       oneDiscountRule: isAr ? "لا يمكن الجمع بين AUTO و CODE. اختر نوع خصم واحد فقط." : "AUTO and CODE cannot be combined. Choose one discount type only.",
+      autoAvailable: isAr ? "خصم AUTO متاح" : "AUTO discount available",
+      autoUnavailable: isAr ? "لا يوجد خصم AUTO متاح لهذه السلة حالياً" : "No AUTO discount is currently eligible for this cart",
+      systemFallback: isAr ? "وضع الطوارئ: عرض البيانات عبر Fallback" : "Fallback mode: degraded data source active",
+      systemHealthy: isAr ? "اتصال قاعدة البيانات سليم" : "Database connectivity healthy",
     }),
     [isAr]
   );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch("/api/health", { cache: "no-store" })
+      .then(async (res) => {
+        const data: unknown = await res.json().catch(() => null);
+        if (cancelled) return;
+
+        if (!res.ok || !isObject(data)) {
+          setHealthMode("error");
+          return;
+        }
+
+        const mode = toStr(data.mode).toLowerCase();
+        if (mode === "db") setHealthMode("db");
+        else if (mode === "fallback") setHealthMode("fallback");
+        else setHealthMode("error");
+      })
+      .catch(() => {
+        if (!cancelled) setHealthMode("error");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const cart = readLocalCart();
@@ -153,8 +186,11 @@ export default function CheckoutClient() {
     if (!items.length) {
       setDiscountMode("NONE");
       setSelectedPromo(null);
+      setAutoPromoCandidate(null);
       return;
     }
+
+    let cancelled = false;
 
     async function loadAutoPromo() {
       const res = await fetch("/api/promotions/validate", {
@@ -164,9 +200,15 @@ export default function CheckoutClient() {
       });
 
       const data: unknown = await res.json().catch(() => null);
+      if (cancelled) return;
+
       if (!res.ok || !isObject(data) || data.ok !== true || !isObject(data.promo)) {
-        if (discountMode === "AUTO") setDiscountMode("NONE");
-        if (selectedPromo?.mode === "AUTO") setSelectedPromo(null);
+        setAutoPromoCandidate(null);
+        if (discountMode === "AUTO") {
+          setDiscountMode("NONE");
+          setSelectedPromo(null);
+          setPromoMsg(COPY.autoUnavailable);
+        }
         return;
       }
 
@@ -177,15 +219,18 @@ export default function CheckoutClient() {
         discountJod: toNum(data.promo.discountJod),
       };
 
-      if (discountMode !== "CODE") {
+      setAutoPromoCandidate(nextAuto);
+      if (discountMode === "AUTO") {
         setSelectedPromo(nextAuto);
-        setDiscountMode("AUTO");
-        setPromoOpen(false);
       }
     }
 
     void loadAutoPromo();
-  }, [items, locale, isAr, discountMode, selectedPromo?.mode, COPY.autoPromo]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [items, locale, isAr, discountMode, COPY.autoPromo, COPY.autoUnavailable]);
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((sum, i) => sum + Number(i.priceJod || 0) * Number(i.qty || 1), 0);
@@ -234,6 +279,7 @@ export default function CheckoutClient() {
       });
       setDiscountMode("CODE");
       setPromoMsg(COPY.promoApplied);
+      setPromoOpen(false);
     } catch (error: unknown) {
       setPromoMsg(errMsg(error));
     } finally {
@@ -260,10 +306,20 @@ export default function CheckoutClient() {
     if (discountMode === "AUTO") {
       setDiscountMode("NONE");
       setSelectedPromo(null);
+      setPromoMsg(null);
+      return;
+    }
+
+    if (!autoPromoCandidate) {
+      setPromoMsg(COPY.autoUnavailable);
       return;
     }
 
     setDiscountMode("AUTO");
+    setSelectedPromo(autoPromoCandidate);
+    setPromoOpen(false);
+    setPromoInput("");
+    setPromoMsg(COPY.autoAvailable);
   }
 
   async function createOrder(paymentMethod: "PAYTABS" | "COD") {
@@ -401,6 +457,9 @@ export default function CheckoutClient() {
 
           <aside className="panel checkout-summary-panel">
             <h3 style={{ marginTop: 0 }}>{COPY.orderSummary}</h3>
+            <p className="muted" style={{ marginTop: 0 }}>
+              {healthMode === "fallback" ? COPY.systemFallback : healthMode === "db" ? COPY.systemHealthy : null}
+            </p>
 
             <div style={{ display: "grid", gap: 10 }}>
               {items.map((i) => (
@@ -433,6 +492,14 @@ export default function CheckoutClient() {
                 <button type="button" className="btn btn-outline" onClick={() => setPromoOpen((v) => !v)}>
                   {COPY.havePromo}
                 </button>
+              )}
+
+              {autoPromoCandidate ? (
+                <p className="muted" style={{ margin: 0 }}>
+                  {COPY.autoAvailable}: <strong>{autoPromoCandidate.discountJod.toFixed(2)} JOD</strong>
+                </p>
+              ) : (
+                <p className="muted" style={{ margin: 0 }}>{COPY.autoUnavailable}</p>
               )}
 
               {promoOpen ? (
