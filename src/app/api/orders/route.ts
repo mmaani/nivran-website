@@ -77,7 +77,7 @@ function normalizeItems(items: unknown): { slug: string; qty: number; variantId:
     .map((x: IncomingItem) => ({
       slug: String(x?.slug || "").trim(),
       qty: Math.max(1, Math.min(99, Number(x?.qty || 1))),
-      variantId: normalizeVariantId(x?.variantId),
+      variantId: Number.isFinite(Number(x?.variantId)) ? Number(x?.variantId) : null,
     }))
     .filter((x) => !!x.slug);
 }
@@ -203,6 +203,13 @@ export async function POST(req: NextRequest) {
     for (const v of dr.rows || []) defaultVariantByProductId.set(Number(v.product_id), v);
   }
 
+  const variantIds = Array.from(new Set(items.map((i) => i.variantId).filter((id): id is number => typeof id === "number")));
+  const variantMap = new Map<number, VariantRow>();
+  if (variantIds.length) {
+    const vr = await db.query<VariantRow>(`select id, product_id, label, price_jod from product_variants where id = any($1::bigint[]) and is_active=true`, [variantIds]);
+    for (const v of vr.rows) variantMap.set(v.id, v);
+  }
+
   const lines: OrderLine[] = [];
   for (const it of items) {
     const p = productBySlug.get(it.slug);
@@ -237,11 +244,20 @@ export async function POST(req: NextRequest) {
       }
       // else: keep product base price as final fallback
     }
-
+    let unit = Number(p.price_jod || 0);
+    let variantLabel: string | null = null;
+    if (it.variantId) {
+      const variant = variantMap.get(it.variantId);
+      if (!variant || Number(variant.product_id) !== Number(p.id)) {
+        return NextResponse.json({ ok: false, error: `Invalid variant for product: ${it.slug}` }, { status: 400 });
+      }
+      unit = Number(variant.price_jod || 0);
+      variantLabel = String(variant.label || "");
+    }
     const qty = it.qty;
     lines.push({
       slug: it.slug,
-      variant_id: chosenVariantId,
+      variant_id: it.variantId ?? null,
       variant_label: variantLabel,
       name_en: String(p.name_en || it.slug),
       name_ar: String(p.name_ar || p.name_en || it.slug),
