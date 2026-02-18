@@ -6,7 +6,7 @@ import { clearLocalCart, readLocalCart, type CartItem } from "@/lib/cartStore";
 
 type Locale = "en" | "ar";
 type JsonObject = Record<string, unknown>;
-type DiscountMode = "NONE" | "AUTO" | "CODE";
+type DiscountMode = "NONE" | "CODE";
 
 type PromoState = {
   mode: Exclude<DiscountMode, "NONE">;
@@ -63,7 +63,10 @@ export default function CheckoutClient() {
   const [discountMode, setDiscountMode] = useState<DiscountMode>("NONE");
   const [selectedPromo, setSelectedPromo] = useState<PromoState | null>(null);
   const [promoBusy, setPromoBusy] = useState(false);
+  const [freeShippingThresholdJod, setFreeShippingThresholdJod] = useState(35);
+  const [baseShippingJod, setBaseShippingJod] = useState(3.5);
   const [promoMsg, setPromoMsg] = useState<string | null>(null);
+  const [healthMode, setHealthMode] = useState<"checking" | "db" | "fallback" | "error">("checking");
 
   const [cartId, setCartId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -96,18 +99,44 @@ export default function CheckoutClient() {
       placed: isAr ? "تم إنشاء الطلب." : "Order created.",
       promoLabel: isAr ? "كود الخصم" : "Promo code",
       havePromo: isAr ? "استخدام كود خصم" : "Use promo code",
-      useCodeInstead: isAr ? "التبديل إلى كود خصم (سيتم إلغاء التلقائي)" : "Switch to promo code (AUTO will be removed)",
       promoPlaceholder: isAr ? "أدخل الكود" : "Enter code",
       promoApply: isAr ? "تطبيق" : "Apply",
       promoRemove: isAr ? "إزالة" : "Remove",
       promoApplied: isAr ? "تم تطبيق الخصم (CODE)" : "Promo code applied (CODE)",
-      autoPromo: isAr ? "خصم تلقائي (AUTO)" : "Automatic discount (AUTO)",
-      useAutoPromo: isAr ? "تفعيل الخصم التلقائي" : "Apply AUTO discount",
-      removeAutoPromo: isAr ? "إلغاء الخصم التلقائي" : "Remove AUTO discount",
-      oneDiscountRule: isAr ? "لا يمكن الجمع بين AUTO و CODE. اختر نوع خصم واحد فقط." : "AUTO and CODE cannot be combined. Choose one discount type only.",
+      freeShippingReached: isAr ? "تهانينا! أنت مؤهل للشحن المجاني." : "Great news! You unlocked free shipping.",
+      freeShippingRemaining: isAr ? "أضف {{amount}} JOD لتحصل على شحن مجاني" : "Add {{amount}} JOD to unlock free shipping",
+      systemFallback: isAr ? "وضع الطوارئ: عرض البيانات عبر Fallback" : "Fallback mode: degraded data source active",
+      systemHealthy: isAr ? "اتصال قاعدة البيانات سليم" : "Database connectivity healthy",
     }),
     [isAr]
   );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch("/api/health", { cache: "no-store" })
+      .then(async (res) => {
+        const data: unknown = await res.json().catch(() => null);
+        if (cancelled) return;
+
+        if (!res.ok || !isObject(data)) {
+          setHealthMode("error");
+          return;
+        }
+
+        const mode = toStr(data.mode).toLowerCase();
+        if (mode === "db") setHealthMode("db");
+        else if (mode === "fallback") setHealthMode("fallback");
+        else setHealthMode("error");
+      })
+      .catch(() => {
+        if (!cancelled) setHealthMode("error");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const cart = readLocalCart();
@@ -155,46 +184,37 @@ export default function CheckoutClient() {
       setSelectedPromo(null);
       return;
     }
+  }, [items]);
 
-    async function loadAutoPromo() {
-      const res = await fetch("/api/promotions/validate", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mode: "AUTO", locale, items: items.map((i) => ({ slug: i.slug, qty: i.qty, variantId: i.variantId })) }),
-      });
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/shipping-config", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data: unknown) => {
+        if (cancelled || !isObject(data)) return;
+        const threshold = toNum(data.thresholdJod);
+        const base = toNum(data.baseShippingJod);
+        if (threshold >= 0) setFreeShippingThresholdJod(threshold);
+        if (base >= 0) setBaseShippingJod(base);
+      })
+      .catch(() => null);
 
-      const data: unknown = await res.json().catch(() => null);
-      if (!res.ok || !isObject(data) || data.ok !== true || !isObject(data.promo)) {
-        if (discountMode === "AUTO") setDiscountMode("NONE");
-        if (selectedPromo?.mode === "AUTO") setSelectedPromo(null);
-        return;
-      }
-
-      const nextAuto: PromoState = {
-        mode: "AUTO",
-        code: null,
-        title: isAr ? toStr(data.promo.titleAr || data.promo.titleEn || COPY.autoPromo) : toStr(data.promo.titleEn || data.promo.titleAr || COPY.autoPromo),
-        discountJod: toNum(data.promo.discountJod),
-      };
-
-      if (discountMode !== "CODE") {
-        setSelectedPromo(nextAuto);
-        setDiscountMode("AUTO");
-        setPromoOpen(false);
-      }
-    }
-
-    void loadAutoPromo();
-  }, [items, locale, isAr, discountMode, selectedPromo?.mode, COPY.autoPromo]);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((sum, i) => sum + Number(i.priceJod || 0) * Number(i.qty || 1), 0);
     const discount = selectedPromo ? Number(selectedPromo.discountJod || 0) : 0;
     const subtotalAfterDiscount = Math.max(0, subtotal - discount);
-    const shipping = items.length ? 3.5 : 0;
+    const shipping = items.length ? (freeShippingThresholdJod > 0 && subtotalAfterDiscount >= freeShippingThresholdJod ? 0 : baseShippingJod) : 0;
     const total = Number((subtotalAfterDiscount + shipping).toFixed(2));
     return { subtotal, discount, subtotalAfterDiscount, shipping, total };
-  }, [items, selectedPromo]);
+  }, [items, selectedPromo, freeShippingThresholdJod, baseShippingJod]);
+
+  const freeShippingRemaining = Math.max(0, freeShippingThresholdJod - totals.subtotalAfterDiscount);
+  const shouldShowPromoMsg = Boolean(promoMsg);
 
   function validate() {
     if (!items.length) {
@@ -234,6 +254,7 @@ export default function CheckoutClient() {
       });
       setDiscountMode("CODE");
       setPromoMsg(COPY.promoApplied);
+      setPromoOpen(false);
     } catch (error: unknown) {
       setPromoMsg(errMsg(error));
     } finally {
@@ -249,21 +270,6 @@ export default function CheckoutClient() {
     setPromoInput("");
     setPromoMsg(null);
     setPromoOpen(false);
-  }
-
-  function toggleAutoPromo() {
-    if (discountMode === "CODE") {
-      setPromoMsg(COPY.oneDiscountRule);
-      return;
-    }
-
-    if (discountMode === "AUTO") {
-      setDiscountMode("NONE");
-      setSelectedPromo(null);
-      return;
-    }
-
-    setDiscountMode("AUTO");
   }
 
   async function createOrder(paymentMethod: "PAYTABS" | "COD") {
@@ -401,6 +407,9 @@ export default function CheckoutClient() {
 
           <aside className="panel checkout-summary-panel">
             <h3 style={{ marginTop: 0 }}>{COPY.orderSummary}</h3>
+            <p className="muted" style={{ marginTop: 0 }}>
+              {healthMode === "fallback" ? COPY.systemFallback : healthMode === "db" ? COPY.systemHealthy : null}
+            </p>
 
             <div style={{ display: "grid", gap: 10 }}>
               {items.map((i) => (
@@ -418,22 +427,17 @@ export default function CheckoutClient() {
             </div>
 
             <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <span className="muted">{COPY.autoPromo}</span>
-                <button className="btn btn-outline" type="button" onClick={toggleAutoPromo} disabled={discountMode === "CODE"}>
-                  {discountMode === "AUTO" ? COPY.removeAutoPromo : COPY.useAutoPromo}
-                </button>
-              </div>
+              <button type="button" className="btn btn-outline" onClick={() => { setPromoOpen((v) => !v); setPromoMsg(null); }}>
+                {COPY.havePromo}
+              </button>
 
-              {discountMode === "AUTO" ? (
-                <button type="button" className="btn btn-outline" onClick={() => { setPromoOpen(true); setDiscountMode("NONE"); setSelectedPromo(null); }}>
-                  {COPY.useCodeInstead}
-                </button>
-              ) : (
-                <button type="button" className="btn btn-outline" onClick={() => setPromoOpen((v) => !v)}>
-                  {COPY.havePromo}
-                </button>
-              )}
+              {totals.subtotalAfterDiscount > 0 ? (
+                freeShippingRemaining <= 0 ? (
+                  <p className="muted" style={{ margin: 0 }}><strong>{COPY.freeShippingReached}</strong></p>
+                ) : (
+                  <p className="muted" style={{ margin: 0 }}>{COPY.freeShippingRemaining.replace("{{amount}}", freeShippingRemaining.toFixed(2))}</p>
+                )
+              ) : null}
 
               {promoOpen ? (
                 <>
@@ -445,9 +449,9 @@ export default function CheckoutClient() {
                       value={promoInput}
                       onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
                       placeholder={COPY.promoPlaceholder}
-                      disabled={discountMode === "AUTO"}
+                      disabled={false}
                     />
-                    <button className="btn btn-outline" type="button" disabled={promoBusy || !promoInput.trim() || discountMode === "AUTO"} onClick={applyPromoCode}>
+                    <button className="btn btn-outline" type="button" disabled={promoBusy || !promoInput.trim()} onClick={applyPromoCode}>
                       {COPY.promoApply}
                     </button>
                     {selectedPromo?.mode === "CODE" ? (
@@ -456,10 +460,10 @@ export default function CheckoutClient() {
                   </div>
                 </>
               ) : null}
-              {promoMsg ? <p className="muted" style={{ margin: 0 }}>{promoMsg}</p> : null}
+              {shouldShowPromoMsg ? <p className="muted" style={{ margin: 0 }}>{promoMsg}</p> : null}
               {selectedPromo ? (
                 <p className="muted" style={{ margin: 0 }}>
-                  <strong>{selectedPromo.mode === "AUTO" ? "AUTO" : "CODE"}</strong> · {selectedPromo.title}
+                  <strong>{selectedPromo.mode}</strong> · {selectedPromo.title}
                 </p>
               ) : null}
             </div>

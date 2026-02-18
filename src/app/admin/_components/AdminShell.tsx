@@ -29,6 +29,7 @@ export default function AdminShell({
   const [lang, setLang] = useState<"en" | "ar">(initialLang);
   const [savingLang, setSavingLang] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const nowLabel = new Date().toLocaleString(lang === "ar" ? "ar-JO" : "en-GB", { dateStyle: "medium", timeStyle: "short" });
 
   const nav = useMemo(
     () => [
@@ -112,6 +113,17 @@ export default function AdminShell({
             </div>
           )}
 
+
+          {authed ? (
+            <div className="admin-context-row">
+              <span className="admin-pill"><T en="Live operations" ar="تشغيل مباشر" /></span>
+              <span className="admin-pill admin-pill-muted">{nowLabel}</span>
+              <Link className="admin-mini-link" href="/admin/catalog#promos-section"><T en="Campaigns" ar="الحملات" /></Link>
+              <Link className="admin-mini-link" href="/admin/catalog#variants-section"><T en="Variants" ar="المتغيرات" /></Link>
+              <Link className="admin-mini-link" href="/admin/orders"><T en="Order queue" ar="قائمة الطلبات" /></Link>
+            </div>
+          ) : null}
+
           <div className="admin-actions">
             <button
               type="button"
@@ -148,8 +160,17 @@ export default function AdminShell({
             <Link href="/admin/orders">
               <T en="Orders" ar="الطلبات" />
             </Link>
+            <Link href="/admin/catalog">
+              <T en="Catalog workspace" ar="مساحة الكتالوج" />
+            </Link>
+            <Link href="/admin/catalog#promos-section">
+              <T en="Campaign center" ar="مركز الحملات" />
+            </Link>
             <Link href="/admin/inbox">
               <T en="Inbox" ar="الوارد" />
+            </Link>
+            <Link href="/en/product">
+              <T en="Storefront preview" ar="معاينة المتجر" />
             </Link>
           </div>
         </div>
