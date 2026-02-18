@@ -2,23 +2,10 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureCatalogTablesSafe } from "@/lib/catalog";
 import { requireAdmin } from "@/lib/guards";
+import { catalogErrorRedirect, catalogSavedRedirect, catalogUnauthorizedRedirect } from "../redirects";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function catalogErrorRedirect(req: Request, code: string) {
-  return NextResponse.redirect(new URL(`/admin/catalog?error=${encodeURIComponent(code)}`, req.url), 303);
-}
-
-function unauthorized(req: Request, status: number, error: string) {
-  const accept = req.headers.get("accept") || "";
-  const isBrowser = accept.includes("text/html");
-  if (isBrowser) {
-    const next = "/admin/catalog";
-    return NextResponse.redirect(new URL(`/admin/login?next=${encodeURIComponent(next)}`, req.url));
-  }
-  return NextResponse.json({ ok: false, error }, { status });
-}
 
 function normalizeKey(v: unknown) {
   return String(v || "")
@@ -31,12 +18,17 @@ function normalizeKey(v: unknown) {
 }
 
 export async function POST(req: Request) {
+  let form: FormData | null = null;
   try {
+    form = await req.formData();
     const auth = requireAdmin(req);
-    if (!auth.ok) return unauthorized(req, auth.status, auth.error);
+    if (!auth.ok) {
+      const accept = req.headers.get("accept") || "";
+      if (accept.includes("text/html")) return catalogUnauthorizedRedirect(req, form);
+      return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
+    }
 
     await ensureCatalogTablesSafe();
-    const form = await req.formData();
     const action = String(form.get("action") || "create");
 
     if (action === "create") {
@@ -48,7 +40,7 @@ export async function POST(req: Request) {
       const isPromoted = String(form.get("is_promoted") || "") === "on";
 
       if (!key || !nameEn || !nameAr) {
-        return catalogErrorRedirect(req, "invalid-category");
+        return catalogErrorRedirect(req, form, "invalid-category");
       }
 
       await db.query(
@@ -96,9 +88,9 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.redirect(new URL("/admin/catalog?saved=1", req.url), 303);
+    return catalogSavedRedirect(req, form);
   } catch (error: unknown) {
     console.error("[admin/catalog/categories] route error", error);
-    return catalogErrorRedirect(req, "category-save-failed");
+    return catalogErrorRedirect(req, form, "category-save-failed");
   }
 }

@@ -27,6 +27,7 @@ type ProductRow = {
   category_key: string;
   is_active: boolean;
   image_count: number;
+  auto_promo_count: number;
   wear_times: string[];
   seasons: string[];
   audiences: string[];
@@ -110,6 +111,16 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
                from product_images
               group by product_id
            ) i on i.product_id = p.id
+      left join lateral (
+             select count(*)::int as auto_promo_count
+               from promotions pr
+              where pr.is_active=true
+                and pr.promo_kind='AUTO'
+                and (pr.starts_at is null or pr.starts_at <= now())
+                and (pr.ends_at is null or pr.ends_at >= now())
+                and (pr.category_keys is null or array_length(pr.category_keys,1) is null or p.category_key = any(pr.category_keys))
+                and (pr.product_slugs is null or array_length(pr.product_slugs,1) is null or p.slug = any(pr.product_slugs))
+           ) ap on true
           order by p.created_at desc
           limit 300`
       ),
@@ -305,6 +316,23 @@ export default async function AdminCatalogPage({
     return haystack.includes(qPromos);
   });
 
+  const selectedProductIdParam = Number(params.variantProductId || 0);
+  const selectedProduct = productsForVariantSection.find((p) => p.id === selectedProductIdParam)
+    || productsForVariantSection[0]
+    || null;
+  const selectedProductVariants = selectedProduct
+    ? filteredVariants.filter((v) => v.product_id === selectedProduct.id)
+    : [];
+
+  const returnQuery = new URLSearchParams();
+  const carry = ["qProducts", "qVariants", "qPromos", "productState", "variantState", "promoState"] as const;
+  for (const key of carry) {
+    const value = String(params[key] || "").trim();
+    if (value) returnQuery.set(key, value);
+  }
+  if (selectedProduct) returnQuery.set("variantProductId", String(selectedProduct.id));
+  const returnTo = returnQuery.size ? `/admin/catalog?${returnQuery.toString()}` : "/admin/catalog";
+
   return (
     <main className={styles.adminGrid}>
       <header className={styles.adminCard}>
@@ -415,6 +443,7 @@ export default async function AdminCatalogPage({
       <section className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{L.addProduct}</h2>
         <form action="/api/admin/catalog/products" method="post" className={styles.adminGrid}>
+                <input type="hidden" name="return_to" value={returnTo} />
           <input type="hidden" name="action" value="create" />
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
             <input name="slug" required placeholder="e.g. nivran-care-hand-gel-60ml" className={`${styles.adminInput} ${styles.ltr}`} />
@@ -479,10 +508,11 @@ export default async function AdminCatalogPage({
                   <td>{byKey.get(p.category_key) ? labelCategory(lang, byKey.get(p.category_key)!) : p.category_key}<div style={{ fontSize: 12, opacity: 0.78, marginTop: 4 }}>{[...p.wear_times, ...p.seasons, ...p.audiences].slice(0,4).join(" • ")}</div></td>
                   <td className={styles.ltr}>{p.price_jod} JOD {p.compare_at_price_jod ? `(was ${p.compare_at_price_jod})` : ""}</td>
                   <td className={styles.ltr}>{p.inventory_qty}</td>
-                  <td className={styles.ltr}>{p.image_count}/5</td>
+                  <td className={styles.ltr}>{p.image_count}/5<div style={{ fontSize: 12, opacity: 0.78 }}>{isAr ? `عروض تلقائية: ${p.auto_promo_count}` : `Auto promos: ${p.auto_promo_count}`}</div></td>
                   <td>{p.is_active ? L.active : L.hidden}</td>
                   <td>
                     <form action="/api/admin/catalog/products" method="post" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <input type="hidden" name="return_to" value={returnTo} />
                       <input type="hidden" name="action" value="update" />
                       <input type="hidden" name="id" value={p.id} />
                       <select name="category_key" defaultValue={p.category_key} className={styles.adminSelect}>
@@ -510,6 +540,7 @@ export default async function AdminCatalogPage({
                       <button className={styles.adminBtn} type="submit">{L.update}</button>
                     </form>
                     <form action="/api/admin/catalog/products" method="post" style={{ marginTop: 8 }}>
+                <input type="hidden" name="return_to" value={returnTo} />
                       <input type="hidden" name="action" value="delete" />
                       <input type="hidden" name="id" value={p.id} />
                       <button className={styles.adminBtn} type="submit">{L.del}</button>
@@ -524,70 +555,108 @@ export default async function AdminCatalogPage({
       </section>
 
 
-      <section id="variants-section" className={styles.adminCard}>
-        <h2 style={{ marginTop: 0 }}>{isAr ? "المتغيرات" : "Variants"}</h2>
-        <p className="muted" style={{ marginTop: -4 }}>{isAr ? `نتائج: ${filteredVariants.length}` : `Results: ${filteredVariants.length}`}</p>
-        <div style={{ display: "grid", gap: 16 }}>
-          {productsForVariantSection.length === 0 ? <p className="muted" style={{ margin: 0 }}>{isAr ? "لا توجد متغيرات مطابقة." : "No matching variants found."}</p> : null}
-          {productsForVariantSection.map((product) => {
-            const variants = filteredVariants.filter((v) => v.product_id === product.id);
-            return (
-              <div key={product.id} style={{ border: "1px solid #ececec", borderRadius: 12, padding: 12 }}>
-                <div style={{ fontWeight: 700, marginBottom: 10 }}>
-                  <span className={styles.ltr}>{product.slug}</span> — {isAr ? product.name_ar : product.name_en}
-                </div>
-
-                <form action="/api/admin/catalog/variants" method="post" style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(8,minmax(0,1fr))", marginBottom: 10 }}>
-                  <input type="hidden" name="action" value="create" />
-                  <input type="hidden" name="product_id" value={product.id} />
-                  <input name="label" required minLength={2} placeholder={isAr ? "الاسم (مثال 50 ml)" : "Label (e.g. 50 ml)"} className={styles.adminInput} />
-                  <input name="size_ml" type="number" min="0" placeholder="ml" className={`${styles.adminInput} ${styles.ltr}`} />
-                  <input name="price_jod" type="number" min="0.01" step="0.01" required placeholder="Price" className={`${styles.adminInput} ${styles.ltr}`} />
-                  <input name="compare_at_price_jod" type="number" min="0" step="0.01" placeholder="Compare" className={`${styles.adminInput} ${styles.ltr}`} />
-                  <input name="sort_order" type="number" min="0" defaultValue={variants.length * 10} placeholder="Sort" className={`${styles.adminInput} ${styles.ltr}`} />
-                  <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" name="is_default" /> {isAr ? "افتراضي" : "Default"}</label>
-                  <span className="muted" style={{ fontSize: 12 }}>{isAr ? "عند تفعيل الافتراضي سيتم إلغاء الافتراضي القديم تلقائياً." : "When Default is enabled, the previous default is automatically unset."}</span>
-                  <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" name="is_active" defaultChecked /> {L.active}</label>
-                  <button className={styles.adminBtn} type="submit" style={{ gridColumn: "1 / -1", width: "fit-content" }}>{isAr ? "إضافة متغير" : "Add variant"}</button>
-                </form>
-
-                <div style={{ display: "grid", gap: 8 }}>
-                  {variants.map((v) => (
-                    <form key={v.id} action="/api/admin/catalog/variants" method="post" style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(8,minmax(0,1fr))", alignItems: "center", borderTop: "1px dashed #eee", paddingTop: 8 }}>
-                      <input type="hidden" name="action" value="update" />
-                      <input type="hidden" name="id" value={v.id} />
-                      <input type="hidden" name="product_id" value={product.id} />
-                      <input name="label" required minLength={2} defaultValue={v.label} className={styles.adminInput} />
-                      <input name="size_ml" type="number" min="0" defaultValue={v.size_ml ?? ""} className={`${styles.adminInput} ${styles.ltr}`} />
-                      <input name="price_jod" type="number" min="0.01" step="0.01" required defaultValue={Number(v.price_jod || "0")} className={`${styles.adminInput} ${styles.ltr}`} />
-                      <input name="compare_at_price_jod" type="number" min="0" step="0.01" defaultValue={v.compare_at_price_jod ? Number(v.compare_at_price_jod) : ""} className={`${styles.adminInput} ${styles.ltr}`} />
-                      <input name="sort_order" type="number" min="0" defaultValue={v.sort_order} className={`${styles.adminInput} ${styles.ltr}`} />
-                      <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" name="is_default" defaultChecked={v.is_default} /> {isAr ? "افتراضي" : "Default"}</label>
-                      <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" name="is_active" defaultChecked={v.is_active} /> {L.active}</label>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button className={styles.adminBtn} type="submit">{L.update}</button>
-                      </div>
-                    </form>
-                  ))}
-                  {variants.length === 0 ? <p style={{ margin: 0, opacity: 0.7 }}>{isAr ? "لا توجد متغيرات" : "No variants yet"}</p> : null}
-                  {variants.map((v) => (
-                    <form key={`del-${v.id}`} action="/api/admin/catalog/variants" method="post" style={{ display: "inline" }}>
-                      <input type="hidden" name="action" value="delete" />
-                      <input type="hidden" name="id" value={v.id} />
-                      <button className={styles.adminBtn} type="submit">{isAr ? `حذف ${v.label}` : `Delete ${v.label}`}</button>
-                    </form>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+      <section className={styles.adminCard}>
+        <h2 style={{ marginTop: 0 }}>{isAr ? "إدارة الصور" : "Product images"}</h2>
+        <p className="muted" style={{ marginTop: -4 }}>{isAr ? "استبدل صور المنتج المختار (حد أقصى 5 صور)." : "Replace images for the selected product (max 5 files)."}</p>
+        <form action="/api/admin/catalog/product-images" method="post" encType="multipart/form-data" style={{ display: "grid", gap: 10, gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr) auto", alignItems: "center" }}>
+          <input type="hidden" name="return_to" value={returnTo} />
+          <select name="product_id" className={styles.adminSelect} defaultValue={selectedProduct ? String(selectedProduct.id) : ""}>
+            {data.products.map((p) => (
+              <option key={`img-${p.id}`} value={p.id}>{p.slug} — {isAr ? p.name_ar : p.name_en}</option>
+            ))}
+          </select>
+          <input className={styles.adminInput} type="file" name="images" multiple accept="image/*" required />
+          <button className={`${styles.adminBtn} ${styles.adminBtnPrimary}`} type="submit">{isAr ? "رفع الصور" : "Upload images"}</button>
+        </form>
       </section>
 
-      <section id="promos-section" className={styles.adminCard}>
+      <section id="variants-section" className={styles.adminCard}>
+        <h2 style={{ marginTop: 0 }}>{isAr ? "إدارة المتغيرات" : "Variant management"}</h2>
+        <p className="muted" style={{ marginTop: -4 }}>
+          {isAr ? "اختر منتجًا واحدًا لإدارة الأحجام والأسعار بسرعة ووضوح." : "Choose one product to manage sizes and prices with a focused workflow."}
+        </p>
+
+        <form method="get" action="/admin/catalog" className={styles.adminGrid} style={{ marginBottom: 10 }}>
+          <div style={{ display: "grid", gap: 8, gridTemplateColumns: "minmax(0,1fr) auto" }}>
+            <select className={styles.adminSelect} name="variantProductId" defaultValue={selectedProduct ? String(selectedProduct.id) : ""}>
+              {productsForVariantSection.map((p) => (
+                <option key={p.id} value={p.id}>{p.slug} — {isAr ? p.name_ar : p.name_en}</option>
+              ))}
+            </select>
+            <button className={styles.adminBtn} type="submit">{isAr ? "عرض المتغيرات" : "Load variants"}</button>
+          </div>
+          <input type="hidden" name="qProducts" value={qProducts} />
+          <input type="hidden" name="qVariants" value={qVariants} />
+          <input type="hidden" name="qPromos" value={qPromos} />
+          <input type="hidden" name="productState" value={productState} />
+          <input type="hidden" name="variantState" value={variantState} />
+          <input type="hidden" name="promoState" value={promoState} />
+        </form>
+
+        {selectedProduct ? (
+          <>
+            <div className={styles.adminCard} style={{ marginBottom: 12, background: "#fafafa" }}>
+              <strong>{selectedProduct.slug}</strong> — {isAr ? selectedProduct.name_ar : selectedProduct.name_en}
+              <p className="muted" style={{ marginBottom: 0, marginTop: 6 }}>
+                {isAr ? `عدد المتغيرات المطابقة: ${selectedProductVariants.length}` : `Matching variants: ${selectedProductVariants.length}`}
+              </p>
+            </div>
+
+            <form action="/api/admin/catalog/variants" method="post" style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(8,minmax(0,1fr))", marginBottom: 10 }}>
+                <input type="hidden" name="return_to" value={returnTo} />
+              <input type="hidden" name="action" value="create" />
+              <input type="hidden" name="product_id" value={selectedProduct.id} />
+              <input name="label" required minLength={2} placeholder={isAr ? "الاسم (مثال 50 ml)" : "Label (e.g. 50 ml)"} className={styles.adminInput} />
+              <input name="size_ml" type="number" min="0" placeholder="ml" className={`${styles.adminInput} ${styles.ltr}`} />
+              <input name="price_jod" type="number" min="0.01" step="0.01" required placeholder="Price" className={`${styles.adminInput} ${styles.ltr}`} />
+              <input name="compare_at_price_jod" type="number" min="0" step="0.01" placeholder="Compare" className={`${styles.adminInput} ${styles.ltr}`} />
+              <input name="sort_order" type="number" min="0" defaultValue={selectedProductVariants.length * 10} placeholder="Sort" className={`${styles.adminInput} ${styles.ltr}`} />
+              <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" name="is_default" /> {isAr ? "افتراضي" : "Default"}</label>
+              <span className="muted" style={{ fontSize: 12 }}>{isAr ? "افتراضي واحد فقط لكل منتج." : "Only one default variant per product."}</span>
+              <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" name="is_active" defaultChecked /> {L.active}</label>
+              <button className={styles.adminBtn} type="submit" style={{ gridColumn: "1 / -1", width: "fit-content" }}>{isAr ? "إضافة متغير" : "Add variant"}</button>
+            </form>
+
+            <div style={{ display: "grid", gap: 8 }}>
+              {selectedProductVariants.map((v) => (
+                <div key={v.id} style={{ borderTop: "1px dashed #eee", paddingTop: 8 }}>
+                  <form action="/api/admin/catalog/variants" method="post" style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(8,minmax(0,1fr))", alignItems: "center" }}>
+                    <input type="hidden" name="return_to" value={returnTo} />
+                    <input type="hidden" name="action" value="update" />
+                    <input type="hidden" name="id" value={v.id} />
+                    <input type="hidden" name="product_id" value={selectedProduct.id} />
+                    <input name="label" required minLength={2} defaultValue={v.label} className={styles.adminInput} />
+                    <input name="size_ml" type="number" min="0" defaultValue={v.size_ml ?? ""} className={`${styles.adminInput} ${styles.ltr}`} />
+                    <input name="price_jod" type="number" min="0.01" step="0.01" required defaultValue={Number(v.price_jod || "0")} className={`${styles.adminInput} ${styles.ltr}`} />
+                    <input name="compare_at_price_jod" type="number" min="0" step="0.01" defaultValue={v.compare_at_price_jod ? Number(v.compare_at_price_jod) : ""} className={`${styles.adminInput} ${styles.ltr}`} />
+                    <input name="sort_order" type="number" min="0" defaultValue={v.sort_order} className={`${styles.adminInput} ${styles.ltr}`} />
+                    <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" name="is_default" defaultChecked={v.is_default} /> {isAr ? "افتراضي" : "Default"}</label>
+                    <label style={{ display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" name="is_active" defaultChecked={v.is_active} /> {L.active}</label>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button className={styles.adminBtn} type="submit">{L.update}</button>
+                    </div>
+                  </form>
+                  <form action="/api/admin/catalog/variants" method="post" style={{ marginTop: 8 }}>
+                    <input type="hidden" name="return_to" value={returnTo} />
+                    <input type="hidden" name="action" value="delete" />
+                    <input type="hidden" name="id" value={v.id} />
+                    <button className={styles.adminBtn} type="submit">{L.del}</button>
+                  </form>
+                </div>
+              ))}
+              {selectedProductVariants.length === 0 ? <p className="muted" style={{ margin: 0 }}>{isAr ? "لا توجد متغيرات لهذا المنتج بعد." : "No variants for this product yet."}</p> : null}
+            </div>
+          </>
+        ) : (
+          <p className="muted" style={{ margin: 0 }}>{isAr ? "لا توجد منتجات لإدارة المتغيرات." : "No products available for variant management."}</p>
+        )}
+      </section>
+
+<section id="promos-section" className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{L.addPromo}</h2>
         <p className="muted" style={{ marginTop: -4 }}>{isAr ? `نتائج: ${filteredPromos.length}` : `Results: ${filteredPromos.length}`}</p>
         <form action="/api/admin/catalog/promotions" method="post" className={styles.adminGrid}>
+                <input type="hidden" name="return_to" value={returnTo} />
           <input type="hidden" name="action" value="create" />
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
             <select name="promo_kind" defaultValue="CODE" className={styles.adminSelect}>
@@ -651,6 +720,7 @@ export default async function AdminCatalogPage({
                 {L.promoType}: {String(r.promo_kind || "CODE").toUpperCase() === "AUTO" ? L.autoPromo : L.codePromo} • {L.promoPriority}: {r.priority || 0} • {L.promoUsage}: {r.used_count || 0}{r.usage_limit ? ` / ${r.usage_limit}` : ""} • {L.promoMin}: {r.min_order_jod || "0"} JOD
               </div>
               <form action="/api/admin/catalog/promotions" method="post" style={{ marginTop: 8 }}>
+                <input type="hidden" name="return_to" value={returnTo} />
                 <input type="hidden" name="action" value="toggle" />
                 <input type="hidden" name="id" value={r.id} />
                 <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -659,6 +729,7 @@ export default async function AdminCatalogPage({
                 <button className={styles.adminBtn} type="submit" style={{ marginTop: 6 }}>{L.update}</button>
               </form>
               <form action="/api/admin/catalog/promotions" method="post" style={{ marginTop: 6 }}>
+                <input type="hidden" name="return_to" value={returnTo} />
                 <input type="hidden" name="action" value="delete" />
                 <input type="hidden" name="id" value={r.id} />
                 <button className={styles.adminBtn} type="submit">{L.del}</button>
@@ -672,6 +743,7 @@ export default async function AdminCatalogPage({
       <section id="categories-section" className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{L.addCategory}</h2>
         <form action="/api/admin/catalog/categories" method="post" className={styles.adminGrid}>
+                <input type="hidden" name="return_to" value={returnTo} />
           <input type="hidden" name="action" value="create" />
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
             <input name="key" required placeholder="hand-gel" className={`${styles.adminInput} ${styles.ltr}`} />
@@ -698,6 +770,7 @@ export default async function AdminCatalogPage({
                   <td className={styles.ltr}>{c.key}</td><td>{c.name_en}</td><td>{c.name_ar}</td><td className={styles.ltr}>{c.sort_order}</td><td>{c.is_active ? "✓" : "—"}</td><td>{c.is_promoted ? "✓" : "—"}</td>
                   <td>
                     <form action="/api/admin/catalog/categories" method="post" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <input type="hidden" name="return_to" value={returnTo} />
                       <input type="hidden" name="action" value="update" />
                       <input type="hidden" name="key" value={c.key} />
                       <input name="name_en" defaultValue={c.name_en} className={styles.adminInput} style={{ width: 160 }} />
@@ -708,6 +781,7 @@ export default async function AdminCatalogPage({
                       <button className={styles.adminBtn} type="submit">{L.update}</button>
                     </form>
                     <form action="/api/admin/catalog/categories" method="post" style={{ marginTop: 8 }}>
+                <input type="hidden" name="return_to" value={returnTo} />
                       <input type="hidden" name="action" value="delete" />
                       <input type="hidden" name="key" value={c.key} />
                       <button className={styles.adminBtn} type="submit">{L.del}</button>

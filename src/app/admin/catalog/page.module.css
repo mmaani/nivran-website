@@ -71,7 +71,7 @@
   border: 1px solid #dfdfe3;
   border-radius: 10px;
   padding: 10px 12px;
-  min-height: 42px;
+  min-height: 40px;
   font: inherit;
   background: #fff;
 }
@@ -147,4 +147,17 @@
   .filterForm {
     grid-template-columns: 1fr;
   }
+}
+
+
+.adminTable td form .adminBtn {
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.adminTable td form .adminInput,
+.adminTable td form .adminSelect {
+  min-height: 36px;
+  padding: 7px 10px;
 }

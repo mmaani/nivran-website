@@ -2,38 +2,26 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureCatalogTablesSafe } from "@/lib/catalog";
 import { requireAdmin } from "@/lib/guards";
+import { catalogErrorRedirect, catalogSavedRedirect, catalogUnauthorizedRedirect } from "../redirects";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function catalogErrorRedirect(req: Request, code: string) {
-  return NextResponse.redirect(new URL(`/admin/catalog?error=${encodeURIComponent(code)}`, req.url), 303);
-}
-
-function redirect303(req: Request, path: string) {
-  return NextResponse.redirect(new URL(path, req.url), 303);
-}
-
-function unauthorized(req: Request) {
-  const accept = req.headers.get("accept") || "";
-  const isBrowser = accept.includes("text/html");
-  if (isBrowser) {
-    const next = "/admin/catalog";
-    return redirect303(req, `/admin/login?next=${encodeURIComponent(next)}`);
-  }
-  return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-}
-
 export async function POST(req: Request) {
+  let form: FormData | null = null;
   try {
+    form = await req.formData();
     const auth = requireAdmin(req);
-    if (!auth.ok) return unauthorized(req);
+    if (!auth.ok) {
+      const accept = req.headers.get("accept") || "";
+      if (accept.includes("text/html")) return catalogUnauthorizedRedirect(req, form);
+      return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
+    }
 
     await ensureCatalogTablesSafe();
 
-    const form = await req.formData();
     const productId = Number(form.get("product_id") || 0);
-    if (!productId) return catalogErrorRedirect(req, "missing-product");
+    if (!productId) return catalogErrorRedirect(req, form, "missing-product");
 
     const files = (form.getAll("images") || []).filter(Boolean) as unknown as File[];
     const selected = files.slice(0, 5);
@@ -55,9 +43,9 @@ export async function POST(req: Request) {
       );
     }
 
-    return redirect303(req, "/admin/catalog?uploaded=1");
+    return catalogSavedRedirect(req, form, { uploaded: 1 });
   } catch (error: unknown) {
     console.error("[admin/catalog/product-images] route error", error);
-    return catalogErrorRedirect(req, "image-upload-failed");
+    return catalogErrorRedirect(req, form, "image-upload-failed");
   }
 }

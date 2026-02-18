@@ -2,23 +2,10 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureCatalogTablesSafe } from "@/lib/catalog";
 import { requireAdmin } from "@/lib/guards";
+import { catalogErrorRedirect, catalogSavedRedirect, catalogUnauthorizedRedirect } from "../redirects";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function catalogErrorRedirect(req: Request, code: string) {
-  return NextResponse.redirect(new URL(`/admin/catalog?error=${encodeURIComponent(code)}`, req.url), 303);
-}
-
-function unauthorized(req: Request, status: number, error: string) {
-  const accept = req.headers.get("accept") || "";
-  const isBrowser = accept.includes("text/html");
-  if (isBrowser) {
-    const next = "/admin/catalog";
-    return NextResponse.redirect(new URL(`/admin/login?next=${encodeURIComponent(next)}`, req.url));
-  }
-  return NextResponse.json({ ok: false, error }, { status });
-}
 
 function readCategoryKeys(form: FormData): string[] | null {
   const raw = form.getAll("category_keys").map((v) => String(v || "").trim()).filter(Boolean);
@@ -36,12 +23,17 @@ function readProductSlugs(raw: string): string[] | null {
 }
 
 export async function POST(req: Request) {
+  let form: FormData | null = null;
   try {
+    form = await req.formData();
     const auth = requireAdmin(req);
-    if (!auth.ok) return unauthorized(req, auth.status, auth.error);
+    if (!auth.ok) {
+      const accept = req.headers.get("accept") || "";
+      if (accept.includes("text/html")) return catalogUnauthorizedRedirect(req, form);
+      return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
+    }
 
     await ensureCatalogTablesSafe();
-    const form = await req.formData();
     const action = String(form.get("action") || "create");
 
     if (action === "create") {
@@ -69,15 +61,15 @@ export async function POST(req: Request) {
       const categoryKeys = readCategoryKeys(form);
 
       if (!titleEn || !titleAr || !Number.isFinite(discountValue) || discountValue <= 0) {
-        return catalogErrorRedirect(req, "invalid-promo");
+        return catalogErrorRedirect(req, form, "invalid-promo");
       }
 
       if (promoKind === "CODE" && !code) {
-        return catalogErrorRedirect(req, "missing-code");
+        return catalogErrorRedirect(req, form, "missing-code");
       }
 
       if (minOrderRaw && (!Number.isFinite(minOrderJod) || Number(minOrderJod) < 0)) {
-        return catalogErrorRedirect(req, "invalid-min-order");
+        return catalogErrorRedirect(req, form, "invalid-min-order");
       }
 
       await db.query(
@@ -120,9 +112,9 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.redirect(new URL("/admin/catalog?saved=1", req.url), 303);
+    return catalogSavedRedirect(req, form);
   } catch (error: unknown) {
     console.error("[admin/catalog/promotions] route error", error);
-    return catalogErrorRedirect(req, "promo-save-failed");
+    return catalogErrorRedirect(req, form, "promo-save-failed");
   }
 }
