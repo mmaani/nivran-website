@@ -25,6 +25,19 @@ function toNum(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * Preserve NULL for missing/invalid variant IDs.
+ * Only accept positive integers.
+ */
+function normalizeVariantId(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v) && v > 0) return Math.trunc(v);
+  if (typeof v === "string") {
+    const n = Number(v.trim());
+    if (Number.isFinite(n) && n > 0) return Math.trunc(n);
+  }
+  return null;
+}
+
 export function clampQty(v: unknown, min = 1, max = MAX_QTY): number {
   const x = Math.floor(toNum(v) || min);
   return Math.min(max, Math.max(min, x));
@@ -39,6 +52,9 @@ export function normalizeCartItems(items: unknown): CartItem[] {
 
     const slug = toStr(it.slug).trim();
     if (!slug) continue;
+
+    const variantId = normalizeVariantId(it.variantId);
+    const variantLabel = toStr(it.variantLabel).trim();
 
     out.push({
       slug,
