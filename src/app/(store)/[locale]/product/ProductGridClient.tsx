@@ -27,6 +27,7 @@ type ProductCard = {
 };
 
 type CategoryOption = { key: string; label: string };
+type CampaignCard = { id: number; title: string; badge: string; endsAt: string | null; minOrderJod: number };
 type SortKey = "recommended" | "price-asc" | "price-desc" | "name";
 
 function promoBadgeText(locale: Locale, promoType: string | null, promoValue: number): string {
@@ -40,14 +41,27 @@ function normalizeText(value: string): string {
   return String(value || "").trim().toLowerCase();
 }
 
+function formatCampaignEnds(locale: Locale, endsAt: string | null): string {
+  if (!endsAt) return locale === "ar" ? "عرض مستمر" : "Always on";
+  const d = new Date(endsAt);
+  if (Number.isNaN(d.getTime())) return locale === "ar" ? "لفترة محدودة" : "Limited time";
+  const diffHours = Math.floor((d.getTime() - Date.now()) / (1000 * 60 * 60));
+  if (diffHours <= 0) return locale === "ar" ? "ينتهي قريبًا" : "Ending soon";
+  if (diffHours < 24) return locale === "ar" ? `ينتهي خلال ${diffHours} ساعة` : `Ends in ${diffHours}h`;
+  const days = Math.ceil(diffHours / 24);
+  return locale === "ar" ? `ينتهي خلال ${days} يوم` : `Ends in ${days}d`;
+}
+
 export default function ProductGridClient({
   locale,
   categories,
   products,
+  campaigns,
 }: {
   locale: Locale;
   categories: CategoryOption[];
   products: ProductCard[];
+  campaigns: CampaignCard[];
 }) {
   const isAr = locale === "ar";
   const [search, setSearch] = useState("");
@@ -83,6 +97,27 @@ export default function ProductGridClient({
 
   return (
     <>
+      {campaigns.length > 0 ? (
+        <section className="panel" style={{ marginBottom: 16, display: "grid", gap: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <h2 style={{ margin: 0, fontSize: 18 }}>{isAr ? "عروض اليوم" : "Today’s campaigns"}</h2>
+            <span className="badge">{isAr ? "تحفّز المبيعات" : "Sales boosters"}</span>
+          </div>
+          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))" }}>
+            {campaigns.slice(0, 3).map((campaign) => (
+              <article key={campaign.id} style={{ border: "1px solid #e7e5df", borderRadius: 12, padding: 12, background: "linear-gradient(135deg,#fff,#fff8ee)" }}>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>{campaign.badge}</div>
+                <strong style={{ display: "block", marginBottom: 4 }}>{campaign.title}</strong>
+                <p className="muted" style={{ margin: 0, fontSize: 12 }}>
+                  {formatCampaignEnds(locale, campaign.endsAt)}
+                  {campaign.minOrderJod > 0 ? (isAr ? ` · حد أدنى ${campaign.minOrderJod.toFixed(2)} JOD` : ` · Min order ${campaign.minOrderJod.toFixed(2)} JOD`) : ""}
+                </p>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="panel" style={{ marginBottom: 16, display: "grid", gap: 10 }}>
         <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))" }}>
           <label>

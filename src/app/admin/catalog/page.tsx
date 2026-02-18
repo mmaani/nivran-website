@@ -64,11 +64,33 @@ type PromoRow = {
   used_count: number | null;
   min_order_jod: string | null;
   priority: number | null;
+  starts_at: string | null;
+  ends_at: string | null;
   product_slugs: string[] | null;
 };
 
 function labelCategory(lang: "en" | "ar", c: CategoryRow) {
   return lang === "ar" ? c.name_ar : c.name_en;
+}
+
+function promoStatusLabel(lang: "en" | "ar", row: PromoRow): string {
+  if (!row.is_active) return lang === "ar" ? "متوقف" : "Paused";
+  const now = Date.now();
+  const starts = row.starts_at ? new Date(String(row.starts_at)).getTime() : null;
+  const ends = row.ends_at ? new Date(String(row.ends_at)).getTime() : null;
+  if (starts && starts > now) return lang === "ar" ? "مجدول" : "Scheduled";
+  if (ends && ends < now) return lang === "ar" ? "منتهي" : "Ended";
+  return lang === "ar" ? "مباشر" : "Live";
+}
+
+function promoEstimatedCoverage(row: PromoRow, products: ProductRow[]): number {
+  const productSlugs = row.product_slugs || [];
+  const categoryKeys = row.category_keys || [];
+  return products.filter((product) => {
+    const bySlug = productSlugs.length === 0 || productSlugs.includes(product.slug);
+    const byCategory = categoryKeys.length === 0 || categoryKeys.includes(product.category_key);
+    return bySlug && byCategory;
+  }).length;
 }
 
 
@@ -149,7 +171,8 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
       ),
       db.query<PromoRow>(
         `select id, promo_kind, code, title_en, title_ar, discount_type, discount_value::text,
-                is_active, category_keys, usage_limit, used_count, min_order_jod::text, priority, product_slugs
+                is_active, category_keys, usage_limit, used_count, min_order_jod::text, priority,
+                starts_at::text as starts_at, ends_at::text as ends_at, product_slugs
            from promotions
           order by created_at desc`
       ),
@@ -325,6 +348,12 @@ export default async function AdminCatalogPage({
     return haystack.includes(qPromos);
   });
 
+  const promoInsights = filteredPromos.map((promo) => ({
+    id: promo.id,
+    status: promoStatusLabel(lang, promo),
+    estimatedCoverage: promoEstimatedCoverage(promo, data.products),
+  }));
+
   const selectedProductIdParam = Number(params.variantProductId || 0);
   const selectedProduct = productsForVariantSection.find((p) => p.id === selectedProductIdParam)
     || productsForVariantSection[0]
@@ -385,7 +414,7 @@ export default async function AdminCatalogPage({
         {errorCode && !variantError ? (
           <p style={{ marginTop: 10, marginBottom: 0, color: "crimson", fontWeight: 600 }}>
             {isAr ? `حدث خطأ في العملية: ${errorCode}` : `Catalog action error: ${errorCode}`}
-          </p> 
+          </p>
         ) : null}
         {data.bootstrapNote ? (
           <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
@@ -400,7 +429,7 @@ export default async function AdminCatalogPage({
         <div><strong>{outOfStockCount}</strong><div className="muted">{isAr ? "نفدت الكمية" : "Out of stock"}</div></div>
         <div><strong>{data.promos.length}</strong><div className="muted">{isAr ? "العروض" : "Promotions"}</div></div>
         <div><strong>{variantsActive}</strong><div className="muted">{isAr ? "متغيرات مفعلة" : "Active variants"}</div></div>
-        <div><strong>{activeAutoPromos}</strong><div className="muted">{isAr ? "عروض تلقائية مفعلة" : "Active AUTO promos"}</div></div>
+              <div><strong>{activeAutoPromos}</strong><div className="muted">{isAr ? "عروض تلقائية مفعلة" : "Active AUTO promos"}</div></div>
         <div><strong>{activeCodePromos}</strong><div className="muted">{isAr ? "كوبونات مفعلة" : "Active CODE promos"}</div></div>
         <div><strong>{productsWithAutoPromo}</strong><div className="muted">{isAr ? "منتجات مشمولة بعرض تلقائي" : "Products covered by AUTO"}</div></div>
       </section>
@@ -809,6 +838,35 @@ export default async function AdminCatalogPage({
 
           <button className={`${styles.adminBtn} ${styles.adminBtnPrimary}`} style={{ width: "fit-content" }}>{L.savePromo}</button>
         </form>
+      </section>
+
+      <section className={styles.adminCard}>
+        <h2 style={{ marginTop: 0 }}>{isAr ? "فعالية الحملات" : "Campaign effectiveness"}</h2>
+        <div className={styles.adminTableWrap}>
+          <table className={styles.adminTable}>
+            <thead>
+              <tr>
+                <th>{isAr ? "الحملة" : "Campaign"}</th>
+                <th>{isAr ? "الحالة" : "Status"}</th>
+                <th>{isAr ? "التغطية المتوقعة" : "Estimated coverage"}</th>
+                <th>{isAr ? "الاستخدام" : "Usage"}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredPromos.map((promo) => {
+                const insight = promoInsights.find((x) => x.id === promo.id);
+                return (
+                  <tr key={`insight-${promo.id}`}>
+                    <td>{(isAr ? promo.title_ar : promo.title_en) || promo.code || "AUTO"}</td>
+                    <td>{insight?.status}</td>
+                    <td>{insight?.estimatedCoverage || 0} {isAr ? "منتج" : "products"}</td>
+                    <td>{promo.used_count || 0}{promo.usage_limit ? ` / ${promo.usage_limit}` : ""}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className={styles.adminCard}>

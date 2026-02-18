@@ -38,6 +38,20 @@ type ProductRow = {
   audiences: string[];
 };
 
+type CampaignRow = {
+  id: number;
+  promo_kind: "AUTO" | "CODE" | string;
+  title_en: string | null;
+  title_ar: string | null;
+  discount_type: "PERCENT" | "FIXED" | null;
+  discount_value: string | null;
+  ends_at: string | null;
+  starts_at: string | null;
+  min_order_jod: string | null;
+  category_keys: string[] | null;
+  product_slugs: string[] | null;
+};
+
 const FALLBACK_CATS: Record<string, { en: string; ar: string }> = {
   perfume: { en: "Perfume", ar: "عطر" },
   "hand-gel": { en: "Hand Gel", ar: "معقم يدين" },
@@ -84,6 +98,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
 
   let categoriesRows: CategoryRow[] = [];
   let productRows: ProductRow[] = [];
+  let campaignRows: CampaignRow[] = [];
 
   try {
     await ensureCatalogTables();
@@ -167,11 +182,25 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
       limit 500`
     );
     productRows = productsRes.rows;
+
+    const campaignsRes = await db.query<CampaignRow>(
+      `select id, promo_kind, title_en, title_ar, discount_type, discount_value::text,
+              ends_at::text as ends_at, starts_at::text as starts_at, min_order_jod::text as min_order_jod,
+              category_keys, product_slugs
+         from promotions
+        where is_active=true
+          and (starts_at is null or starts_at <= now())
+          and (ends_at is null or ends_at >= now())
+        order by priority desc, created_at desc
+        limit 8`
+    );
+    campaignRows = campaignsRes.rows;
   } catch (error: unknown) {
     if (!isDbConnectivityError(error)) throw error;
 
     categoriesRows = fallbackCategories();
     productRows = fallbackCatalogRows();
+    campaignRows = [];
     console.warn("[catalog] Falling back to static product catalog due to DB connectivity issue.");
   }
 
@@ -185,6 +214,17 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
     return (FALLBACK_CATS[key] || { en: key, ar: key })[locale];
   };
 
+
+
+  const campaignCards = campaignRows.map((c) => ({
+    id: c.id,
+    title: (isAr ? c.title_ar : c.title_en) || (isAr ? "عرض خاص" : "Special campaign"),
+    badge: c.discount_type === "PERCENT"
+      ? (isAr ? `وفر ${Number(c.discount_value || 0)}%` : `Save ${Number(c.discount_value || 0)}%`)
+      : (isAr ? `وفر ${Number(c.discount_value || 0).toFixed(2)} د.أ` : `Save ${Number(c.discount_value || 0).toFixed(2)} JOD`),
+    endsAt: c.ends_at,
+    minOrderJod: Number(c.min_order_jod || 0),
+  }));
 
   const productCards = productRows.map((p) => {
     const name = isAr ? p.name_ar : p.name_en;
@@ -244,6 +284,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
         locale={locale}
         categories={cats}
         products={productCards}
+        campaigns={campaignCards}
       />
 
       {productRows.length === 0 ? (

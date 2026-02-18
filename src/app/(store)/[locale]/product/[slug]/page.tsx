@@ -66,6 +66,19 @@ function tagLabel(locale: "en" | "ar", value: string): string {
   return (map[key] || { en: value, ar: value })[locale];
 }
 
+function promoTimingLabel(locale: "en" | "ar", startsAt: string | null, endsAt: string | null): string {
+  const now = Date.now();
+  const start = startsAt ? new Date(startsAt).getTime() : null;
+  const end = endsAt ? new Date(endsAt).getTime() : null;
+  if (start && now < start) return locale === "ar" ? "تبدأ الحملة قريبًا" : "Campaign starts soon";
+  if (!end) return locale === "ar" ? "حملة مستمرة" : "Always-on campaign";
+  const diffHours = Math.floor((end - now) / (1000 * 60 * 60));
+  if (diffHours <= 0) return locale === "ar" ? "تنتهي اليوم" : "Ends today";
+  if (diffHours < 24) return locale === "ar" ? `تنتهي خلال ${diffHours} ساعة` : `Ends in ${diffHours}h`;
+  const days = Math.ceil(diffHours / 24);
+  return locale === "ar" ? `تنتهي خلال ${days} يوم` : `Ends in ${days}d`;
+}
+
 function promoBadgeText(locale: "en" | "ar", promoType: "PERCENT" | "FIXED", promoValue: number): string {
   if (promoType === "PERCENT") {
     return locale === "ar" ? `AUTO • وفر ${promoValue}%` : `AUTO • Save ${promoValue}%`;
@@ -88,6 +101,8 @@ type ProductRow = {
   promo_type: "PERCENT" | "FIXED" | null;
   promo_value: string | null;
   discounted_price_jod: string | null;
+  promo_ends_at: string | null;
+  promo_starts_at: string | null;
   wear_times: string[];
   seasons: string[];
   audiences: string[];
@@ -131,6 +146,8 @@ export default async function ProductDetailPage({
             p.is_active,
             bp.discount_type as promo_type,
             bp.discount_value::text as promo_value,
+            bp.ends_at::text as promo_ends_at,
+            bp.starts_at::text as promo_starts_at,
             (
               case
                 when bp.id is null then null
@@ -144,7 +161,7 @@ export default async function ProductDetailPage({
             coalesce(p.audiences, '{}'::text[]) as audiences
        from products p
        left join lateral (
-         select pr.id, pr.discount_type, pr.discount_value, pr.priority
+         select pr.id, pr.discount_type, pr.discount_value, pr.priority, pr.ends_at, pr.starts_at
          from promotions pr
          where pr.promo_kind='AUTO'
            and pr.is_active=true
@@ -227,6 +244,7 @@ export default async function ProductDetailPage({
   const promoType = product.promo_type;
   const promoValue = Number(product.promo_value || 0);
   const hasPromo = promoType === "PERCENT" || promoType === "FIXED";
+  const promoTiming = hasPromo ? promoTimingLabel(locale, product.promo_starts_at, product.promo_ends_at) : null;
   const outOfStock = Number(product.inventory_qty || 0) <= 0;
 
   const variants = variantsRes.rows.length
@@ -289,6 +307,13 @@ export default async function ProductDetailPage({
           <h1 className="title" style={{ marginTop: 0 }}>
             {name}
           </h1>
+
+          {hasPromo && promoType ? (
+            <div className="panel" style={{ padding: 12, marginBottom: 12, background: "linear-gradient(130deg,#fff,#fff8ee)", border: "1px solid #f0e1c4" }}>
+              <strong>{promoBadgeText(locale, promoType, promoValue)}</strong>
+              <p className="muted" style={{ margin: "6px 0 0" }}>{promoTiming}</p>
+            </div>
+          ) : null}
 
           {outOfStock ? <p className="muted">{isAr ? "غير متوفر حالياً." : "Currently out of stock."}</p> : null}
 

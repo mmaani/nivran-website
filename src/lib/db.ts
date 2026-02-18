@@ -81,6 +81,7 @@ export function isDbConnectivityError(error: unknown): boolean {
     || message.includes("TIMED OUT")
     || message.includes("NO PG_HBA.CONF ENTRY")
     || message.includes("COULD NOT CONNECT TO SERVER")
+    || message.includes("DATABASE_URL ENV VAR IS REQUIRED")
   );
 }
 
