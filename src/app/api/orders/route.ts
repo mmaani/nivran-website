@@ -16,14 +16,14 @@ type PaymentMethod = "PAYTABS" | "COD";
 type IncomingItem = {
   slug?: string;
   qty?: number;
-  name?: string;
-  priceJod?: number;
+  variantId?: number | null;
 };
 
 type CustomerInput = { name?: string; phone?: string; email?: string };
 type ShippingInput = { city?: string; address?: string; notes?: string; country?: string };
 
 type ProductRow = {
+  id: number;
   slug: string;
   name_en: string | null;
   name_ar: string | null;
@@ -32,8 +32,17 @@ type ProductRow = {
   is_active: boolean;
 };
 
+type VariantRow = {
+  id: number;
+  product_id: number;
+  label: string;
+  price_jod: string | number;
+};
+
 type OrderLine = {
   slug: string;
+  variant_id: number | null;
+  variant_label: string | null;
   name_en: string;
   name_ar: string;
   qty: number;
@@ -45,7 +54,7 @@ type OrderLine = {
 async function fetchProductsBySlugs(slugs: string[]) {
   await ensureCatalogTables();
   const r = await db.query<ProductRow>(
-    `select slug, name_en, name_ar, price_jod, category_key, is_active
+    `select id, slug, name_en, name_ar, price_jod, category_key, is_active
        from products
       where slug = any($1::text[])`,
     [slugs]
@@ -53,12 +62,13 @@ async function fetchProductsBySlugs(slugs: string[]) {
   return r.rows || [];
 }
 
-function normalizeItems(items: unknown): { slug: string; qty: number }[] {
+function normalizeItems(items: unknown): { slug: string; qty: number; variantId: number | null }[] {
   if (!Array.isArray(items)) return [];
   return items
     .map((x: IncomingItem) => ({
       slug: String(x?.slug || "").trim(),
       qty: Math.max(1, Math.min(99, Number(x?.qty || 1))),
+      variantId: Number.isFinite(Number(x?.variantId)) ? Number(x?.variantId) : null,
     }))
     .filter((x) => !!x.slug);
 }
@@ -106,7 +116,7 @@ export async function POST(req: NextRequest) {
   const legacyQty = Math.max(1, Math.min(99, Number(body.qty || 1)));
 
   if (!items.length && legacySlug) {
-    items = [{ slug: legacySlug, qty: legacyQty }];
+    items = [{ slug: legacySlug, qty: legacyQty, variantId: null }];
   }
 
   if (!items.length) {
@@ -123,16 +133,34 @@ export async function POST(req: NextRequest) {
   const map = new Map<string, ProductRow>();
   for (const p of products) map.set(String(p.slug), p);
 
+  const variantIds = Array.from(new Set(items.map((i) => i.variantId).filter((id): id is number => typeof id === "number")));
+  const variantMap = new Map<number, VariantRow>();
+  if (variantIds.length) {
+    const vr = await db.query<VariantRow>(`select id, product_id, label, price_jod from product_variants where id = any($1::bigint[]) and is_active=true`, [variantIds]);
+    for (const v of vr.rows) variantMap.set(v.id, v);
+  }
+
   const lines: OrderLine[] = [];
   for (const it of items) {
     const p = map.get(it.slug);
     if (!p || !p.is_active) {
       return NextResponse.json({ ok: false, error: `Unknown or inactive product: ${it.slug}` }, { status: 400 });
     }
-    const unit = Number(p.price_jod || 0);
+    let unit = Number(p.price_jod || 0);
+    let variantLabel: string | null = null;
+    if (it.variantId) {
+      const variant = variantMap.get(it.variantId);
+      if (!variant || Number(variant.product_id) !== Number(p.id)) {
+        return NextResponse.json({ ok: false, error: `Invalid variant for product: ${it.slug}` }, { status: 400 });
+      }
+      unit = Number(variant.price_jod || 0);
+      variantLabel = String(variant.label || "");
+    }
     const qty = it.qty;
     lines.push({
       slug: it.slug,
+      variant_id: it.variantId ?? null,
+      variant_label: variantLabel,
       name_en: String(p.name_en || it.slug),
       name_ar: String(p.name_ar || p.name_en || it.slug),
       qty,
@@ -180,6 +208,8 @@ export async function POST(req: NextRequest) {
 
   const itemsJson = lines.map((l) => ({
     slug: l.slug,
+    variant_id: l.variant_id,
+    variant_label: l.variant_label,
     name_en: l.name_en,
     name_ar: l.name_ar,
     qty: l.qty,

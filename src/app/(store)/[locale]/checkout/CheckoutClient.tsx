@@ -135,7 +135,7 @@ export default function CheckoutClient() {
         const prodName = isAr ? toStr(prod.name_ar || prod.name_en || slug) : toStr(prod.name_en || prod.name_ar || slug);
         const price = toNum(prod.price_jod);
 
-        setItems([{ slug, name: prodName, priceJod: price, qty: 1 }]);
+        setItems([{ slug, variantId: toNum(prod.variant_id) || null, variantLabel: toStr(prod.variant_label), name: prodName, priceJod: price, qty: 1 }]);
       })
       .finally(() => {
         if (!cancelled) setLoadingBuyNow(false);
@@ -157,7 +157,7 @@ export default function CheckoutClient() {
       const res = await fetch("/api/promotions/validate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mode: "AUTO", locale, items: items.map((i) => ({ slug: i.slug, qty: i.qty })) }),
+        body: JSON.stringify({ mode: "AUTO", locale, items: items.map((i) => ({ slug: i.slug, qty: i.qty, variantId: i.variantId })) }),
       });
 
       const data: unknown = await res.json().catch(() => null);
@@ -214,7 +214,7 @@ export default function CheckoutClient() {
       const res = await fetch("/api/promotions/validate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mode: "CODE", promoCode: code, locale, items: items.map((i) => ({ slug: i.slug, qty: i.qty })) }),
+        body: JSON.stringify({ mode: "CODE", promoCode: code, locale, items: items.map((i) => ({ slug: i.slug, qty: i.qty, variantId: i.variantId })) }),
       });
       const data: unknown = await res.json().catch(() => null);
       if (!res.ok || !isObject(data) || data.ok !== true || !isObject(data.promo)) {
@@ -267,7 +267,7 @@ export default function CheckoutClient() {
       paymentMethod,
       discountMode,
       promoCode: discountMode === "CODE" ? selectedPromo?.code || undefined : undefined,
-      items: items.map((i) => ({ slug: i.slug, qty: i.qty })),
+      items: items.map((i) => ({ slug: i.slug, qty: i.qty, variantId: i.variantId })),
       customer: { name, phone, email },
       shipping: { city, address, country: "Jordan", notes },
     };
