@@ -10,12 +10,11 @@ type DiscountMode = "NONE" | "CODE";
 type HealthMode = "checking" | "db" | "fallback" | "error";
 
 type PromoState = {
-  mode: Exclude<DiscountMode, "NONE">; // "CODE" | "AUTO"
+mode: Exclude<DiscountMode, "NONE">; // "CODE"
   code: string | null;
   title: string;
   discountJod: number;
 };
-
 const PROMO_CODE_STORAGE_KEY = "nivran.checkout.promoCode";
 
 function isObject(v: unknown): v is JsonObject {
@@ -54,6 +53,16 @@ function errMsg(e: unknown): string {
   return "Error";
 }
 
+async function readJsonSafe(res: Response): Promise<unknown> {
+  const raw = await res.text();
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return null;
+  }
+}
+
 function clearCart() {
   clearLocalCart();
 }
@@ -81,13 +90,11 @@ export default function CheckoutClient() {
   const [promoOpen, setPromoOpen] = useState(false);
   const [discountMode, setDiscountMode] = useState<DiscountMode>("NONE");
   const [selectedPromo, setSelectedPromo] = useState<PromoState | null>(null);
-  const [autoPromoCandidate, setAutoPromoCandidate] = useState<PromoState | null>(null);
   const [promoBusy, setPromoBusy] = useState(false);
   const [freeShippingThresholdJod, setFreeShippingThresholdJod] = useState(35);
   const [baseShippingJod, setBaseShippingJod] = useState(3.5);
   const [promoMsg, setPromoMsg] = useState<string | null>(null);
   const [healthMode, setHealthMode] = useState<HealthMode>("checking");
-const shouldShowPromoMsg = !!promoMsg;
 
   const [cartId, setCartId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -165,7 +172,7 @@ const shouldShowPromoMsg = !!promoMsg;
 
     fetch("/api/health", { cache: "no-store" })
       .then(async (res) => {
-        const data: unknown = await res.json().catch(() => null);
+        const data: unknown = await readJsonSafe(res);
         if (cancelled) return;
 
         if (!res.ok || !isObject(data)) {
@@ -204,7 +211,7 @@ const shouldShowPromoMsg = !!promoMsg;
 
     fetch(`/api/catalog/product-by-slug?slug=${encodeURIComponent(buyNowSlug)}`)
       .then(async (r) => {
-        const j: unknown = await r.json().catch(() => null);
+        const j: unknown = await readJsonSafe(r);
         if (cancelled) return;
         if (!isRecord(j) || j.ok !== true) return;
 
@@ -256,7 +263,7 @@ const shouldShowPromoMsg = !!promoMsg;
     let cancelled = false;
     fetch("/api/shipping-config", { cache: "no-store" })
       .then(async (r) => {
-        const data: unknown = await r.json().catch(() => null);
+        const data: unknown = await readJsonSafe(r);
         if (cancelled || !isObject(data)) return;
 
         const threshold = toNum(data.thresholdJod);
@@ -267,22 +274,20 @@ const shouldShowPromoMsg = !!promoMsg;
 
         const fallback = data.fallback === true;
         if (fallback) setHealthMode("fallback");
-        else if (healthMode === "checking") setHealthMode("db");
+        else setHealthMode((prev) => (prev === "checking" ? "db" : prev));
       })
       .catch(() => {
-        if (!cancelled && healthMode === "checking") setHealthMode("error");
+        if (!cancelled) setHealthMode((prev) => (prev === "checking" ? "error" : prev));
       });
 
     return () => {
       cancelled = true;
     };
-  }, [healthMode]);
+  }, []);
 
-  const runPromoValidation = useCallback(
-  async (codeRaw: string, opts?: { silent?: boolean }): Promise<boolean> => {
+  const runPromoValidation = useCallback(async (codeRaw: string, opts?: { silent?: boolean }) => {
     const code = codeRaw.trim().toUpperCase();
     if (!code || !items.length) return false;
-
     const silent = opts?.silent === true;
 
     if (!silent) {
@@ -301,22 +306,15 @@ const shouldShowPromoMsg = !!promoMsg;
           items: items.map((i) => ({ slug: i.slug, qty: i.qty, variantId: i.variantId })),
         }),
       });
-
-      const data: unknown = await res.json().catch(() => null);
+      const data: unknown = await readJsonSafe(res);
 
       if (!res.ok || !isObject(data)) {
         throw new Error(isAr ? "تعذر التحقق من الكود الآن" : "Unable to validate code right now");
       }
 
-      if (data.ok !== true || !isObject((data as JsonObject).promo)) {
-        const reason = toStr((data as JsonObject).reason).trim();
-        const fallbackMessage =
-          typeof (data as JsonObject).error === "string"
-            ? ((data as JsonObject).error as string)
-            : isAr
-              ? "كود غير صالح"
-              : "Invalid code";
-
+      if (data.ok !== true || !isObject(data.promo)) {
+        const reason = toStr(data.reason).trim();
+        const fallbackMessage = typeof data.error === "string" ? data.error : isAr ? "كود غير صالح" : "Invalid code";
         const finalMessage = mapPromoError(reason, fallbackMessage);
 
         setSelectedPromo(null);
@@ -325,17 +323,12 @@ const shouldShowPromoMsg = !!promoMsg;
         return false;
       }
 
-      const promo = (data as JsonObject).promo as JsonObject;
-
       setSelectedPromo({
         mode: "CODE",
         code,
-        title: isAr
-          ? toStr(promo.titleAr || promo.titleEn || code)
-          : toStr(promo.titleEn || promo.titleAr || code),
-        discountJod: toNum(promo.discountJod),
+        title: isAr ? toStr(data.promo.titleAr || data.promo.titleEn || code) : toStr(data.promo.titleEn || data.promo.titleAr || code),
+        discountJod: toNum(data.promo.discountJod),
       });
-
       setDiscountMode("CODE");
       if (!silent) setPromoMsg(COPY.promoApplied);
       setPromoOpen(false);
@@ -353,10 +346,7 @@ const shouldShowPromoMsg = !!promoMsg;
     } finally {
       if (!silent) setPromoBusy(false);
     }
-  },
-  [COPY.promoApplied, isAr, items, locale, mapPromoError]
-);
-
+  }, [COPY.promoApplied, isAr, items, locale, mapPromoError]);
 
   useEffect(() => {
     if (!selectedPromo?.code || !items.length) return;
@@ -464,10 +454,10 @@ const shouldShowPromoMsg = !!promoMsg;
         body: JSON.stringify({ cartId: cid, locale }),
       });
 
-      const data: unknown = await res.json().catch(() => null);
-
-      if (!res.ok || !isRecord(data) || data.ok !== true) {
-        const msg = isRecord(data) && typeof data.error === "string" ? data.error : "";
+      const data: unknown = await readJsonSafe(res);
+      const ok = isObject(data) && data.ok === true;
+      if (!res.ok || !ok) {
+        const msg = isObject(data) && typeof data.error === "string" ? data.error : "";
         throw new Error(msg || "PayTabs initiate failed");
       }
 
@@ -641,7 +631,7 @@ const shouldShowPromoMsg = !!promoMsg;
                 </>
               ) : null}
 
-              {shouldShowPromoMsg ? <p className="muted" style={{ margin: 0 }}>{promoMsg}</p> : null}
+{promoMsg ? <p className="muted" style={{ margin: 0 }}>{promoMsg}</p> : null}
 
               {selectedPromo ? (
                 <p className="muted" style={{ margin: 0 }}>

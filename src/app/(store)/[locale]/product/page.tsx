@@ -248,7 +248,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
     const defaultVariantLabel = p.default_variant_label ? String(p.default_variant_label) : "";
     const defaultVariantPrice = Number(p.default_variant_price_jod || p.price_jod || 0);
     const discounted = p.discounted_price_jod != null ? Number(p.discounted_price_jod) : null;
-    const promoValue = toSafeNumber(p.promo_value);
+    const promoValue = Number(p.promo_value || 0);
     const hasPromo = discounted != null && discounted < baseFromPrice;
 
     const apiSrc = p.image_id ? `/api/catalog/product-image/${p.image_id}` : "";
