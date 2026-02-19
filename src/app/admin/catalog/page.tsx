@@ -88,6 +88,16 @@ function promoStatusLabel(lang: "en" | "ar", row: PromoRow): string {
 }
 
 function promoEstimatedCoverage(row: PromoRow, products: ProductRow[]): number {
+  const promoKind = String(row.promo_kind || "PROMO").toUpperCase();
+  if (promoKind !== "SEASONAL") return 0;
+
+  if (!row.is_active) return 0;
+  const now = Date.now();
+  const starts = row.starts_at ? new Date(String(row.starts_at)).getTime() : null;
+  const ends = row.ends_at ? new Date(String(row.ends_at)).getTime() : null;
+  if (starts && starts > now) return 0;
+  if (ends && ends < now) return 0;
+
   const productSlugs = row.product_slugs || [];
   const categoryKeys = row.category_keys || [];
   return products.filter((product) => {
