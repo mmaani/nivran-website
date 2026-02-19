@@ -120,7 +120,7 @@ export async function ensureCatalogTables() {
     );
   `);
 
-  await db.query(`alter table promotions add column if not exists promo_kind text not null default 'CODE';`);
+  await db.query(`alter table promotions add column if not exists promo_kind text not null default 'PROMO';`);
   await db.query(`alter table promotions add column if not exists code text;`);
   await db.query(`alter table promotions add column if not exists title_en text;`);
   await db.query(`alter table promotions add column if not exists title_ar text;`);
@@ -169,25 +169,48 @@ export async function ensureCatalogTables() {
 
   await db.query(`
     update promotions
-       set promo_kind = case when nullif(code,'') is null then 'AUTO' else 'CODE' end
-     where promo_kind is null or promo_kind not in ('AUTO','CODE')
+       set promo_kind = case
+         when promo_kind='AUTO' then 'SEASONAL'
+         when promo_kind='CODE' then 'PROMO'
+         when promo_kind in ('SEASONAL','PROMO','REFERRAL') then promo_kind
+         else 'PROMO'
+       end
+     where promo_kind is null or promo_kind not in ('SEASONAL','PROMO','REFERRAL') or promo_kind in ('AUTO','CODE')
   `);
 
   await db.query(`
     do $$
     begin
-      if not exists (
+      if exists (
         select 1 from pg_constraint where conname='promotions_kind_code_chk'
       ) then
-        alter table promotions
-          add constraint promotions_kind_code_chk
-          check (
-            (promo_kind='AUTO' and (code is null or btrim(code)=''))
-            or (promo_kind='CODE' and code is not null and btrim(code) <> '')
-          );
+        alter table promotions drop constraint promotions_kind_code_chk;
       end if;
+
+      alter table promotions
+        add constraint promotions_kind_code_chk
+        check (
+          promo_kind in ('SEASONAL','PROMO','REFERRAL')
+          and code is not null and btrim(code) <> ''
+        );
     end $$;
   `);
+  // ---------- STORE SETTINGS ----------
+  await db.query(`
+    create table if not exists store_settings (
+      key text primary key,
+      value_text text,
+      value_number numeric(10,2),
+      updated_at timestamptz not null default now()
+    );
+  `);
+
+  await db.query(`
+    insert into store_settings (key, value_number)
+    values ('free_shipping_threshold_jod', 35)
+    on conflict (key) do nothing;
+  `);
+
   // ---------- PRODUCT IMAGES (bytea in Postgres) ----------
   await db.query(`
     create table if not exists product_images (
@@ -233,7 +256,7 @@ export async function ensureCatalogTables() {
   await db.query(`create index if not exists idx_categories_sort on categories(sort_order asc);`);
 
   await db.query(`drop index if exists idx_promotions_code_unique`);
-  await db.query(`create unique index if not exists idx_promotions_code_unique on promotions(code) where promo_kind='CODE';`);
+  await db.query(`create unique index if not exists idx_promotions_code_unique on promotions(code);`);
   await db.query(`create index if not exists idx_promotions_active on promotions(is_active);`);
   await db.query(`create index if not exists idx_promotions_kind on promotions(promo_kind);`);
   await db.query(`create index if not exists idx_promotions_created_at on promotions(created_at desc);`);
@@ -244,4 +267,44 @@ export async function ensureCatalogTables() {
   await db.query(`create index if not exists idx_product_variants_product on product_variants(product_id);`);
   await db.query(`create index if not exists idx_product_variants_active on product_variants(product_id, is_active);`);
   await db.query(`create index if not exists idx_product_variants_sort on product_variants(product_id, sort_order asc, id asc);`);
+}
+
+
+function errorCodeOf(error: unknown): string {
+  if (!error || typeof error !== "object") return "";
+  const value = (error as { code?: unknown }).code;
+  return typeof value === "string" ? value : "";
+}
+
+function errorMessageOf(error: unknown): string {
+  if (error instanceof Error) return String(error.message || "");
+  return String(error || "");
+}
+
+export function isRecoverableCatalogSetupError(error: unknown): boolean {
+  const code = errorCodeOf(error);
+  const message = errorMessageOf(error).toLowerCase();
+
+  if (code === "42501" || code === "25006" || code === "28P01") return true; // permission denied, read-only, auth
+
+  return (
+    message.includes("permission denied")
+    || message.includes("must be owner")
+    || message.includes("read-only")
+    || message.includes("cannot execute")
+  );
+}
+
+export async function ensureCatalogTablesSafe(): Promise<{ ok: true } | { ok: false; reason: string }> {
+  try {
+    await ensureCatalogTables();
+    return { ok: true };
+  } catch (error: unknown) {
+    if (isRecoverableCatalogSetupError(error)) {
+      const reason = errorMessageOf(error).slice(0, 180);
+      console.warn(`[catalog] ensureCatalogTables skipped: ${reason}`);
+      return { ok: false, reason };
+    }
+    throw error;
+  }
 }

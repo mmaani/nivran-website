@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
+import SafeImg from "@/components/SafeImg";
 import styles from "./page.module.css";
 
 export default function ProductImageGallery({
@@ -32,18 +32,13 @@ export default function ProductImageGallery({
   return (
     <div className={styles.gallery}>
       <div className={styles.mainFrame}>
-        <Image
+        <SafeImg
           src={current}
+          fallbackSrc={fallbackSrc}
           alt={name}
           className={styles.mainImg}
-          onError={(e) => {
-            const el = e.currentTarget as HTMLImageElement;
-            if (el.dataset.fallbackApplied === "1") return;
-            el.dataset.fallbackApplied = "1";
-            el.src = fallbackSrc;
-          }}
-          fill
           style={{ objectFit: "contain" }}
+          sizes="(max-width: 900px) 100vw, 50vw"
         />
 
         {canNav ? (
@@ -82,7 +77,15 @@ export default function ProductImageGallery({
               aria-label={`Image ${i + 1}`}
               aria-current={i === safeIdx ? "true" : "false"}
             >
-              <Image src={u} alt={`${name} ${i + 1}`} className={styles.thumbImg} loading="lazy" fill style={{ objectFit: "cover" }} />
+              <SafeImg
+                src={u}
+                fallbackSrc={fallbackSrc}
+                alt={`${name} ${i + 1}`}
+                className={styles.thumbImg}
+                loading="lazy"
+                style={{ objectFit: "cover" }}
+                sizes="96px"
+              />
             </button>
           ))}
         </div>
