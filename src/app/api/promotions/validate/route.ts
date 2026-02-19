@@ -64,15 +64,37 @@ export async function POST(req: Request) {
     if (!body) return NextResponse.json({ ok: false, error: "Invalid request" }, { status: 400 });
 
     const locale = body.locale === "ar" ? "ar" : "en";
-    const mode = "CODE";
+    const mode = String(body.mode || "CODE").toUpperCase();
     const promoCode = String(body.promoCode || "").trim().toUpperCase();
     const normalized = normalizeItems(body.items);
+
+    if (mode === "AUTO" && promoCode) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: locale === "ar" ? "لا يمكن استخدام الكود مع وضع AUTO" : "Promo code is not allowed in AUTO mode",
+          reason: "DISCOUNT_MODE_UNSUPPORTED",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (mode !== "CODE") {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: locale === "ar" ? "وضع الخصم غير مدعوم" : "Unsupported discount mode",
+          reason: "DISCOUNT_MODE_UNSUPPORTED",
+        },
+        { status: 400 }
+      );
+    }
 
     if (!normalized.length) {
       return NextResponse.json({ ok: false, error: locale === "ar" ? "السلة فارغة" : "Cart items are required" }, { status: 400 });
     }
 
-    if (!promoCode) {
+    if (mode === "CODE" && !promoCode) {
       return NextResponse.json({ ok: false, error: locale === "ar" ? "أدخل كود الخصم" : "Promo code is required" }, { status: 400 });
     }
 
@@ -157,7 +179,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       promo: {
-        mode,
+        mode: "CODE",
         promotionId: result.promotionId,
         code: result.promoCode,
         discountJod: result.discountJod,

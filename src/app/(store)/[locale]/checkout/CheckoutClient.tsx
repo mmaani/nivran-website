@@ -17,6 +17,8 @@ mode: Exclude<DiscountMode, "NONE">; // "CODE"
 };
 const PROMO_CODE_STORAGE_KEY = "nivran.checkout.promoCode";
 
+const DISCOUNT_RULE_TEXT_EN = "Single discount mode: campaign code only. AUTO and CODE cannot be combined.";
+const DISCOUNT_RULE_TEXT_AR = "وضع خصم واحد فقط: كود الحملة فقط. لا يمكن الجمع بين AUTO و CODE.";
 
 function isObject(v: unknown): v is JsonObject {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -141,6 +143,7 @@ export default function CheckoutClient() {
       promoNotFound: isAr ? "الكود غير موجود" : "Code was not found",
       promoMinOrder: isAr ? "الحد الأدنى للطلب غير مستوفى" : "Minimum order requirement not met",
       promoCoverage: isAr ? "الكود لا ينطبق على هذه المنتجات" : "Code does not apply to current items",
+      discountModeRule: isAr ? DISCOUNT_RULE_TEXT_AR : DISCOUNT_RULE_TEXT_EN,
       freeShippingReached: isAr ? "تهانينا! أنت مؤهل للشحن المجاني." : "Great news! You unlocked free shipping.",
       freeShippingRemaining: isAr ? "أضف {{amount}} JOD لتحصل على شحن مجاني" : "Add {{amount}} JOD to unlock free shipping",
       freeShippingThreshold: isAr ? "الحد الحالي للشحن المجاني: {{amount}} JOD" : "Current free-shipping threshold: {{amount}} JOD",
@@ -554,6 +557,7 @@ export default function CheckoutClient() {
             <p className="muted" style={{ marginTop: 0 }}>
               {healthMode === "fallback" ? COPY.systemFallback : healthMode === "db" ? COPY.systemHealthy : null}
             </p>
+            <p className="muted" style={{ marginTop: 0 }}>{COPY.discountModeRule}</p>
 
             <div style={{ display: "grid", gap: 10 }}>
               {items.map((i) => (
