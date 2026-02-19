@@ -20,9 +20,7 @@ const PROMO_CODE_STORAGE_KEY = "nivran.checkout.promoCode";
 const DISCOUNT_RULE_TEXT_EN = "Single discount mode: campaign code only. AUTO and CODE cannot be combined.";
 const DISCOUNT_RULE_TEXT_AR = "وضع خصم واحد فقط: كود الحملة فقط. لا يمكن الجمع بين AUTO و CODE.";
 
-const PROMO_CODE_STORAGE_KEY = "nivran.checkout.promoCode";
-const DISCOUNT_RULE_TEXT_EN = "Single discount mode: campaign code only. AUTO and CODE cannot be combined.";
-const DISCOUNT_RULE_TEXT_AR = "وضع خصم واحد فقط: كود الحملة فقط. لا يمكن الجمع بين AUTO و CODE.";
+
 
 function isObject(v: unknown): v is JsonObject {
   return typeof v === "object" && v !== null && !Array.isArray(v);
