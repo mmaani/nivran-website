@@ -2,18 +2,17 @@
   "name": "nivran-store",
   "private": true,
   "version": "0.1.0",
-"scripts": {
-  "dev": "next dev -p 3000",
-  "build": "next build",
-  "start": "next start -p 3000",
-  "lint": "next lint",
-  "check:duplicate-types": "node scripts/check-duplicate-type-aliases.mjs",
-  "ci:guard": "pnpm check:duplicate-types && pnpm check:merge-markers && pnpm check:discount-contract",
-  "ci:guard:full": "pnpm ci:guard && pnpm lint && pnpm build",
-  "check:discount-contract": "node scripts/check-discount-mode-contract.mjs",
-  "check:merge-markers": "node scripts/check-merge-markers.mjs"
-},
-  
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "lint": "next lint",
+    "check:duplicate-types": "node scripts/check-duplicate-type-aliases.mjs",
+    "ci:guard": "pnpm check:duplicate-types && pnpm check:merge-markers && pnpm check:discount-contract",
+    "ci:guard:full": "pnpm ci:guard && pnpm lint && pnpm build",
+    "check:discount-contract": "node scripts/check-discount-mode-contract.mjs",
+    "check:merge-markers": "node scripts/check-merge-markers.mjs"
+  },
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "next": "^15.1.0",

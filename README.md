@@ -179,6 +179,42 @@ git log --oneline -- src/app/admin/inbox/InboxClient.tsx
 git log --oneline -- src/app/admin/_components/AdminShell.tsx
 ```
 
+## Recover `work` when diff vs `main` explodes
+
+If `git diff --stat main..work` shows thousands of unrelated changes, stop and recover `work` before opening any PR.
+
+### Step-by-step (safe)
+
+1. Go to repository root (either `/workspace/nivran-website` or `/workspaces/nivran-website`).
+2. Run a **dry-run** first:
+
+```bash
+./recover-work-branch.sh
+```
+
+3. If the plan looks correct, apply it:
+
+```bash
+APPLY=1 ./recover-work-branch.sh
+```
+
+### If you get `No such file or directory`
+
+Run this exactly:
+
+```bash
+git fetch origin --prune
+git checkout work
+git pull origin work
+ls -l recover-work-branch.sh scripts/recover-work-branch.sh
+./recover-work-branch.sh
+```
+
+What the helper does:
+- creates a local backup branch (`backup/work-<timestamp>`),
+- resets `work` to `origin/main`,
+- force-pushes `work` with `--force-with-lease`.
+
 ## Pull this PR into `main` in Codespaces
 
 From your Codespace terminal:

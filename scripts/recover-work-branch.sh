@@ -1,64 +1,58 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE="origin/main"
-TARGET_REMOTE="origin/work"
-TARGET_LOCAL="work"
+# Recover `work` when it diverges massively from `main` due to bad merges/conflicts.
+# Dry-run by default. Set APPLY=1 to execute.
 
-ts="$(date +%Y%m%d_%H%M%S)"
-backup="backup/work-before-recovery-${ts}"
+APPLY="${APPLY:-0}"
+REMOTE="${REMOTE:-origin}"
+SOURCE_MAIN="${SOURCE_MAIN:-main}"
+TARGET_WORK="${TARGET_WORK:-work}"
 
-echo "==> Fetching..."
-git fetch origin --prune
+run() {
+  echo "+ $*"
+  if [[ "$APPLY" == "1" ]]; then
+    eval "$@"
+  fi
+}
 
-echo "==> Checking working tree clean..."
-if [ -n "$(git status --porcelain)" ]; then
-  echo "ERROR: working tree not clean. Commit/stash first."
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "ERROR: Run this script inside a git repository." >&2
   exit 1
 fi
 
-echo "==> Divergence (origin/main...origin/work):"
-git rev-list --left-right --count "${BASE}...${TARGET_REMOTE}" || true
-
-echo
-echo "==> DRY RUN plan:"
-echo "1) Create backup branch on origin: ${backup} -> ${TARGET_REMOTE}"
-echo "2) Reset local ${TARGET_LOCAL} to ${BASE}"
-echo "3) Push rewritten ${TARGET_LOCAL} to origin with --force-with-lease"
-echo
-echo "To APPLY, run: APPLY=1 $0"
-echo
-
-if [ "${APPLY:-0}" != "1" ]; then
-  exit 0
+if ! git remote get-url "$REMOTE" >/dev/null 2>&1; then
+  echo "ERROR: Remote '$REMOTE' is not configured." >&2
+  echo "Add it first, e.g. git remote add $REMOTE <repo-url>" >&2
+  exit 1
 fi
 
-echo "==> APPLY mode: creating backup branch ${backup}..."
-# Create a remote backup ref pointing at the current origin/work
-git branch -f "${backup}" "${TARGET_REMOTE}"
-git push origin "refs/heads/${backup}:refs/heads/${backup}"
+if ! git ls-remote --exit-code --heads "$REMOTE" "$SOURCE_MAIN" >/dev/null 2>&1; then
+  echo "ERROR: Branch '$SOURCE_MAIN' does not exist on '$REMOTE'." >&2
+  exit 1
+fi
 
-echo "==> Checking out ${TARGET_LOCAL} (create if needed)..."
-if git show-ref --verify --quiet "refs/heads/${TARGET_LOCAL}"; then
-  git checkout "${TARGET_LOCAL}"
+if ! git show-ref --verify --quiet "refs/heads/$TARGET_WORK"; then
+  echo "ERROR: Local branch '$TARGET_WORK' does not exist." >&2
+  exit 1
+fi
+
+echo "== Branch recovery plan =="
+echo "Remote: $REMOTE"
+echo "Source main: $SOURCE_MAIN"
+echo "Target work: $TARGET_WORK"
+echo "Mode: $([[ "$APPLY" == "1" ]] && echo APPLY || echo DRY-RUN)"
+echo
+
+run "git fetch $REMOTE"
+run "git checkout $TARGET_WORK"
+run "git branch backup/$TARGET_WORK-\$(date +%Y%m%d-%H%M%S)"
+run "git reset --hard $REMOTE/$SOURCE_MAIN"
+run "git push $REMOTE $TARGET_WORK --force-with-lease"
+
+echo
+if [[ "$APPLY" == "1" ]]; then
+  echo "Recovery complete. '$TARGET_WORK' now matches '$REMOTE/$SOURCE_MAIN'."
 else
-  git checkout -b "${TARGET_LOCAL}" "${TARGET_REMOTE}"
+  echo "Dry-run complete. Re-run with APPLY=1 to execute."
 fi
-
-echo "==> Resetting ${TARGET_LOCAL} to ${BASE}..."
-git reset --hard "${BASE}"
-
-echo "==> Pushing ${TARGET_LOCAL} -> origin/${TARGET_LOCAL} with --force-with-lease..."
-git push --force-with-lease origin "${TARGET_LOCAL}"
-
-echo
-echo "==> After divergence:"
-git fetch origin --prune
-git rev-list --left-right --count "${BASE}...${TARGET_REMOTE}" || true
-
-echo
-echo "==> Undo instructions (if needed):"
-echo "git fetch origin --prune"
-echo "git checkout ${TARGET_LOCAL}"
-echo "git reset --hard origin/${backup}"
-echo "git push --force-with-lease origin ${TARGET_LOCAL}"

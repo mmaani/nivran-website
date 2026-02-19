@@ -49,6 +49,18 @@ function pickMode(value: unknown): PromoMode {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+export async function GET() {
+  return NextResponse.json(
+    {
+      ok: true,
+      message: "Use POST /api/promotions/validate with mode, promoCode, locale, and items.",
+      supportedMethods: ["POST"],
+      discountMode: "CODE",
+    },
+    { headers: { "cache-control": "no-store" } }
+  );
+}
+
 export async function POST(req: Request) {
   const bootstrap = await ensureCatalogTablesSafe();
   if (!bootstrap.ok) {
@@ -63,7 +75,7 @@ export async function POST(req: Request) {
     if (!body) return NextResponse.json({ ok: false, error: "Invalid request" }, { status: 400 });
 
     const locale = body.locale === "ar" ? "ar" : "en";
-    const mode = pickMode(body.mode);
+    const mode = String(body.mode || "CODE").toUpperCase();
     const promoCode = String(body.promoCode || "").trim().toUpperCase();
     const normalized = normalizeItems(body.items);
 

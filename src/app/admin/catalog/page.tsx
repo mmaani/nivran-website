@@ -110,8 +110,36 @@ type CatalogPageData = {
 };
 
 async function loadCatalogPageData(): Promise<CatalogPageData> {
-  const bootstrap = await ensureCatalogTablesSafe();
-  const bootstrapNote = bootstrap.ok ? undefined : bootstrap.reason;
+  let bootstrapNote: string | undefined;
+  try {
+    const bootstrap = await ensureCatalogTablesSafe();
+    bootstrapNote = bootstrap.ok ? undefined : bootstrap.reason;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error || "Unknown catalog bootstrap error");
+    if (isDbConnectivityError(error)) {
+      return {
+        health: "fallback",
+        categories: [],
+        products: [],
+        variants: [],
+        promos: [],
+        freeShippingThresholdJod: 35,
+        bootstrapNote: "DB_CONNECTIVITY",
+        errorMessage: message,
+      };
+    }
+
+    return {
+      health: "error",
+      categories: [],
+      products: [],
+      variants: [],
+      promos: [],
+      freeShippingThresholdJod: 35,
+      bootstrapNote: "CATALOG_BOOTSTRAP_UNAVAILABLE",
+      errorMessage: message,
+    };
+  }
 
   try {
     const [categoriesRes, productsRes, variantsRes, promosRes, settingsRes] = await Promise.all([
