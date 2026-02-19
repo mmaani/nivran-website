@@ -7,7 +7,6 @@ import {
 } from "@/lib/promotions";
 
 type PromoMode = "CODE" | "AUTO";
-
 type IncomingItem = { slug?: string; qty?: number; variantId?: number | null };
 type ProductRow = {
   id: number;
@@ -42,9 +41,9 @@ function normalizeItems(items: unknown): { slug: string; qty: number; variantId:
     .filter((x) => x.slug.length > 0);
 }
 
-function pickMode(v: unknown): PromoMode {
-  const s = String(v ?? "").trim().toUpperCase();
-  return s === "AUTO" ? "AUTO" : "CODE";
+function pickMode(value: unknown): PromoMode {
+  const normalized = String(value || "").trim().toUpperCase();
+  return normalized === "AUTO" ? "AUTO" : "CODE";
 }
 
 export const runtime = "nodejs";
@@ -64,7 +63,7 @@ export async function POST(req: Request) {
     if (!body) return NextResponse.json({ ok: false, error: "Invalid request" }, { status: 400 });
 
     const locale = body.locale === "ar" ? "ar" : "en";
-    const mode = String(body.mode || "CODE").toUpperCase();
+    const mode = pickMode(body.mode);
     const promoCode = String(body.promoCode || "").trim().toUpperCase();
     const normalized = normalizeItems(body.items);
 
