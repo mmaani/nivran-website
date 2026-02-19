@@ -17,6 +17,8 @@ mode: Exclude<DiscountMode, "NONE">; // "CODE"
 };
 const PROMO_CODE_STORAGE_KEY = "nivran.checkout.promoCode";
 
+const PROMO_CODE_STORAGE_KEY = "nivran.checkout.promoCode";
+
 function isObject(v: unknown): v is JsonObject {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }

@@ -226,19 +226,22 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
 
 
 
-  const campaignCards = campaignRows.map((c) => ({
-    discountValue: toSafeNumber(c.discount_value),
-    minOrderJod: toSafeNumber(c.min_order_jod),
-    ...c,
-  })).filter((c) => String(c.promo_kind || "PROMO").toUpperCase() === "SEASONAL").map((c) => ({
-    id: c.id,
-    title: (isAr ? c.title_ar : c.title_en) || (isAr ? "عرض خاص" : "Special campaign"),
-    badge: c.discount_type === "PERCENT"
-      ? (isAr ? `وفر ${c.discountValue}%` : `Save ${c.discountValue}%`)
-      : (isAr ? `وفر ${c.discountValue.toFixed(2)} د.أ` : `Save ${c.discountValue.toFixed(2)} JOD`),
-    endsAt: c.ends_at,
-    minOrderJod: c.minOrderJod,
-  }));
+  const campaignCards = campaignRows
+    .map((c) => ({
+      ...c,
+      discountValue: toSafeNumber(c.discount_value),
+      minOrderJod: toSafeNumber(c.min_order_jod),
+    }))
+    .filter((c) => String(c.promo_kind || "").toUpperCase() === "SEASONAL")
+    .map((c) => ({
+      id: c.id,
+      title: (isAr ? c.title_ar : c.title_en) || (isAr ? "عرض خاص" : "Special campaign"),
+      badge: c.discount_type === "PERCENT"
+        ? (isAr ? `وفر ${c.discountValue}%` : `Save ${c.discountValue}%`)
+        : (isAr ? `وفر ${c.discountValue.toFixed(2)} د.أ` : `Save ${c.discountValue.toFixed(2)} JOD`),
+      endsAt: c.ends_at,
+      minOrderJod: c.minOrderJod,
+    }));
 
   const productCards = productRows.map((p) => {
     const name = isAr ? p.name_ar : p.name_en;
@@ -248,7 +251,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
     const defaultVariantLabel = p.default_variant_label ? String(p.default_variant_label) : "";
     const defaultVariantPrice = Number(p.default_variant_price_jod || p.price_jod || 0);
     const discounted = p.discounted_price_jod != null ? Number(p.discounted_price_jod) : null;
-    const promoValue = Number(p.promo_value || 0);
+    const promoValue = toSafeNumber(p.promo_value);
     const hasPromo = discounted != null && discounted < baseFromPrice;
 
     const apiSrc = p.image_id ? `/api/catalog/product-image/${p.image_id}` : "";
