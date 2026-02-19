@@ -21,17 +21,21 @@ const PROMO_CODE_STORAGE_KEY = "nivran.checkout.promoCode";
 function isObject(v: unknown): v is JsonObject {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
+function isRecord(v: unknown): v is JsonObject {
+  return isObject(v);
+}
 
-function getStr(obj: JsonRecord, key: string): string | undefined {
+function getStr(obj: JsonObject, key: string): string | undefined {
   const v = obj[key];
   return typeof v === "string" ? v : undefined;
 }
 
-function getNum(obj: JsonRecord, key: string): number | undefined {
+function getNum(obj: JsonObject, key: string): number | undefined {
   const v = obj[key];
   const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
   return Number.isFinite(n) ? n : undefined;
 }
+
 
 function toStr(v: unknown): string {
   if (typeof v === "string") return v;
@@ -54,7 +58,6 @@ function clearCart() {
   clearLocalCart();
 }
 
-type HealthMode = "checking" | "db" | "fallback" | "error";
 
 export default function CheckoutClient() {
   const p = useParams<{ locale?: string }>();
@@ -84,6 +87,7 @@ export default function CheckoutClient() {
   const [baseShippingJod, setBaseShippingJod] = useState(3.5);
   const [promoMsg, setPromoMsg] = useState<string | null>(null);
   const [healthMode, setHealthMode] = useState<HealthMode>("checking");
+const shouldShowPromoMsg = !!promoMsg;
 
   const [cartId, setCartId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -274,16 +278,17 @@ export default function CheckoutClient() {
     };
   }, [healthMode]);
 
-  const runPromoValidation = useCallback(async (codeRaw: string, opts?: { silent?: boolean }) => {
+  const runPromoValidation = useCallback(
+  async (codeRaw: string, opts?: { silent?: boolean }): Promise<boolean> => {
     const code = codeRaw.trim().toUpperCase();
     if (!code || !items.length) return false;
+
     const silent = opts?.silent === true;
 
     if (!silent) {
       setPromoBusy(true);
       setPromoMsg(null);
     }
-  }, [items]);
 
     try {
       const res = await fetch("/api/promotions/validate", {
@@ -296,15 +301,22 @@ export default function CheckoutClient() {
           items: items.map((i) => ({ slug: i.slug, qty: i.qty, variantId: i.variantId })),
         }),
       });
+
       const data: unknown = await res.json().catch(() => null);
 
       if (!res.ok || !isObject(data)) {
         throw new Error(isAr ? "تعذر التحقق من الكود الآن" : "Unable to validate code right now");
       }
 
-      if (data.ok !== true || !isObject(data.promo)) {
-        const reason = toStr(data.reason).trim();
-        const fallbackMessage = typeof data.error === "string" ? data.error : isAr ? "كود غير صالح" : "Invalid code";
+      if (data.ok !== true || !isObject((data as JsonObject).promo)) {
+        const reason = toStr((data as JsonObject).reason).trim();
+        const fallbackMessage =
+          typeof (data as JsonObject).error === "string"
+            ? ((data as JsonObject).error as string)
+            : isAr
+              ? "كود غير صالح"
+              : "Invalid code";
+
         const finalMessage = mapPromoError(reason, fallbackMessage);
 
         setSelectedPromo(null);
@@ -313,12 +325,17 @@ export default function CheckoutClient() {
         return false;
       }
 
+      const promo = (data as JsonObject).promo as JsonObject;
+
       setSelectedPromo({
         mode: "CODE",
         code,
-        title: isAr ? toStr(data.promo.titleAr || data.promo.titleEn || code) : toStr(data.promo.titleEn || data.promo.titleAr || code),
-        discountJod: toNum(data.promo.discountJod),
+        title: isAr
+          ? toStr(promo.titleAr || promo.titleEn || code)
+          : toStr(promo.titleEn || promo.titleAr || code),
+        discountJod: toNum(promo.discountJod),
       });
+
       setDiscountMode("CODE");
       if (!silent) setPromoMsg(COPY.promoApplied);
       setPromoOpen(false);
@@ -336,7 +353,10 @@ export default function CheckoutClient() {
     } finally {
       if (!silent) setPromoBusy(false);
     }
-  }, [COPY.promoApplied, isAr, items, locale, mapPromoError]);
+  },
+  [COPY.promoApplied, isAr, items, locale, mapPromoError]
+);
+
 
   useEffect(() => {
     if (!selectedPromo?.code || !items.length) return;
