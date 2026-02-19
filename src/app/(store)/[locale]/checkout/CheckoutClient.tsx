@@ -145,12 +145,10 @@ export default function CheckoutClient() {
       promoNotFound: isAr ? "الكود غير موجود" : "Code was not found",
       promoMinOrder: isAr ? "الحد الأدنى للطلب غير مستوفى" : "Minimum order requirement not met",
       promoCoverage: isAr ? "الكود لا ينطبق على هذه المنتجات" : "Code does not apply to current items",
-      discountModeRule: isAr ? DISCOUNT_RULE_TEXT_AR : DISCOUNT_RULE_TEXT_EN,
       freeShippingReached: isAr ? "تهانينا! أنت مؤهل للشحن المجاني." : "Great news! You unlocked free shipping.",
       freeShippingRemaining: isAr ? "أضف {{amount}} JOD لتحصل على شحن مجاني" : "Add {{amount}} JOD to unlock free shipping",
       freeShippingThreshold: isAr ? "الحد الحالي للشحن المجاني: {{amount}} JOD" : "Current free-shipping threshold: {{amount}} JOD",
-      systemFallback: isAr ? "وضع الطوارئ: عرض البيانات عبر مصدر بديل" : "Fallback mode: degraded data source active",
-      systemHealthy: isAr ? "اتصال قاعدة البيانات سليم" : "Database connectivity healthy",
+      systemFallback: isAr ? "خدمة العروض غير متاحة مؤقتاً. يمكنك المتابعة بدون خصم حالياً." : "Promotions are temporarily unavailable. You can still checkout without a discount.",
     }),
     [isAr]
   );
@@ -300,6 +298,7 @@ export default function CheckoutClient() {
       setPromoBusy(true);
       setPromoMsg(null);
     }
+  }, [items]);
 
     try {
       const res = await fetch("/api/promotions/validate", {
@@ -556,10 +555,9 @@ export default function CheckoutClient() {
 
           <aside className="panel checkout-summary-panel">
             <h3 style={{ marginTop: 0 }}>{COPY.orderSummary}</h3>
-            <p className="muted" style={{ marginTop: 0 }}>
-              {healthMode === "fallback" ? COPY.systemFallback : healthMode === "db" ? COPY.systemHealthy : null}
-            </p>
-            <p className="muted" style={{ marginTop: 0 }}>{COPY.discountModeRule}</p>
+            {healthMode === "fallback" || healthMode === "error" ? (
+              <p className="muted" style={{ marginTop: 0 }}>{COPY.systemFallback}</p>
+            ) : null}
 
             <div style={{ display: "grid", gap: 10 }}>
               {items.map((i) => (

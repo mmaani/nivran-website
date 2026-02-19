@@ -24,7 +24,6 @@ const checks = [
   {
     file: "src/app/(store)/[locale]/checkout/CheckoutClient.tsx",
     patterns: [
-      'AUTO and CODE cannot be combined',
       'discountMode === "CODE" ? selectedPromo?.code || undefined : undefined',
       'const PROMO_CODE_STORAGE_KEY = "nivran.checkout.promoCode";',
     ],

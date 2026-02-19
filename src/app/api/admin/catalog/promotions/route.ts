@@ -65,7 +65,7 @@ export async function POST(req: Request) {
         return catalogErrorRedirect(req, form, "invalid-promo");
       }
 
-      if (!code) {
+      if (promoKind !== "SEASONAL" && !code) {
         return catalogErrorRedirect(req, form, "missing-code");
       }
 

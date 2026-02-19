@@ -1,6 +1,6 @@
 import "server-only";
 // src/lib/catalog.ts
-import { db } from "@/lib/db";
+import { db, isDbConnectivityError } from "@/lib/db";
 
 /**
  * Catalog schema helpers (migration-safe).
@@ -191,7 +191,10 @@ export async function ensureCatalogTables() {
         add constraint promotions_kind_code_chk
         check (
           promo_kind in ('SEASONAL','PROMO','REFERRAL')
-          and code is not null and btrim(code) <> ''
+          and (
+            promo_kind = 'SEASONAL'
+            or (code is not null and btrim(code) <> '')
+          )
         );
     end $$;
   `);
@@ -285,7 +288,7 @@ export function isRecoverableCatalogSetupError(error: unknown): boolean {
   const code = errorCodeOf(error);
   const message = errorMessageOf(error).toLowerCase();
 
-  if (code === "42501" || code === "25006" || code === "28P01") return true; // permission denied, read-only, auth
+  if (code === "42501" || code === "25006" || code === "28P01" || code === "23514") return true; // permission denied, read-only, auth, check constraint
 
   return (
     message.includes("permission denied")
@@ -300,6 +303,10 @@ export async function ensureCatalogTablesSafe(): Promise<{ ok: true } | { ok: fa
     await ensureCatalogTables();
     return { ok: true };
   } catch (error: unknown) {
+    if (isDbConnectivityError(error)) {
+      return { ok: false, reason: "DB_CONNECTIVITY" };
+    }
+
     if (isRecoverableCatalogSetupError(error)) {
       const reason = errorMessageOf(error).slice(0, 180);
       console.warn(`[catalog] ensureCatalogTables skipped: ${reason}`);

@@ -7,7 +7,11 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    await ensureCatalogTablesSafe();
+    const bootstrap = await ensureCatalogTablesSafe();
+    if (!bootstrap.ok) {
+      return NextResponse.json({ ok: true, thresholdJod: 35, baseShippingJod: 3.5, fallback: true });
+    }
+
     const r = await db.query<{ value_number: string | number | null }>(
       `select value_number from store_settings where key='free_shipping_threshold_jod' limit 1`
     );
