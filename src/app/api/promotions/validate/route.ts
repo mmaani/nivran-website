@@ -6,6 +6,7 @@ import {
   type PricedOrderLine,
 } from "@/lib/promotions";
 
+type PromoMode = "CODE" | "AUTO";
 type IncomingItem = { slug?: string; qty?: number; variantId?: number | null };
 type ProductRow = {
   id: number;
@@ -38,6 +39,11 @@ function normalizeItems(items: unknown): { slug: string; qty: number; variantId:
       variantId: normalizeVariantId(x?.variantId),
     }))
     .filter((x) => x.slug.length > 0);
+}
+
+function pickMode(value: unknown): PromoMode {
+  const normalized = String(value || "").trim().toUpperCase();
+  return normalized === "AUTO" ? "AUTO" : "CODE";
 }
 
 export const runtime = "nodejs";

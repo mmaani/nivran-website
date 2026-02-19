@@ -10,11 +10,15 @@ type DiscountMode = "NONE" | "CODE";
 type HealthMode = "checking" | "db" | "fallback" | "error";
 
 type PromoState = {
-  mode: Exclude<DiscountMode, "NONE">;
+mode: Exclude<DiscountMode, "NONE">; // "CODE"
   code: string | null;
   title: string;
   discountJod: number;
 };
+const PROMO_CODE_STORAGE_KEY = "nivran.checkout.promoCode";
+
+const DISCOUNT_RULE_TEXT_EN = "Single discount mode: campaign code only. AUTO and CODE cannot be combined.";
+const DISCOUNT_RULE_TEXT_AR = "وضع خصم واحد فقط: كود الحملة فقط. لا يمكن الجمع بين AUTO و CODE.";
 
 const PROMO_CODE_STORAGE_KEY = "nivran.checkout.promoCode";
 const DISCOUNT_RULE_TEXT_EN = "Single discount mode: campaign code only. AUTO and CODE cannot be combined.";
@@ -23,6 +27,21 @@ const DISCOUNT_RULE_TEXT_AR = "وضع خصم واحد فقط: كود الحمل�
 function isObject(v: unknown): v is JsonObject {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
+function isRecord(v: unknown): v is JsonObject {
+  return isObject(v);
+}
+
+function getStr(obj: JsonObject, key: string): string | undefined {
+  const v = obj[key];
+  return typeof v === "string" ? v : undefined;
+}
+
+function getNum(obj: JsonObject, key: string): number | undefined {
+  const v = obj[key];
+  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+  return Number.isFinite(n) ? n : undefined;
+}
+
 
 function toStr(v: unknown): string {
   if (typeof v === "string") return v;
@@ -54,6 +73,7 @@ async function readJsonSafe(res: Response): Promise<unknown> {
 function clearCart() {
   clearLocalCart();
 }
+
 
 export default function CheckoutClient() {
   const p = useParams<{ locale?: string }>();
@@ -91,12 +111,16 @@ export default function CheckoutClient() {
   const COPY = useMemo(
     () => ({
       title: isAr ? "الدفع" : "Checkout",
-      subtitle: isAr ? "أكمل البيانات لتأكيد طلبك والدفع بأمان." : "Complete your details to place your order securely.",
+      subtitle: isAr
+        ? "أكمل البيانات لتأكيد طلبك والدفع بأمان."
+        : "Complete your details to place your order securely.",
       empty: isAr ? "لا توجد عناصر في السلة." : "Your cart is empty.",
       backToShop: isAr ? "العودة للمتجر" : "Back to shop",
       editCart: isAr ? "تعديل السلة" : "Edit cart",
       loadingProduct: isAr ? "جارٍ تحميل المنتج..." : "Loading product...",
-      required: isAr ? "الاسم والهاتف والعنوان والبريد الإلكتروني مطلوبة" : "Name, phone, address, and email are required",
+      required: isAr
+        ? "الاسم والهاتف والعنوان والبريد الإلكتروني مطلوبة"
+        : "Name, phone, address, and email are required",
       payCard: isAr ? "الدفع بالبطاقة" : "Pay by card",
       cod: isAr ? "الدفع عند الاستلام" : "Cash on delivery",
       orderSummary: isAr ? "ملخص الطلب" : "Order summary",
@@ -105,6 +129,7 @@ export default function CheckoutClient() {
       shipping: isAr ? "الشحن" : "Shipping",
       shippingFree: isAr ? "شحن مجاني" : "Free shipping",
       total: isAr ? "الإجمالي" : "Total",
+
       fullName: isAr ? "الاسم الكامل" : "Full name",
       phone: isAr ? "رقم الهاتف" : "Phone",
       email: isAr ? "البريد الإلكتروني" : "Email",
@@ -196,17 +221,33 @@ export default function CheckoutClient() {
       .then(async (r) => {
         const j: unknown = await readJsonSafe(r);
         if (cancelled) return;
+        if (!isRecord(j) || j.ok !== true) return;
 
-        if (!isObject(j) || j.ok !== true || !isObject(j.product)) return;
+        const product = j.product;
+        if (!isRecord(product)) return;
 
-        const prod = j.product;
-        const slug = toStr(prod.slug).trim();
+        const slug = (getStr(product, "slug") || "").trim();
         if (!slug) return;
 
-        const prodName = isAr ? toStr(prod.name_ar || prod.name_en || slug) : toStr(prod.name_en || prod.name_ar || slug);
-        const price = toNum(prod.price_jod);
+        const nameAr = getStr(product, "name_ar");
+        const nameEn = getStr(product, "name_en");
+        const prodName = isAr ? (nameAr || nameEn || slug) : (nameEn || nameAr || slug);
 
-        setItems([{ slug, variantId: toNum(prod.variant_id) || null, variantLabel: toStr(prod.variant_label), name: prodName, priceJod: price, qty: 1 }]);
+        const price = getNum(product, "price_jod") ?? 0;
+        const variantIdRaw = getNum(product, "variant_id");
+        const variantId = typeof variantIdRaw === "number" && variantIdRaw > 0 ? variantIdRaw : null;
+        const variantLabel = getStr(product, "variant_label") || "";
+
+        setItems([
+          {
+            slug,
+            variantId,
+            variantLabel,
+            name: prodName,
+            priceJod: price,
+            qty: 1,
+          },
+        ]);
       })
       .finally(() => {
         if (!cancelled) setLoadingBuyNow(false);
@@ -217,6 +258,7 @@ export default function CheckoutClient() {
     };
   }, [buyNowSlug, isAr]);
 
+  // Reset promos if cart empty
   useEffect(() => {
     if (!items.length) {
       setDiscountMode("NONE");
@@ -392,17 +434,17 @@ export default function CheckoutClient() {
       }
     }
 
-    const ok = isObject(data) && data.ok === true;
-    if (!res.ok || !ok) {
-      const msg = isObject(data) && typeof data.error === "string" ? data.error : "";
+    if (!res.ok || !isRecord(data) || data.ok !== true) {
+      const msg = isRecord(data) && typeof data.error === "string" ? data.error : "";
       throw new Error(msg || `Order create failed (${res.status})`);
     }
 
-    const cid = isObject(data) ? toStr(data.cartId).trim() : "";
-    const st = isObject(data) ? toStr(data.status).trim() : "";
+    const cid = (getStr(data, "cartId") || "").trim();
+    const st = (getStr(data, "status") || "").trim();
 
     setCartId(cid || null);
     setStatus(st || null);
+
     return cid;
   }
 
@@ -461,22 +503,31 @@ export default function CheckoutClient() {
 
   return (
     <div style={{ padding: "1.2rem 0" }}>
-      <h1 className="title" style={{ marginTop: 0 }}>{COPY.title}</h1>
-      <p className="lead" style={{ marginTop: 0 }}>{COPY.subtitle}</p>
+      <h1 className="title" style={{ marginTop: 0 }}>
+        {COPY.title}
+      </h1>
+      <p className="lead" style={{ marginTop: 0 }}>
+        {COPY.subtitle}
+      </p>
 
       {loadingBuyNow ? <p className="muted">{COPY.loadingProduct}</p> : null}
 
       {items.length === 0 ? (
         <div className="panel">
-          <p className="muted" style={{ margin: 0 }}>{COPY.empty}</p>
+          <p className="muted" style={{ margin: 0 }}>
+            {COPY.empty}
+          </p>
           <div style={{ marginTop: 12 }}>
-            <a className="btn btn-outline" href={`/${locale}/product`}>{COPY.backToShop}</a>
+            <a className="btn btn-outline" href={`/${locale}/product`}>
+              {COPY.backToShop}
+            </a>
           </div>
         </div>
       ) : (
         <div className="grid-2 checkout-grid">
           <section className="panel checkout-form-panel" style={{ display: "grid", gap: ".55rem" }}>
             <h3 style={{ margin: "0 0 6px" }}>{isAr ? "بيانات التوصيل" : "Delivery details"}</h3>
+
             <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={COPY.fullName} />
             <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={COPY.phone} />
             <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={COPY.email} />
@@ -487,13 +538,21 @@ export default function CheckoutClient() {
             {err && <p style={{ color: err === COPY.placed ? "seagreen" : "crimson", margin: 0 }}>{err}</p>}
 
             <div className="cta-row" style={{ marginTop: 12 }}>
-              <button className="btn primary" onClick={payByCard} disabled={loading}>{COPY.payCard}</button>
-              <button className="btn" onClick={cashOnDelivery} disabled={loading}>{COPY.cod}</button>
+              <button className="btn primary" onClick={payByCard} disabled={loading}>
+                {COPY.payCard}
+              </button>
+              <button className="btn" onClick={cashOnDelivery} disabled={loading}>
+                {COPY.cod}
+              </button>
             </div>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
-              <a className="btn btn-outline" href={`/${locale}/cart`}>{COPY.editCart}</a>
-              <a className="btn btn-outline" href={`/${locale}/product`}>{COPY.backToShop}</a>
+              <a className="btn btn-outline" href={`/${locale}/cart`}>
+                {COPY.editCart}
+              </a>
+              <a className="btn btn-outline" href={`/${locale}/product`}>
+                {COPY.backToShop}
+              </a>
             </div>
           </section>
 
@@ -509,8 +568,12 @@ export default function CheckoutClient() {
                 <div key={`${i.slug}::${i.variantId ?? "base"}`} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                   <div style={{ flex: 1 }}>
                     <strong>{i.name}</strong>
-                    <div className="muted" style={{ marginTop: 4 }}>{i.qty} × {Number(i.priceJod || 0).toFixed(2)} JOD</div>
-                    <div className="muted" style={{ marginTop: 2 }}>{i.variantLabel ? `${i.slug} · ${i.variantLabel}` : i.slug}</div>
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      {i.qty} × {Number(i.priceJod || 0).toFixed(2)} JOD
+                    </div>
+                    <div className="muted" style={{ marginTop: 2 }}>
+                      {i.variantLabel ? `${i.slug} · ${i.variantLabel}` : i.slug}
+                    </div>
                   </div>
                   <div style={{ minWidth: 120, textAlign: "end" }}>
                     <strong>{(Number(i.priceJod || 0) * Number(i.qty || 1)).toFixed(2)} JOD</strong>
@@ -569,12 +632,16 @@ export default function CheckoutClient() {
                       {COPY.promoApply}
                     </button>
                     {selectedPromo?.mode === "CODE" ? (
-                      <button className="btn" type="button" onClick={removePromoCode}>{COPY.promoRemove}</button>
+                      <button className="btn" type="button" onClick={removePromoCode}>
+                        {COPY.promoRemove}
+                      </button>
                     ) : null}
                   </div>
                 </>
               ) : null}
-              {promoMsg ? <p className="muted" style={{ margin: 0 }}>{promoMsg}</p> : null}
+
+{promoMsg ? <p className="muted" style={{ margin: 0 }}>{promoMsg}</p> : null}
+
               {selectedPromo ? (
                 <p className="muted" style={{ margin: 0 }}>
                   <strong>{selectedPromo.mode}</strong> · {selectedPromo.title}
