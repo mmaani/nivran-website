@@ -502,3 +502,42 @@
 @media (max-width: 640px) {
   .admin-kpi-grid { grid-template-columns: 1fr; }
 }
+
+
+.admin-context-row {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.admin-pill {
+  border: 1px solid rgba(20, 20, 20, 0.16);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #fff;
+}
+
+.admin-pill-muted {
+  color: #6f6a62;
+  font-weight: 600;
+}
+
+.admin-mini-link {
+  color: #5c554c;
+  text-decoration: none;
+  font-size: 12px;
+  border: 1px solid rgba(20, 20, 20, 0.12);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: rgba(255,255,255,.72);
+}
+
+.admin-mini-link:hover {
+  color: #141414;
+  border-color: rgba(20,20,20,.24);
+}
