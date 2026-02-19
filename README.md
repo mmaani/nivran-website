@@ -179,6 +179,34 @@ git log --oneline -- src/app/admin/inbox/InboxClient.tsx
 git log --oneline -- src/app/admin/_components/AdminShell.tsx
 ```
 
+## Recover `work` when diff vs `main` explodes
+
+If `git diff --stat main..work` shows thousands of unrelated deletions/renames, your `work` branch likely drifted due to conflict resolution on the wrong base.
+
+Use this helper (dry-run by default):
+
+If you see `No such file or directory`, confirm you are in repository root (common paths: `/workspace/nivran-website` or `/workspaces/nivran-website`) and that your current branch includes the helper script.
+Quick recovery:
+
+```bash
+git fetch origin --prune
+git checkout work
+git pull origin work
+./recover-work-branch.sh
+```
+
+```bash
+./recover-work-branch.sh
+```
+
+Apply the recovery (force-align `work` to `origin/main` with safety backup):
+
+```bash
+APPLY=1 ./recover-work-branch.sh
+```
+
+This script creates a local backup branch first, then resets `work` to `origin/main` and force-pushes with lease.
+
 ## Pull this PR into `main` in Codespaces
 
 From your Codespace terminal:
