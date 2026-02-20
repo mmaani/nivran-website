@@ -62,6 +62,7 @@ export default function CheckoutClient() {
 
   const [items, setItems] = useState<CartItem[]>([]);
   const [loadingBuyNow, setLoadingBuyNow] = useState(false);
+  const [buyNowError, setBuyNowError] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -95,6 +96,7 @@ export default function CheckoutClient() {
       backToShop: isAr ? "العودة للمتجر" : "Back to shop",
       editCart: isAr ? "تعديل السلة" : "Edit cart",
       loadingProduct: isAr ? "جارٍ تحميل المنتج..." : "Loading product...",
+      unavailableProduct: isAr ? "هذا المنتج غير متاح حالياً." : "This product is currently unavailable.",
       required: isAr ? "الاسم والهاتف والعنوان والبريد الإلكتروني مطلوبة" : "Name, phone, address, and email are required",
       payCard: isAr ? "الدفع بالبطاقة" : "Pay by card",
       cod: isAr ? "الدفع عند الاستلام" : "Cash on delivery",
@@ -178,11 +180,13 @@ export default function CheckoutClient() {
   useEffect(() => {
     const cart = readLocalCart();
     if (cart.length) {
+      setBuyNowError(null);
       setItems(cart);
       return;
     }
 
     if (!buyNowSlug) {
+      setBuyNowError(null);
       setItems([]);
       return;
     }
@@ -195,16 +199,31 @@ export default function CheckoutClient() {
         const j: unknown = await readJsonSafe(r);
         if (cancelled) return;
 
-        if (!isObject(j) || j.ok !== true || !isObject(j.product)) return;
+        if (!r.ok || !isObject(j) || j.ok !== true || !isObject(j.product)) {
+          setItems([]);
+          setBuyNowError(COPY.unavailableProduct);
+          return;
+        }
 
         const prod = j.product;
         const slug = toStr(prod.slug).trim();
-        if (!slug) return;
+        if (!slug) {
+          setItems([]);
+          setBuyNowError(COPY.unavailableProduct);
+          return;
+        }
 
         const prodName = isAr ? toStr(prod.name_ar || prod.name_en || slug) : toStr(prod.name_en || prod.name_ar || slug);
         const price = toNum(prod.price_jod);
 
+        setBuyNowError(null);
         setItems([{ slug, variantId: toNum(prod.variant_id) || null, variantLabel: toStr(prod.variant_label), name: prodName, priceJod: price, qty: 1 }]);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setItems([]);
+          setBuyNowError(COPY.unavailableProduct);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoadingBuyNow(false);
@@ -213,7 +232,7 @@ export default function CheckoutClient() {
     return () => {
       cancelled = true;
     };
-  }, [buyNowSlug, isAr]);
+  }, [COPY.unavailableProduct, buyNowSlug, isAr]);
 
   useEffect(() => {
     if (!items.length) {
@@ -474,7 +493,7 @@ export default function CheckoutClient() {
       {items.length === 0 ? (
         <div className="panel">
           <p className="muted" style={{ margin: 0 }}>
-            {COPY.empty}
+            {buyNowError || COPY.empty}
           </p>
           <div style={{ marginTop: 12 }}>
             <a className="btn btn-outline" href={`/${locale}/product`}>
