@@ -26,13 +26,13 @@ const REQUIRED = [
     file: "src/app/api/shipping-config/route.ts",
     checks: [
       "DEFAULT_FREE_SHIPPING_THRESHOLD_JOD",
-      "normalizeFreeShippingThreshold",
+      "readFreeShippingThresholdJod",
     ],
   },
   {
     file: "src/app/api/orders/route.ts",
     checks: [
-      "normalizeFreeShippingThreshold",
+      "readFreeShippingThresholdJod",
       "shippingForSubtotal",
     ],
   },

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db, isDbConnectivityError } from "@/lib/db";
 import { ensureCatalogTablesSafe } from "@/lib/catalog";
-import { DEFAULT_FREE_SHIPPING_THRESHOLD_JOD } from "@/lib/shipping";
+import { DEFAULT_FREE_SHIPPING_THRESHOLD_JOD, readFreeShippingThresholdJod } from "@/lib/shipping";
 import { getAdminLang } from "@/lib/admin-lang";
 import styles from "./page.module.css";
 
@@ -49,10 +49,6 @@ type CatalogVariantRow = {
   is_default: boolean;
   is_active: boolean;
   sort_order: number;
-};
-
-type StoreSettingsRow = {
-  free_shipping_threshold_jod: string | null;
 };
 
 type PromoRow = {
@@ -143,7 +139,7 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
   }
 
   try {
-    const [categoriesRes, productsRes, variantsRes, promosRes, settingsRes] = await Promise.all([
+    const [categoriesRes, productsRes, variantsRes, promosRes, shippingThreshold] = await Promise.all([
       db.query<CategoryRow>(
         `select key, name_en, name_ar, sort_order, is_active, is_promoted
            from categories
@@ -210,12 +206,7 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
            from promotions
           order by created_at desc`
       ),
-      db.query<StoreSettingsRow>(
-        `select value_number::text as free_shipping_threshold_jod
-           from store_settings
-          where key='free_shipping_threshold_jod'
-          limit 1`
-      ),
+      readFreeShippingThresholdJod(),
     ]);
 
     return {
@@ -224,7 +215,7 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
       products: productsRes.rows,
       variants: variantsRes.rows,
       promos: promosRes.rows,
-      freeShippingThresholdJod: Number(settingsRes.rows[0]?.free_shipping_threshold_jod || DEFAULT_FREE_SHIPPING_THRESHOLD_JOD),
+      freeShippingThresholdJod: shippingThreshold.value,
       bootstrapNote,
     };
   } catch (error: unknown) {

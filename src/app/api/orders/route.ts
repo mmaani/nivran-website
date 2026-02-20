@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { hasAllColumns, hasColumn } from "@/lib/dbSchema";
-import { normalizeFreeShippingThreshold, shippingForSubtotal } from "@/lib/shipping";
+import { readFreeShippingThresholdJod, shippingForSubtotal } from "@/lib/shipping";
 import { ensureOrdersTables } from "@/lib/orders";
 import { ensureCatalogTables } from "@/lib/catalog";
 import { getCustomerIdFromRequest } from "@/lib/identity";
@@ -292,10 +292,8 @@ export async function POST(req: NextRequest) {
     finalPromoCode = codeEval.promoCode || promoCode;
   }
 
-  const shippingSettingsRes = await db.query<{ value_number: string | number | null }>(
-    `select value_number from store_settings where key='free_shipping_threshold_jod' limit 1`
-  );
-  const freeShippingThresholdJod = normalizeFreeShippingThreshold(shippingSettingsRes.rows[0]?.value_number);
+  const shippingThreshold = await readFreeShippingThresholdJod();
+  const freeShippingThresholdJod = shippingThreshold.value;
   const shippingJod = shippingForSubtotal(subtotalAfterDiscount, lines.length > 0, freeShippingThresholdJod);
   const totalJod = Number((subtotalAfterDiscount + shippingJod).toFixed(2));
 
