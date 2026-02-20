@@ -3,7 +3,7 @@ import ProductPurchasePanel from "./ProductPurchasePanel";
 import SafeImg from "@/components/SafeImg";
 import { notFound } from "next/navigation";
 import { db, isDbConnectivityError } from "@/lib/db";
-import { ensureCatalogTables } from "@/lib/catalog";
+import { ensureCatalogTablesSafe, isRecoverableCatalogSetupError } from "@/lib/catalog";
 import {
   fallbackProductBySlug,
   localizedName,
@@ -128,9 +128,94 @@ export default async function ProductDetailPage({
   const locale = rawLocale === "ar" ? "ar" : "en";
   const isAr = locale === "ar";
 
+  const renderFallbackPdp = (reason: string) => {
+    const fallback = fallbackProductBySlug(slug);
+    if (!fallback) return notFound();
+
+    console.warn(`[pdp] Falling back to static product details due to ${reason}.`);
+
+    const name = localizedName(fallback.name, locale);
+    const desc = fallback.description[locale];
+    const catLabel = categoryLabels[fallback.category][locale];
+    const variants = (fallback.variants || []).map((v, index) => ({
+      id: syntheticVariantId(fallback.slug, index),
+      label: v.sizeLabel,
+      priceJod: Number(v.priceJod || 0),
+      compareAtPriceJod: null,
+      isDefault: !!v.isDefault,
+    }));
+
+    const safeVariants = variants.length
+      ? variants
+      : [{ id: syntheticVariantId(fallback.slug), label: isAr ? "القياسي" : "Standard", priceJod: Number(fallback.priceJod || 0), compareAtPriceJod: null, isDefault: true }];
+
+    const fallbackSrc = fallback.images?.[0] || fallbackFromSlug(fallback.slug);
+    const fallbackRelatedPool = fallbackCatalogRows().filter((item) => item.slug !== fallback.slug);
+    const fallbackRelated = shuffle(fallbackRelatedPool).slice(0, 3);
+
+    return (
+      <div style={{ padding: "1.2rem 0" }}>
+        <p className="muted" style={{ marginTop: 0 }}>{catLabel}</p>
+
+        <div className={styles.grid2} style={{ alignItems: "start" }}>
+          <div style={{ position: "relative" }}>
+            <ProductImageGallery name={name} images={[fallbackSrc]} fallbackSrc={fallbackSrc} />
+          </div>
+
+          <div>
+            <h1 className="title" style={{ marginTop: 0 }}>{name}</h1>
+            {desc ? <p className="muted">{desc}</p> : null}
+
+            <ProductPurchasePanel
+              locale={locale}
+              slug={fallback.slug}
+              name={name}
+              variants={safeVariants}
+              promoType={null}
+              promoValue={0}
+              outOfStock={false}
+            />
+          </div>
+        </div>
+
+        {fallbackRelated.length > 0 ? (
+          <section style={{ marginTop: 30 }}>
+            <h2 style={{ marginBottom: 10 }}>{isAr ? "منتجات مقترحة" : "Related products"}</h2>
+            <div className="grid-3">
+              {fallbackRelated.map((r) => {
+                const rName = locale === "ar" ? r.name_ar : r.name_en;
+                const rPrice = Number(r.min_variant_price_jod || r.price_jod || 0);
+                const rImage = fallbackFromSlug(r.slug);
+                return (
+                  <article key={r.slug} className="panel">
+                    <div style={{ position: "relative", width: "100%", aspectRatio: "4 / 3", borderRadius: 12, overflow: "hidden", border: "1px solid #eee", marginBottom: 10 }}>
+                      <SafeImg
+                        src={rImage}
+                        fallbackSrc={fallbackFromSlug(r.slug)}
+                        alt={rName}
+                        style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+                        loading="lazy"
+                        sizes="(max-width: 900px) 100vw, 33vw"
+                      />
+                    </div>
+                    <p className="muted" style={{ marginTop: 0 }}>{categoryLabels[r.category_key as keyof typeof categoryLabels]?.[locale] || r.category_key}</p>
+                    <h3 style={{ margin: "0 0 .35rem" }}>{rName}</h3>
+                    <p style={{ marginTop: 0 }}><strong>{isAr ? `ابتداءً من ${rPrice.toFixed(2)} JOD` : `From ${rPrice.toFixed(2)} JOD`}</strong></p>
+                    <a className="btn" href={`/${locale}/product/${r.slug}`}>{isAr ? "عرض المنتج" : "View product"}</a>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
+      </div>
+    );
+  };
+
   try {
 
-  await ensureCatalogTables();
+  const bootstrap = await ensureCatalogTablesSafe();
+  if (!bootstrap.ok) return renderFallbackPdp(bootstrap.reason);
 
   const pr = await db.query<ProductRow>(
     `select p.id,
@@ -373,88 +458,8 @@ export default async function ProductDetailPage({
     </div>
   );
   } catch (error: unknown) {
-    if (!isDbConnectivityError(error)) throw error;
-
-    const fallback = fallbackProductBySlug(slug);
-    if (!fallback) return notFound();
-
-    console.warn("[pdp] Falling back to static product details due to DB connectivity issue.");
-
-    const name = localizedName(fallback.name, locale);
-    const desc = fallback.description[locale];
-    const catLabel = categoryLabels[fallback.category][locale];
-    const variants = (fallback.variants || []).map((v, index) => ({
-      id: syntheticVariantId(fallback.slug, index),
-      label: v.sizeLabel,
-      priceJod: Number(v.priceJod || 0),
-      compareAtPriceJod: null,
-      isDefault: !!v.isDefault,
-    }));
-
-    const safeVariants = variants.length
-      ? variants
-      : [{ id: syntheticVariantId(fallback.slug), label: isAr ? "القياسي" : "Standard", priceJod: Number(fallback.priceJod || 0), compareAtPriceJod: null, isDefault: true }];
-
-    const fallbackSrc = fallback.images?.[0] || fallbackFromSlug(fallback.slug);
-    const fallbackRelatedPool = fallbackCatalogRows().filter((item) => item.slug !== fallback.slug);
-    const fallbackRelated = shuffle(fallbackRelatedPool).slice(0, 3);
-
-    return (
-      <div style={{ padding: "1.2rem 0" }}>
-        <p className="muted" style={{ marginTop: 0 }}>{catLabel}</p>
-
-        <div className={styles.grid2} style={{ alignItems: "start" }}>
-          <div style={{ position: "relative" }}>
-            <ProductImageGallery name={name} images={[fallbackSrc]} fallbackSrc={fallbackSrc} />
-          </div>
-
-          <div>
-            <h1 className="title" style={{ marginTop: 0 }}>{name}</h1>
-            {desc ? <p className="muted">{desc}</p> : null}
-
-            <ProductPurchasePanel
-              locale={locale}
-              slug={fallback.slug}
-              name={name}
-              variants={safeVariants}
-              promoType={null}
-              promoValue={0}
-              outOfStock={false}
-            />
-          </div>
-        </div>
-
-        {fallbackRelated.length > 0 ? (
-          <section style={{ marginTop: 30 }}>
-            <h2 style={{ marginBottom: 10 }}>{isAr ? "منتجات مقترحة" : "Related products"}</h2>
-            <div className="grid-3">
-              {fallbackRelated.map((r) => {
-                const rName = locale === "ar" ? r.name_ar : r.name_en;
-                const rPrice = Number(r.min_variant_price_jod || r.price_jod || 0);
-                const rImage = fallbackFromSlug(r.slug);
-                return (
-                  <article key={r.slug} className="panel">
-                    <div style={{ position: "relative", width: "100%", aspectRatio: "4 / 3", borderRadius: 12, overflow: "hidden", border: "1px solid #eee", marginBottom: 10 }}>
-                      <SafeImg
-                        src={rImage}
-                        fallbackSrc={fallbackFromSlug(r.slug)}
-                        alt={rName}
-                        style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
-                        loading="lazy"
-                        sizes="(max-width: 900px) 100vw, 33vw"
-                      />
-                    </div>
-                    <p className="muted" style={{ marginTop: 0 }}>{categoryLabels[r.category_key as keyof typeof categoryLabels]?.[locale] || r.category_key}</p>
-                    <h3 style={{ margin: "0 0 .35rem" }}>{rName}</h3>
-                    <p style={{ marginTop: 0 }}><strong>{isAr ? `ابتداءً من ${rPrice.toFixed(2)} JOD` : `From ${rPrice.toFixed(2)} JOD`}</strong></p>
-                    <a className="btn" href={`/${locale}/product/${r.slug}`}>{isAr ? "عرض المنتج" : "View product"}</a>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-        ) : null}
-      </div>
-    );
+    if (!isDbConnectivityError(error) && !isRecoverableCatalogSetupError(error)) throw error;
+    const reason = isDbConnectivityError(error) ? "DB_CONNECTIVITY" : "CATALOG_RECOVERABLE_ERROR";
+    return renderFallbackPdp(reason);
   }
 }
