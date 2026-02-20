@@ -2,9 +2,9 @@
 -- PostgreSQL database dump
 --
 
-\restrict 9PqNePdhrK242kaB4AcELZ63yTEtfddzpPCvpZ6NZc8xsUBDGiqsplHo1Grp8Xm
+\restrict OgRf7D5nVQAQMkVbP6lLZ6sz538JiIRj5NweIHHVEIflhAIEj5HIegItdQK2m1b
 
--- Dumped from database version 17.7 (bdd1736)
+-- Dumped from database version 17.8 (6108b59)
 -- Dumped by pg_dump version 17.8 (Debian 17.8-0+deb13u1)
 
 SET statement_timeout = 0;
@@ -18,6 +18,20 @@ SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
+
+--
+-- Name: pgcrypto; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
+
 
 --
 -- Name: order_status; Type: TYPE; Schema: public; Owner: -
@@ -101,6 +115,17 @@ CREATE SEQUENCE public.batches_id_seq
 --
 
 ALTER SEQUENCE public.batches_id_seq OWNED BY public.batches.id;
+
+
+--
+-- Name: carts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.carts (
+    cart_id text NOT NULL,
+    items jsonb DEFAULT '[]'::jsonb NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
 
 
 --
@@ -202,9 +227,8 @@ CREATE TABLE public.customer_cart_items (
     slug text NOT NULL,
     name text NOT NULL,
     price_jod numeric(10,2) DEFAULT 0 NOT NULL,
-    qty integer NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT customer_cart_items_qty_check CHECK ((qty > 0))
+    qty integer DEFAULT 1 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -219,6 +243,39 @@ CREATE TABLE public.customer_carts (
 
 
 --
+-- Name: customer_password_reset_tokens; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.customer_password_reset_tokens (
+    id bigint NOT NULL,
+    customer_id bigint NOT NULL,
+    token text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    used_at timestamp with time zone
+);
+
+
+--
+-- Name: customer_password_reset_tokens_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.customer_password_reset_tokens_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: customer_password_reset_tokens_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.customer_password_reset_tokens_id_seq OWNED BY public.customer_password_reset_tokens.id;
+
+
+--
 -- Name: customer_sessions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -228,7 +285,8 @@ CREATE TABLE public.customer_sessions (
     token text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     expires_at timestamp with time zone NOT NULL,
-    revoked_at timestamp with time zone
+    revoked_at timestamp with time zone,
+    token_hash text
 );
 
 
@@ -265,7 +323,11 @@ CREATE TABLE public.customers (
     locale text DEFAULT 'en'::text NOT NULL,
     is_active boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    full_name text,
+    address_line1 text,
+    city text,
+    country text
 );
 
 
@@ -311,7 +373,7 @@ CREATE TABLE public.newsletter_subscribers (
     email text NOT NULL,
     locale text DEFAULT 'en'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -388,9 +450,10 @@ CREATE TABLE public.orders (
     paytabs_payload jsonb,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    payment_method text DEFAULT 'PAYTABS'::text NOT NULL,
     customer jsonb,
     shipping jsonb,
+    payment_method text DEFAULT 'PAYTABS'::text NOT NULL,
+    customer_id bigint,
     paytabs_last_payload text,
     paytabs_last_signature text,
     items jsonb,
@@ -404,7 +467,11 @@ CREATE TABLE public.orders (
     subtotal_after_discount_jod numeric(10,2),
     shipping_jod numeric(10,2),
     total_jod numeric(10,2),
-    customer_id bigint
+    promo_code text,
+    promotion_id bigint,
+    discount_source text,
+    CONSTRAINT orders_discount_source_chk CHECK (((discount_source = ANY (ARRAY['AUTO'::text, 'CODE'::text])) OR (discount_source IS NULL))),
+    CONSTRAINT orders_single_discount_chk CHECK ((((discount_source IS NULL) AND (promo_code IS NULL)) OR ((discount_source = 'AUTO'::text) AND (promo_code IS NULL)) OR ((discount_source = 'CODE'::text) AND (promo_code IS NOT NULL))))
 );
 
 
@@ -425,6 +492,39 @@ CREATE SEQUENCE public.orders_id_seq
 --
 
 ALTER SEQUENCE public.orders_id_seq OWNED BY public.orders.id;
+
+
+--
+-- Name: password_reset_tokens; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.password_reset_tokens (
+    id bigint NOT NULL,
+    staff_user_id bigint NOT NULL,
+    token_hash text NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    used_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: password_reset_tokens_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.password_reset_tokens_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: password_reset_tokens_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.password_reset_tokens_id_seq OWNED BY public.password_reset_tokens.id;
 
 
 --
@@ -478,11 +578,12 @@ CREATE TABLE public.paytabs_callbacks (
     verified boolean DEFAULT false NOT NULL,
     cart_id text,
     tran_ref text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
     signature_header text,
-    signature_computed text NOT NULL,
+    signature_computed text,
     signature_valid boolean DEFAULT false NOT NULL,
-    raw_body text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    raw_body text,
+    payload_json jsonb
 );
 
 
@@ -573,6 +674,44 @@ ALTER SEQUENCE public.product_media_id_seq OWNED BY public.product_media.id;
 
 
 --
+-- Name: product_variants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.product_variants (
+    id bigint NOT NULL,
+    product_id bigint NOT NULL,
+    label text NOT NULL,
+    size_ml integer,
+    price_jod numeric(10,2) NOT NULL,
+    compare_at_price_jod numeric(10,2),
+    is_default boolean DEFAULT false NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    sort_order integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: product_variants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.product_variants_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: product_variants_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.product_variants_id_seq OWNED BY public.product_variants.id;
+
+
+--
 -- Name: products; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -591,14 +730,17 @@ CREATE TABLE public.products (
     active boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    slug text NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
     description_en text,
     description_ar text,
     price_jod numeric(10,2),
     compare_at_price_jod numeric(10,2),
     inventory_qty integer DEFAULT 0 NOT NULL,
+    slug text NOT NULL,
     category_key text DEFAULT 'perfume'::text,
-    is_active boolean DEFAULT true NOT NULL
+    wear_times text[] DEFAULT '{}'::text[] NOT NULL,
+    seasons text[] DEFAULT '{}'::text[] NOT NULL,
+    audiences text[] DEFAULT '{}'::text[] NOT NULL
 );
 
 
@@ -628,17 +770,24 @@ ALTER SEQUENCE public.products_id_seq OWNED BY public.products.id;
 CREATE TABLE public.promotions (
     id bigint NOT NULL,
     code text,
-    title_en text,
-    title_ar text,
-    discount_type text,
-    discount_value numeric(10,2),
+    title_en text NOT NULL,
+    title_ar text NOT NULL,
+    discount_type text NOT NULL,
+    discount_value numeric(10,2) NOT NULL,
     starts_at timestamp with time zone,
     ends_at timestamp with time zone,
     usage_limit integer,
     is_active boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    category_keys text[]
+    category_keys text[],
+    min_order_jod numeric(10,2),
+    used_count integer DEFAULT 0 NOT NULL,
+    promo_kind text DEFAULT 'CODE'::text NOT NULL,
+    priority integer DEFAULT 0 NOT NULL,
+    product_slugs text[],
+    CONSTRAINT promotions_discount_type_check CHECK ((discount_type = ANY (ARRAY['PERCENT'::text, 'FIXED'::text]))),
+    CONSTRAINT promotions_kind_code_chk CHECK ((((promo_kind = 'AUTO'::text) AND ((code IS NULL) OR (btrim(code) = ''::text))) OR ((promo_kind = 'CODE'::text) AND (code IS NOT NULL) AND (btrim(code) <> ''::text))))
 );
 
 
@@ -702,13 +851,14 @@ ALTER SEQUENCE public.shipments_id_seq OWNED BY public.shipments.id;
 
 CREATE TABLE public.staff_users (
     id bigint NOT NULL,
-    email text NOT NULL,
+    username text NOT NULL,
     password_hash text NOT NULL,
     full_name text,
-    role text DEFAULT 'staff'::text NOT NULL,
+    role text DEFAULT 'admin'::text NOT NULL,
     is_active boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT staff_users_role_check CHECK ((role = ANY (ARRAY['admin'::text, 'staff'::text])))
 );
 
 
@@ -729,6 +879,18 @@ CREATE SEQUENCE public.staff_users_id_seq
 --
 
 ALTER SEQUENCE public.staff_users_id_seq OWNED BY public.staff_users.id;
+
+
+--
+-- Name: store_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.store_settings (
+    key text NOT NULL,
+    value_text text,
+    value_number numeric(10,2),
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
 
 
 --
@@ -786,6 +948,13 @@ ALTER TABLE ONLY public.coupons ALTER COLUMN id SET DEFAULT nextval('public.coup
 
 
 --
+-- Name: customer_password_reset_tokens id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_password_reset_tokens ALTER COLUMN id SET DEFAULT nextval('public.customer_password_reset_tokens_id_seq'::regclass);
+
+
+--
 -- Name: customer_sessions id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -821,6 +990,13 @@ ALTER TABLE ONLY public.orders ALTER COLUMN id SET DEFAULT nextval('public.order
 
 
 --
+-- Name: password_reset_tokens id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.password_reset_tokens ALTER COLUMN id SET DEFAULT nextval('public.password_reset_tokens_id_seq'::regclass);
+
+
+--
 -- Name: payments id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -846,6 +1022,13 @@ ALTER TABLE ONLY public.product_images ALTER COLUMN id SET DEFAULT nextval('publ
 --
 
 ALTER TABLE ONLY public.product_media ALTER COLUMN id SET DEFAULT nextval('public.product_media_id_seq'::regclass);
+
+
+--
+-- Name: product_variants id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_variants ALTER COLUMN id SET DEFAULT nextval('public.product_variants_id_seq'::regclass);
 
 
 --
@@ -900,6 +1083,14 @@ ALTER TABLE ONLY public.batches
 
 
 --
+-- Name: carts carts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.carts
+    ADD CONSTRAINT carts_pkey PRIMARY KEY (cart_id);
+
+
+--
 -- Name: categories categories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -945,6 +1136,22 @@ ALTER TABLE ONLY public.customer_cart_items
 
 ALTER TABLE ONLY public.customer_carts
     ADD CONSTRAINT customer_carts_pkey PRIMARY KEY (customer_id);
+
+
+--
+-- Name: customer_password_reset_tokens customer_password_reset_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_password_reset_tokens
+    ADD CONSTRAINT customer_password_reset_tokens_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: customer_password_reset_tokens customer_password_reset_tokens_token_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_password_reset_tokens
+    ADD CONSTRAINT customer_password_reset_tokens_token_key UNIQUE (token);
 
 
 --
@@ -1028,6 +1235,14 @@ ALTER TABLE ONLY public.orders
 
 
 --
+-- Name: password_reset_tokens password_reset_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.password_reset_tokens
+    ADD CONSTRAINT password_reset_tokens_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: payments payments_paytabs_tran_ref_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1068,6 +1283,14 @@ ALTER TABLE ONLY public.product_media
 
 
 --
+-- Name: product_variants product_variants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_variants
+    ADD CONSTRAINT product_variants_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: products products_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1092,6 +1315,14 @@ ALTER TABLE ONLY public.products
 
 
 --
+-- Name: promotions promotions_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.promotions
+    ADD CONSTRAINT promotions_code_key UNIQUE (code);
+
+
+--
 -- Name: promotions promotions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1108,19 +1339,27 @@ ALTER TABLE ONLY public.shipments
 
 
 --
--- Name: staff_users staff_users_email_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.staff_users
-    ADD CONSTRAINT staff_users_email_key UNIQUE (email);
-
-
---
 -- Name: staff_users staff_users_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.staff_users
     ADD CONSTRAINT staff_users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: staff_users staff_users_username_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.staff_users
+    ADD CONSTRAINT staff_users_username_key UNIQUE (username);
+
+
+--
+-- Name: store_settings store_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.store_settings
+    ADD CONSTRAINT store_settings_pkey PRIMARY KEY (key);
 
 
 --
@@ -1137,6 +1376,20 @@ ALTER TABLE ONLY public.variants
 
 ALTER TABLE ONLY public.variants
     ADD CONSTRAINT variants_sku_key UNIQUE (sku);
+
+
+--
+-- Name: customer_cart_items_customer_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX customer_cart_items_customer_id_idx ON public.customer_cart_items USING btree (customer_id);
+
+
+--
+-- Name: customer_sessions_token_hash_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX customer_sessions_token_hash_idx ON public.customer_sessions USING btree (token_hash);
 
 
 --
@@ -1182,10 +1435,24 @@ CREATE INDEX idx_contact_topic ON public.contact_submissions USING btree (topic)
 
 
 --
--- Name: idx_customer_cart_items_customer; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_customer_reset_tokens_customer_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_customer_cart_items_customer ON public.customer_cart_items USING btree (customer_id);
+CREATE INDEX idx_customer_reset_tokens_customer_id ON public.customer_password_reset_tokens USING btree (customer_id);
+
+
+--
+-- Name: idx_customer_reset_tokens_token; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_customer_reset_tokens_token ON public.customer_password_reset_tokens USING btree (token);
+
+
+--
+-- Name: idx_customer_sessions_customer; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_customer_sessions_customer ON public.customer_sessions USING btree (customer_id);
 
 
 --
@@ -1196,6 +1463,20 @@ CREATE INDEX idx_customer_sessions_customer_id ON public.customer_sessions USING
 
 
 --
+-- Name: idx_customer_sessions_expires; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_customer_sessions_expires ON public.customer_sessions USING btree (expires_at);
+
+
+--
+-- Name: idx_customer_sessions_expires_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_customer_sessions_expires_at ON public.customer_sessions USING btree (expires_at);
+
+
+--
 -- Name: idx_customer_sessions_token; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1203,10 +1484,38 @@ CREATE INDEX idx_customer_sessions_token ON public.customer_sessions USING btree
 
 
 --
+-- Name: idx_customers_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_customers_active ON public.customers USING btree (is_active);
+
+
+--
+-- Name: idx_customers_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_customers_created_at ON public.customers USING btree (created_at DESC);
+
+
+--
+-- Name: idx_customers_email_lower; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_customers_email_lower ON public.customers USING btree (lower(email));
+
+
+--
 -- Name: idx_newsletter_created_at; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_newsletter_created_at ON public.newsletter_subscribers USING btree (created_at DESC);
+
+
+--
+-- Name: idx_newsletter_email_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_newsletter_email_unique ON public.newsletter_subscribers USING btree (email);
 
 
 --
@@ -1238,6 +1547,20 @@ CREATE INDEX idx_orders_created_at ON public.orders USING btree (created_at DESC
 
 
 --
+-- Name: idx_orders_customer_id_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_orders_customer_id_created_at ON public.orders USING btree (customer_id, created_at DESC);
+
+
+--
+-- Name: idx_orders_discount_source; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_orders_discount_source ON public.orders USING btree (discount_source);
+
+
+--
 -- Name: idx_orders_paytabs_tran_ref; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1245,10 +1568,31 @@ CREATE INDEX idx_orders_paytabs_tran_ref ON public.orders USING btree (paytabs_t
 
 
 --
+-- Name: idx_orders_promo_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_orders_promo_code ON public.orders USING btree (promo_code);
+
+
+--
 -- Name: idx_orders_status; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_orders_status ON public.orders USING btree (status);
+
+
+--
+-- Name: idx_password_reset_tokens_expires; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_password_reset_tokens_expires ON public.password_reset_tokens USING btree (expires_at);
+
+
+--
+-- Name: idx_password_reset_tokens_staff; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_password_reset_tokens_staff ON public.password_reset_tokens USING btree (staff_user_id);
 
 
 --
@@ -1287,10 +1631,45 @@ CREATE INDEX idx_product_images_product ON public.product_images USING btree (pr
 
 
 --
+-- Name: idx_product_variants_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_product_variants_active ON public.product_variants USING btree (product_id, is_active);
+
+
+--
+-- Name: idx_product_variants_product; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_product_variants_product ON public.product_variants USING btree (product_id);
+
+
+--
+-- Name: idx_product_variants_single_default; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_product_variants_single_default ON public.product_variants USING btree (product_id) WHERE (is_default = true);
+
+
+--
+-- Name: idx_product_variants_sort; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_product_variants_sort ON public.product_variants USING btree (product_id, sort_order, id);
+
+
+--
 -- Name: idx_products_active; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_products_active ON public.products USING btree (is_active);
+
+
+--
+-- Name: idx_products_audiences; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_products_audiences ON public.products USING gin (audiences);
 
 
 --
@@ -1308,10 +1687,24 @@ CREATE INDEX idx_products_created_at ON public.products USING btree (created_at 
 
 
 --
+-- Name: idx_products_seasons; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_products_seasons ON public.products USING gin (seasons);
+
+
+--
 -- Name: idx_products_slug_unique; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_products_slug_unique ON public.products USING btree (slug);
+
+
+--
+-- Name: idx_products_wear_times; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_products_wear_times ON public.products USING gin (wear_times);
 
 
 --
@@ -1325,7 +1718,7 @@ CREATE INDEX idx_promotions_active ON public.promotions USING btree (is_active);
 -- Name: idx_promotions_code_unique; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX idx_promotions_code_unique ON public.promotions USING btree (code);
+CREATE UNIQUE INDEX idx_promotions_code_unique ON public.promotions USING btree (code) WHERE (promo_kind = 'CODE'::text);
 
 
 --
@@ -1333,6 +1726,55 @@ CREATE UNIQUE INDEX idx_promotions_code_unique ON public.promotions USING btree 
 --
 
 CREATE INDEX idx_promotions_created_at ON public.promotions USING btree (created_at DESC);
+
+
+--
+-- Name: idx_promotions_kind; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_promotions_kind ON public.promotions USING btree (promo_kind);
+
+
+--
+-- Name: idx_promotions_priority; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_promotions_priority ON public.promotions USING btree (priority DESC);
+
+
+--
+-- Name: idx_promotions_usage; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_promotions_usage ON public.promotions USING btree (usage_limit, used_count);
+
+
+--
+-- Name: idx_staff_users_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_staff_users_active ON public.staff_users USING btree (is_active);
+
+
+--
+-- Name: product_images_pid_pos_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX product_images_pid_pos_idx ON public.product_images USING btree (product_id, "position");
+
+
+--
+-- Name: uq_customer_sessions_token; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_customer_sessions_token ON public.customer_sessions USING btree (token) WHERE (token IS NOT NULL);
+
+
+--
+-- Name: uq_customer_sessions_token_hash; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_customer_sessions_token_hash ON public.customer_sessions USING btree (token_hash) WHERE (token_hash IS NOT NULL);
 
 
 --
@@ -1355,7 +1797,7 @@ ALTER TABLE ONLY public.batches
 --
 
 ALTER TABLE ONLY public.customer_cart_items
-    ADD CONSTRAINT customer_cart_items_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customer_carts(customer_id) ON DELETE CASCADE;
+    ADD CONSTRAINT customer_cart_items_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE CASCADE;
 
 
 --
@@ -1364,6 +1806,14 @@ ALTER TABLE ONLY public.customer_cart_items
 
 ALTER TABLE ONLY public.customer_carts
     ADD CONSTRAINT customer_carts_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: customer_password_reset_tokens customer_password_reset_tokens_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_password_reset_tokens
+    ADD CONSTRAINT customer_password_reset_tokens_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE CASCADE;
 
 
 --
@@ -1399,6 +1849,14 @@ ALTER TABLE ONLY public.order_items
 
 
 --
+-- Name: password_reset_tokens password_reset_tokens_staff_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.password_reset_tokens
+    ADD CONSTRAINT password_reset_tokens_staff_user_id_fkey FOREIGN KEY (staff_user_id) REFERENCES public.staff_users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: payments payments_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1407,11 +1865,27 @@ ALTER TABLE ONLY public.payments
 
 
 --
+-- Name: product_images product_images_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_images
+    ADD CONSTRAINT product_images_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE;
+
+
+--
 -- Name: product_media product_media_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.product_media
     ADD CONSTRAINT product_media_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE;
+
+
+--
+-- Name: product_variants product_variants_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_variants
+    ADD CONSTRAINT product_variants_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE;
 
 
 --
@@ -1434,5 +1908,5 @@ ALTER TABLE ONLY public.variants
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 9PqNePdhrK242kaB4AcELZ63yTEtfddzpPCvpZ6NZc8xsUBDGiqsplHo1Grp8Xm
+\unrestrict OgRf7D5nVQAQMkVbP6lLZ6sz538JiIRj5NweIHHVEIflhAIEj5HIegItdQK2m1b
 
