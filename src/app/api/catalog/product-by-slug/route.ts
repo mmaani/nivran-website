@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, isDbConnectivityError } from "@/lib/db";
-import { ensureCatalogTables } from "@/lib/catalog";
+import { ensureCatalogTablesSafe } from "@/lib/catalog";
 import { fallbackProductBySlug, syntheticVariantId } from "@/lib/catalogFallback";
 
 export const runtime = "nodejs";
@@ -25,7 +25,37 @@ export async function GET(req: NextRequest) {
   if (!slug) return NextResponse.json({ ok: false, error: "Missing slug" }, { status: 400 });
 
   try {
-    await ensureCatalogTables();
+    const bootstrap = await ensureCatalogTablesSafe();
+    if (!bootstrap.ok) {
+      const fallback = fallbackProductBySlug(slug);
+      if (!fallback) {
+        return NextResponse.json(
+          { ok: false, error: "Catalog temporarily unavailable", reason: bootstrap.reason },
+          { status: 503, headers: { "cache-control": "no-store" } }
+        );
+      }
+
+      const defaultVariant = fallback.variants?.find((v) => v.isDefault) || fallback.variants?.[0] || null;
+      return NextResponse.json(
+        {
+          ok: true,
+          fallback: true,
+          reason: bootstrap.reason,
+          product: {
+            slug: fallback.slug,
+            name_en: fallback.name.en,
+            name_ar: fallback.name.ar,
+            description_en: fallback.description.en,
+            description_ar: fallback.description.ar,
+            price_jod: Number(defaultVariant?.priceJod ?? fallback.priceJod),
+            variant_id: defaultVariant ? syntheticVariantId(fallback.slug) : null,
+            variant_label: defaultVariant?.sizeLabel ?? null,
+            is_active: true,
+          },
+        },
+        { status: 200, headers: { "cache-control": "no-store" } }
+      );
+    }
 
     const r = await db.query<ProductRow>(
       `select p.slug, p.name_en, p.name_ar, p.description_en, p.description_ar, p.price_jod, p.is_active,
@@ -46,7 +76,7 @@ export async function GET(req: NextRequest) {
     );
 
     const p = r.rows?.[0];
-    if (!p) return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
+    if (!p || !p.is_active) return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
 
     return NextResponse.json(
       {
@@ -63,7 +93,7 @@ export async function GET(req: NextRequest) {
           is_active: !!p.is_active,
         },
       },
-      { status: 200 }
+      { status: 200, headers: { "cache-control": "no-store" } }
     );
   } catch (error: unknown) {
     if (!isDbConnectivityError(error)) throw error;
@@ -77,6 +107,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         ok: true,
+        fallback: true,
+        reason: "DB_CONNECTIVITY",
         product: {
           slug: p.slug,
           name_en: p.name.en,
@@ -89,7 +121,7 @@ export async function GET(req: NextRequest) {
           is_active: true,
         },
       },
-      { status: 200 }
+      { status: 200, headers: { "cache-control": "no-store" } }
     );
   }
 }
