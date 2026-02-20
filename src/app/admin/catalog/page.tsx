@@ -217,7 +217,7 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
           limit 1200`
       ),
       db.query<PromoRow>(
-        `select id, promo_kind, code, title_en, title_ar, discount_type, discount_value::text,
+        `select id::int as id, promo_kind, code, title_en, title_ar, discount_type, discount_value::text,
                 is_active, category_keys, usage_limit, used_count, min_order_jod::text, priority,
                 starts_at::text as starts_at, ends_at::text as ends_at, product_slugs
            from promotions
@@ -273,6 +273,8 @@ export default async function AdminCatalogPage({
   const params = (await searchParams) || {};
   const saved = String(params.saved || "") === "1";
   const errorCode = String(params.error || "").trim();
+  const errorPgCode = String((params as any).error_code || "").trim();
+  const errorDetail = String((params as any).error_detail || "").trim();
   const variantError = errorCode === "invalid-variant";
   const duplicateVariantLabelError = errorCode === "duplicate-variant-label";
   const uploaded = String(params.uploaded || "") === "1";
@@ -476,7 +478,12 @@ export default async function AdminCatalogPage({
         ) : null}
         {errorCode && !variantError ? (
           <p style={{ marginTop: 10, marginBottom: 0, color: "crimson", fontWeight: 600 }}>
-            {isAr ? `حدث خطأ في العملية: ${errorCode}` : `Catalog action error: ${errorCode}`}
+            {isAr ? `حدث خطأ في العملية: ${errorCode}${errorPgCode ? ` (${errorPgCode})` : ""}` : `Catalog action error: ${errorCode}${errorPgCode ? ` (${errorPgCode})` : ""}`}
+          </p>
+        ) : null}
+        {errorCode && errorDetail ? (
+          <p className="muted" style={{ marginTop: 6, marginBottom: 0, color: "#b91c1c" }}>
+            {errorDetail}
           </p>
         ) : null}
         {data.bootstrapNote ? (
@@ -492,9 +499,9 @@ export default async function AdminCatalogPage({
         <div><strong>{outOfStockCount}</strong><div className="muted">{isAr ? "نفدت الكمية" : "Out of stock"}</div></div>
         <div><strong>{data.promos.length}</strong><div className="muted">{isAr ? "العروض" : "Promotions"}</div></div>
         <div><strong>{variantsActive}</strong><div className="muted">{isAr ? "متغيرات مفعلة" : "Active variants"}</div></div>
-              <div><strong>{activeSeasonalPromos}</strong><div className="muted">{isAr ? "حملات موسمية مفعلة" : "Active seasonal campaigns"}</div></div>
+              <div><strong>{activeSeasonalPromos}</strong><div className="muted">{isAr ? "حملات تلقائية مفعلة" : "Active auto campaigns"}</div></div>
         <div><strong>{activePromoCodes}</strong><div className="muted">{isAr ? "أكواد ترويجية مفعلة" : "Active promo codes"}</div></div>
-        <div><strong>{productsWithSeasonalCampaign}</strong><div className="muted">{isAr ? "منتجات مشمولة بحملة موسمية" : "Products covered by seasonal campaign"}</div></div>
+        <div><strong>{productsWithSeasonalCampaign}</strong><div className="muted">{isAr ? "منتجات مشمولة بحملة تلقائية" : "Products covered by auto campaign"}</div></div>
         <div><strong>{activeReferralCodes}</strong><div className="muted">{isAr ? "أكواد إحالة مفعلة" : "Active referral codes"}</div></div>
       </section>
       <section className={styles.adminCard}>
@@ -866,7 +873,13 @@ export default async function AdminCatalogPage({
 
 <section id="promos-section" className={styles.adminCard}>
         <h2 style={{ marginTop: 0 }}>{isAr ? "إضافة / تعديل عرض" : "Add / Edit promotion"}</h2>
-        <p className="muted" style={{ marginTop: -4 }}>{isAr ? `نتائج: ${filteredPromos.length}` : `Results: ${filteredPromos.length}`}</p>
+        <p className="muted" style={{ marginTop: -4 }}>{isAr ? `نتائج: ` : `Results: `}</p>
+
+        {selectedPromo ? (
+          <div style={{ border: "1px solid #b91c1c", background: "#fff1f2", padding: 10, borderRadius: 12, color: "#b91c1c", fontWeight: 600 }}>
+            {isAr ? `تم تحميل عرض موجود للتعديل (ID: ). سيتم استبدال القيم عند الحفظ.` : `Loaded existing promotion for editing (ID: ). Saving will overwrite its values.`}
+          </div>
+        ) : null}
 
         <form method="get" action="/admin/catalog" className={styles.adminGrid} style={{ marginBottom: 12 }}>
           <div style={{ display: "grid", gap: 8, gridTemplateColumns: "minmax(0,1fr) auto" }}>

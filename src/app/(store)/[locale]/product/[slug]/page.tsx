@@ -248,7 +248,7 @@ export default async function ProductDetailPage({
        left join lateral (
          select pr.id, pr.discount_type, pr.discount_value, pr.priority, pr.ends_at, pr.starts_at
          from promotions pr
-         where pr.promo_kind='SEASONAL'
+         where pr.promo_kind in ('AUTO','SEASONAL')
            and pr.is_active=true
            and (pr.starts_at is null or pr.starts_at <= now())
            and (pr.ends_at is null or pr.ends_at >= now())
@@ -282,7 +282,7 @@ export default async function ProductDetailPage({
   const cat = cr.rows[0];
 
   const imgs = await db.query<{ id: number }>(
-    `select id
+    `select id::int as id
        from product_images
       where product_id=$1
       order by "position" asc, id asc`,
@@ -290,7 +290,7 @@ export default async function ProductDetailPage({
   );
 
   const variantsRes = await db.query<VariantRow>(
-    `select id, label, price_jod::text as price_jod, compare_at_price_jod::text as compare_at_price_jod, is_default, sort_order
+    `select id::int as id, label, price_jod::text as price_jod, compare_at_price_jod::text as compare_at_price_jod, is_default, sort_order
        from product_variants
       where product_id=$1 and is_active=true
       order by is_default desc, sort_order asc, id asc`,
@@ -305,7 +305,7 @@ export default async function ProductDetailPage({
             vm.min_variant_price_jod::text as min_variant_price_jod,
             p.price_jod::text as price_jod,
             (
-              select pi.id
+                            select pi.id::int
               from product_images pi
               where pi.product_id=p.id
               order by pi."position" asc, pi.id asc

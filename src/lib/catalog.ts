@@ -179,6 +179,7 @@ export async function ensureCatalogTables() {
        set promo_kind = case
          when promo_kind in ('AUTO','SEASONAL') then 'AUTO'
          when promo_kind in ('CODE','PROMO','REFERRAL') then 'CODE'
+         when (code is null or btrim(code) = '') then 'AUTO'
          else 'CODE'
        end
      where promo_kind is null

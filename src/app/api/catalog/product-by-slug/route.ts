@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
 
     const r = await db.query<ProductRow>(
       `select p.slug, p.name_en, p.name_ar, p.description_en, p.description_ar, p.price_jod, p.is_active,
-              dv.id as variant_id,
+              dv.id::int as variant_id,
               dv.label as variant_label,
               dv.price_jod::text as variant_price_jod
          from products p

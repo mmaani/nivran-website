@@ -108,7 +108,7 @@ export async function GET(req: Request) {
     }
 
     const pr = await db.query<ProductRow>(
-    `select id, slug, slug_en, slug_ar, name_en, name_ar, description_en, description_ar,
+    `select id::int as id, slug, slug_en, slug_ar, name_en, name_ar, description_en, description_ar,
             price_jod, compare_at_price_jod, inventory_qty, category_key, is_active
        from products
       where ${id ? "id=$1" : "slug=$1"}
@@ -122,7 +122,7 @@ export async function GET(req: Request) {
     }
 
     const imgRes = await db.query<ProductImageRow>(
-    `select id, "position"::int as position
+    `select id::int as id, "position"::int as position
        from product_images
       where product_id=$1
       order by "position" asc nulls last, id asc`,
@@ -130,17 +130,22 @@ export async function GET(req: Request) {
   );
 
     const promoRes = await db.query<PromotionRow>(
-    `select id, promo_kind, code, title_en, title_ar, discount_type, discount_value, category_keys
+    `select id::int as id, promo_kind, code, title_en, title_ar, discount_type, discount_value, category_keys
        from promotions
-      where is_active=true and promo_kind='SEASONAL'
+      where is_active=true and promo_kind in ('AUTO','SEASONAL')
         and (starts_at is null or starts_at <= ${nowSql()})
         and (ends_at is null or ends_at >= ${nowSql()})
         and (
           category_keys is null
           or array_length(category_keys, 1) is null
-          or $1 = any(category_keys)
+          or  = any(category_keys)
         )
-      order by created_at desc
+        and (
+          product_slugs is null
+          or array_length(product_slugs, 1) is null
+          or  = any(product_slugs)
+        )
+      order by priority desc, created_at desc
       limit 1`,
     [product.category_key]
   );

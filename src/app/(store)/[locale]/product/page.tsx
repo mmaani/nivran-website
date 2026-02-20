@@ -130,13 +130,13 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
             p.description_ar,
             p.price_jod::text as price_jod,
             vm.min_variant_price_jod::text as min_variant_price_jod,
-            dv.id as default_variant_id,
+            dv.id::int as default_variant_id,
             dv.label as default_variant_label,
             dv.price_jod::text as default_variant_price_jod,
             p.category_key,
             p.inventory_qty,
             (
-              select pi.id
+                            select pi.id::int
               from product_images pi
               where pi.product_id=p.id
               order by pi."position" asc, pi.id asc
@@ -171,7 +171,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
        left join lateral (
          select pr.id, pr.discount_type, pr.discount_value, pr.priority
          from promotions pr
-         where pr.promo_kind='SEASONAL'
+         where pr.promo_kind in ('AUTO','SEASONAL')
            and pr.is_active=true
            and (pr.starts_at is null or pr.starts_at <= now())
            and (pr.ends_at is null or pr.ends_at >= now())
@@ -194,7 +194,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
     productRows = productsRes.rows;
 
       const campaignsRes = await db.query<CampaignRow>(
-        `select id, promo_kind, title_en, title_ar, discount_type, discount_value::text,
+        `select id::int as id, promo_kind, title_en, title_ar, discount_type, discount_value::text,
                 ends_at::text as ends_at, starts_at::text as starts_at, min_order_jod::text as min_order_jod,
                 category_keys, product_slugs
            from promotions
@@ -238,7 +238,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
       discountValue: toSafeNumber(c.discount_value),
       minOrderJod: toSafeNumber(c.min_order_jod),
     }))
-    .filter((c) => String(c.promo_kind || "").toUpperCase() === "SEASONAL")
+    .filter((c) => { const k = String(c.promo_kind || "").toUpperCase(); return k === "AUTO" || k === "SEASONAL"; })
     .map((c) => ({
       id: c.id,
       title: (isAr ? c.title_ar : c.title_en) || (isAr ? "عرض خاص" : "Special campaign"),

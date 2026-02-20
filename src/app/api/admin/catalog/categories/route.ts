@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureCatalogTablesSafe } from "@/lib/catalog";
 import { requireAdmin } from "@/lib/guards";
-import { catalogErrorRedirect, catalogSavedRedirect, catalogUnauthorizedRedirect } from "../redirects";
+import {
+  catalogErrorRedirect,
+  catalogSavedRedirect,
+  catalogUnauthorizedRedirect,
+} from "../redirects";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -83,8 +87,9 @@ export async function POST(req: Request) {
     if (action === "delete") {
       const key = normalizeKey(form.get("key"));
       if (key) {
-        await db.query(`delete from categories where key=$1`, [key]);
+        // Move any products pointing to this category BEFORE deletion.
         await db.query(`update products set category_key='perfume' where category_key=$1`, [key]);
+        await db.query(`delete from categories where key=$1`, [key]);
       }
     }
 
