@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { ensureOrdersTables } from "@/lib/orders";
+import { ensureOrdersTables, commitInventoryForPaidCart } from "@/lib/orders";
 import { consumePromotionUsage } from "@/lib/promotions";
 import {
   computePaytabsSignature,
@@ -108,7 +108,14 @@ async function tryConsumeCodePromoOnPaid(cartId: string): Promise<void> {
           and promo_consumed = false`,
       [cartId]
     );
+  
+async function tryCommitInventoryOnPaid(cartId: string): Promise<void> {
+  await db.withTransaction(async (trx) => {
+    await commitInventoryForPaidCart(trx, cartId);
   });
+}
+
+});
 }
 
 export async function POST(req: Request) {
@@ -191,8 +198,13 @@ export async function POST(req: Request) {
     ]
   );
 
-  // If payment succeeded, consume CODE promo usage now (one-time).
+  // If payment succeeded, commit inventory and consume CODE promo usage now (one-time).
   if (nextStatus === "PAID") {
+    try {
+      await tryCommitInventoryOnPaid(cartId);
+    } catch {
+      // ignore inventory errors
+    }
     try {
       await tryConsumeCodePromoOnPaid(cartId);
     } catch {

@@ -1,5 +1,5 @@
 import "server-only";
-import { db } from "@/lib/db";
+import { db, type DbExecutor } from "@/lib/db";
 
 export async function ensureOrdersTables() {
   // 1) Create tables (only if missing)
@@ -102,7 +102,10 @@ export async function ensureOrdersTables() {
   `);
 
   // timestamps
-  await db.query(`alter table orders add column if not exists created_at timestamptz not null default now()`);
+  
+  // inventory commit (decrement stock) idempotency
+  await db.query(`alter table orders add column if not exists inventory_committed_at timestamptz`);
+await db.query(`alter table orders add column if not exists created_at timestamptz not null default now()`);
   await db.query(`alter table orders add column if not exists updated_at timestamptz not null default now()`);
 
   await db.query(`alter table paytabs_callbacks add column if not exists payload jsonb`);
@@ -118,6 +121,8 @@ export async function ensureOrdersTables() {
   await db.query(`create index if not exists idx_orders_promo_code on orders(promo_code)`);
   await db.query(`create index if not exists idx_orders_discount_source on orders(discount_source)`);
 
+  await db.query(`create index if not exists idx_orders_inventory_committed_at on orders(inventory_committed_at)`);
+
   await db.query(`create index if not exists idx_orders_promo_consumed on orders(promo_consumed)`);
   await db.query(`create index if not exists idx_orders_promo_consume_failed on orders(promo_consume_failed)`);
 
@@ -126,3 +131,144 @@ export async function ensureOrdersTables() {
   await db.query(`create index if not exists idx_paytabs_callbacks_created_at on paytabs_callbacks(created_at desc)`);
   await db.query(`create index if not exists idx_paytabs_callbacks_received_at on paytabs_callbacks(received_at desc)`);
 }
+
+
+type InventoryDelta = { slug: string; qty: number };
+
+function toNonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const s = value.trim();
+  return s ? s : null;
+}
+
+function toQty(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(1, Math.min(999, Math.trunc(n)));
+}
+
+function parseJsonIfString(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const s = value.trim();
+  if (!s) return null;
+  try {
+    return JSON.parse(s) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function extractInventoryDeltas(itemsValue: unknown): InventoryDelta[] {
+  const parsed = parseJsonIfString(itemsValue);
+  if (!Array.isArray(parsed)) return [];
+
+  const map = new Map<string, number>();
+
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== "object") continue;
+    const obj = entry as Record<string, unknown>;
+    const slug = toNonEmptyString(obj.slug);
+    if (!slug) continue;
+    const qty = toQty(obj.qty);
+    map.set(slug, (map.get(slug) || 0) + qty);
+  }
+
+  return Array.from(map.entries()).map(([slug, qty]) => ({ slug, qty }));
+}
+
+type OrderInventoryRow = {
+  cart_id: string;
+  status: string;
+  inventory_committed_at: string | null;
+  items: unknown;
+};
+
+/**
+ * Commit inventory (decrement products.inventory_qty) once the order is PAID / PAID_COD.
+ * Idempotent via orders.inventory_committed_at.
+ */
+export async function commitInventoryForPaidCart(trx: DbExecutor, cartId: string): Promise<boolean> {
+  const { rows } = await trx.query<OrderInventoryRow>(
+    `select cart_id, status, inventory_committed_at, items
+       from orders
+      where cart_id = $1
+      for update`,
+    [cartId]
+  );
+
+  const order = rows[0];
+  if (!order) return false;
+
+  const status = String(order.status || "").toUpperCase();
+  const isPaid = status === "PAID" || status === "PAID_COD";
+  if (!isPaid) return false;
+
+  if (order.inventory_committed_at) return false;
+
+  const deltas = extractInventoryDeltas(order.items);
+
+  // Mark committed even if deltas are empty (prevents repeated webhook attempts).
+  for (const d of deltas) {
+    await trx.query(
+      `update products
+          set inventory_qty = greatest(0, inventory_qty - $2::int),
+              updated_at = now()
+        where slug = $1::text`,
+      [d.slug, d.qty]
+    );
+  }
+
+  await trx.query(
+    `update orders
+        set inventory_committed_at = now(),
+            updated_at = now()
+      where cart_id = $1
+        and inventory_committed_at is null`,
+    [cartId]
+  );
+
+  return true;
+}
+
+export async function commitInventoryForPaidOrderId(trx: DbExecutor, orderId: number): Promise<boolean> {
+  const { rows } = await trx.query<OrderInventoryRow>(
+    `select cart_id, status, inventory_committed_at, items
+       from orders
+      where id = $1
+      for update`,
+    [orderId]
+  );
+
+  const order = rows[0];
+  if (!order) return false;
+
+  const status = String(order.status || "").toUpperCase();
+  const isPaid = status === "PAID" || status === "PAID_COD";
+  if (!isPaid) return false;
+
+  if (order.inventory_committed_at) return false;
+
+  const deltas = extractInventoryDeltas(order.items);
+  for (const d of deltas) {
+    await trx.query(
+      `update products
+          set inventory_qty = greatest(0, inventory_qty - $2::int),
+              updated_at = now()
+        where slug = $1::text`,
+      [d.slug, d.qty]
+    );
+  }
+
+  await trx.query(
+    `update orders
+        set inventory_committed_at = now(),
+            updated_at = now()
+      where id = $1
+        and inventory_committed_at is null`,
+    [orderId]
+  );
+
+  return true;
+}
+
+

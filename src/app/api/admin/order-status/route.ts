@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { ensureOrdersTables } from "@/lib/orders";
+import { ensureOrdersTables, commitInventoryForPaidOrderId } from "@/lib/orders";
 import { requireAdmin } from "@/lib/guards";
 import { consumePromotionUsage } from "@/lib/promotions";
 
@@ -101,6 +101,13 @@ async function tryConsumeCodePromoIfPaidById(orderId: number): Promise<void> {
       [orderId]
     );
   });
+
+async function tryCommitInventoryIfPaidById(orderId: number): Promise<void> {
+  await db.withTransaction(async (trx) => {
+    await commitInventoryForPaidOrderId(trx, orderId);
+  });
+}
+
 }
 
 export async function POST(req: Request) {
@@ -141,6 +148,11 @@ export async function POST(req: Request) {
   );
 
   if (nextStatus === "PAID_COD" || nextStatus === "PAID") {
+    try {
+      await tryCommitInventoryIfPaidById(id);
+    } catch {
+      // ignore
+    }
     try {
       await tryConsumeCodePromoIfPaidById(id);
     } catch {
