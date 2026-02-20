@@ -13,6 +13,15 @@ const REQUIRED = [
     ],
   },
   {
+    file: "src/app/(store)/[locale]/product/[slug]/page.tsx",
+    checks: [
+      "ensureCatalogTablesSafe",
+      "isRecoverableCatalogSetupError",
+      "renderFallbackPdp",
+      "CATALOG_RECOVERABLE_ERROR",
+    ],
+  },
+  {
     file: "src/lib/catalog.ts",
     checks: [
       'code === "42P01"',
