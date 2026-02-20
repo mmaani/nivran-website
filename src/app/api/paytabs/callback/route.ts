@@ -1,3 +1,4 @@
+// src/app/api/paytabs/callback/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureOrdersTables, commitInventoryForPaidCart } from "@/lib/orders";
@@ -33,7 +34,6 @@ async function hasPayloadColumn(): Promise<boolean> {
   );
   return (r.rowCount ?? 0) > 0;
 }
-
 
 type OrderForConsume = {
   cart_id: string;
@@ -105,17 +105,16 @@ async function tryConsumeCodePromoOnPaid(cartId: string): Promise<void> {
               promo_consumed_at = coalesce(promo_consumed_at, now()),
               updated_at = now()
         where cart_id = $1
-          and promo_consumed = false`,
+          and coalesce(promo_consumed, false) = false`,
       [cartId]
     );
-  
+  });
+}
+
 async function tryCommitInventoryOnPaid(cartId: string): Promise<void> {
   await db.withTransaction(async (trx) => {
     await commitInventoryForPaidCart(trx, cartId);
   });
-}
-
-});
 }
 
 export async function POST(req: Request) {
@@ -135,11 +134,11 @@ export async function POST(req: Request) {
     payload = null;
   }
 
-  const cartId = String(payload?.cart_id || payload?.cartId || "").trim() || null;
-  const tranRef = String(payload?.tran_ref || "").trim() || null;
+  const cartId = String(payload?.cart_id || payload?.cartId || "").trim() || "";
+  const tranRef = String(payload?.tran_ref || "").trim() || "";
   const respStatus = String(payload?.payment_result?.response_status || "").trim();
   const respMessage =
-    String(payload?.payment_result?.response_message || payload?.message || "").trim() || null;
+    String(payload?.payment_result?.response_message || payload?.message || "").trim() || "";
 
   // Always record callback (even invalid signature) for auditability
   try {
@@ -150,7 +149,15 @@ export async function POST(req: Request) {
           (cart_id, tran_ref, signature_header, signature_computed, signature_valid, raw_body, payload)
          values
           ($1,$2,$3,$4,$5,$6,$7)`,
-        [cartId, tranRef, sigHeader || null, computed, sigValid, rawBody, payload ? JSON.stringify(payload) : null]
+        [
+          cartId || null,
+          tranRef || null,
+          sigHeader || null,
+          computed,
+          sigValid,
+          rawBody,
+          payload ? (payload as unknown) : null,
+        ]
       );
     } else {
       await db.query(
@@ -158,7 +165,7 @@ export async function POST(req: Request) {
           (cart_id, tran_ref, signature_header, signature_computed, signature_valid, raw_body)
          values
           ($1,$2,$3,$4,$5,$6)`,
-        [cartId, tranRef, sigHeader || null, computed, sigValid, rawBody]
+        [cartId || null, tranRef || null, sigHeader || null, computed, sigValid, rawBody]
       );
     }
   } catch {
@@ -178,24 +185,15 @@ export async function POST(req: Request) {
 
   await db.query(
     `update orders
-        set paytabs_tran_ref = coalesce(nullif($2,''), paytabs_tran_ref),
-            paytabs_last_payload = $3,
-            paytabs_last_signature = $4,
-            paytabs_response_status = $5,
-            paytabs_response_message = $6,
-            status = case when status = any($7) then $8 else status end,
+        set paytabs_tran_ref = coalesce(nullif($2::text,''), paytabs_tran_ref),
+            paytabs_last_payload = $3::text,
+            paytabs_last_signature = $4::text,
+            paytabs_response_status = $5::text,
+            paytabs_response_message = $6::text,
+            status = case when status = any($7::text[]) then $8::text else status end,
             updated_at = now()
-      where cart_id = $1`,
-    [
-      cartId,
-      tranRef || "",
-      rawBody,
-      sigHeader || "",
-      respStatus,
-      respMessage,
-      allowedFrom,
-      nextStatus,
-    ]
+      where cart_id = $1::text`,
+    [cartId, tranRef, rawBody, sigHeader, respStatus, respMessage, allowedFrom, nextStatus]
   );
 
   // If payment succeeded, commit inventory and consume CODE promo usage now (one-time).
