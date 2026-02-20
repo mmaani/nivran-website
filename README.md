@@ -2,6 +2,28 @@
 
 NIVRAN / نيفـران storefront on Next.js App Router with Neon Postgres and PayTabs Hosted Payment Page (HPP).
 
+## Runbook contract check
+
+Run this to verify README-critical environment keys and helper scripts are still present:
+
+```bash
+pnpm check:readme-runbook-contract
+```
+
+### One-command local checklist
+
+To run the practical README verification path in one go:
+
+```bash
+pnpm check:readme-checklist
+```
+
+This executes:
+- runbook contract check
+- CI guard checks (including product page + catalog API fallback contracts)
+- lint
+- production build
+
 ## Local development
 
 1. Install dependencies:
