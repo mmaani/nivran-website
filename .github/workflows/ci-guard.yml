@@ -20,26 +20,31 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install pnpm (Corepack)
+      - name: Enable pnpm (Corepack)
         run: |
-          npm install --global corepack@latest
+          set -euxo pipefail
+          npm i -g corepack@latest
           corepack enable
           corepack prepare pnpm@10 --activate
-          pnpm --version
-
-      - name: Get pnpm store path
-        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Cache pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.PNPM_STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-
+          node -v
+          pnpm -v
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          set -euxo pipefail
+          pnpm install --frozen-lockfile
 
-      - name: Guard + lint + build
-        run: pnpm ci:guard:full
+      - name: Guard
+        run: |
+          set -euxo pipefail
+          pnpm ci:guard || pnpm ci:guard:full
+
+      - name: Lint
+        run: |
+          set -euxo pipefail
+          pnpm lint
+
+      - name: Build
+        run: |
+          set -euxo pipefail
+          pnpm build

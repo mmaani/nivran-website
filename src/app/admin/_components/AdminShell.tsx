@@ -87,74 +87,25 @@ export default function AdminShell({
       <header className="admin-topbar">
         <div className="admin-topbar-inner">
           <div className="admin-brand">
-            <Link className="admin-logo" href={authed ? "/admin" : "/admin/login"}>
-              <Image src="/brand/logo.svg" alt="NIVRAN" width={34} height={34} priority />
-              <span>NIVRAN</span>
-            </Link>
-            <p className="admin-subtitle">
-              <T en="Operations Console" ar="منصة تشغيل المتجر" />
-            </p>
-            <p className="admin-context">
-              <T
-                en="Unified overview for orders, catalog, support, and payment reliability."
-                ar="نظرة موحّدة للطلبات والكتالوج والدعم وموثوقية المدفوعات."
-              />
-            </p>
+            <a href="/admin" className="admin-logo">
+              NIVRAN
+            </a>
+            <span className="admin-badge">Admin</span>
           </div>
 
-          {authed ? (
-            <nav className="admin-nav" aria-label={lang === "ar" ? "التنقل الإداري" : "Admin navigation"}>
-              {nav.map((item) => {
-                const active = pathname === item.href || pathname.startsWith(item.href + "/");
-                return (
-                  <Link key={item.href} href={item.href} className={`nav-link ${active ? "active" : ""}`}>
-                    <span className="nav-icon" aria-hidden>
-                      {item.icon}
-                    </span>
-                    <T en={item.en} ar={item.ar} />
-                  </Link>
-                );
-              })}
-            </nav>
-          ) : (
-            <div className="admin-login-chip">
-              <T en="Secure admin session required" ar="يلزم تسجيل دخول إداري آمن" />
-            </div>
-          )}
-
-
-          {authed ? (
-            <div className="admin-context-row">
-              <span className="admin-pill"><T en="Live operations" ar="تشغيل مباشر" /></span>
-              <span className="admin-pill admin-pill-muted" suppressHydrationWarning>
-                {nowLabel || "—"}
-              </span>
-              <Link className="admin-mini-link" href="/admin/catalog#promos-section"><T en="Campaigns" ar="الحملات" /></Link>
-              <Link className="admin-mini-link" href="/admin/catalog#variants-section"><T en="Variants" ar="المتغيرات" /></Link>
-              <Link className="admin-mini-link" href="/admin/orders"><T en="Order queue" ar="قائمة الطلبات" /></Link>
-            </div>
-          ) : null}
+          <nav className="admin-nav" aria-label="Admin">
+            <a href="/admin" className="admin-link">Dashboard</a>
+            <a href="/admin/orders" className="admin-link">Orders</a>
+            <a href="/admin/catalog" className="admin-link">Catalog</a>
+            <a href="/admin/customers" className="admin-link">Customers</a>
+            <a href="/admin/inbox" className="admin-link">Inbox</a>
+            <a href="/admin/staff" className="admin-link">Staff</a>
+          </nav>
 
           <div className="admin-actions">
-            <button
-              type="button"
-              className="btn"
-              onClick={toggleLang}
-              title={lang === "en" ? "Switch to Arabic" : "التبديل إلى الإنجليزية"}
-              disabled={savingLang}
-            >
-              {lang === "en" ? "AR" : "EN"}
-            </button>
-
-            <Link className="btn" href="/">
-              <T en="Storefront" ar="واجهة المتجر" />
-            </Link>
-
-            {authed ? (
-              <button className="btn" type="button" onClick={logout} disabled={loggingOut}>
-                <T en={loggingOut ? "Signing out…" : "Logout"} ar={loggingOut ? "جارٍ تسجيل الخروج…" : "تسجيل الخروج"} />
-              </button>
-            ) : null}
+            <form action="/api/admin/logout" method="POST">
+              <button className="admin-logout" type="submit">Logout</button>
+            </form>
           </div>
         </div>
       </header>
