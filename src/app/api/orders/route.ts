@@ -8,6 +8,7 @@ import { ensureCatalogTables } from "@/lib/catalog";
 import { getCustomerIdFromRequest } from "@/lib/identity";
 import {
   consumePromotionUsage,
+  evaluateAutoPromotionForLines,
   evaluatePromoCodeForLines,
 } from "@/lib/promotions";
 
@@ -103,8 +104,10 @@ export async function POST(req: NextRequest) {
   const locale = body.locale === "ar" ? "ar" : "en";
 
   const promoCode = String(body.promoCode || "").trim().toUpperCase();
-  const discountMode = String(body.discountMode || "NONE").toUpperCase();
-  const discountSource = discountMode === "CODE" ? "CODE" : null;
+  const discountModeRaw = String(body.discountMode || "NONE").toUpperCase();
+  const wantsCodeDiscount = discountModeRaw === "CODE";
+  // discountSource is computed server-side (null | 'AUTO' | 'CODE')
+  let discountSource: "AUTO" | "CODE" | null = wantsCodeDiscount ? "CODE" : null;
 
   const paymentMethod: PaymentMethod =
     String(body.paymentMethod || body.mode || "").toUpperCase() === "COD" ? "COD" : "PAYTABS";
@@ -292,6 +295,18 @@ export async function POST(req: NextRequest) {
     finalPromoCode = codeEval.promoCode || promoCode;
   }
 
+  // If no CODE promo is applied, try seasonal (AUTO) promotions server-side.
+  if (discountSource !== "CODE") {
+    const autoEval = await evaluateAutoPromotionForLines(db, lines, subtotalBeforeDiscount);
+    if (autoEval.ok && autoEval.discountJod > 0) {
+      discountSource = "AUTO";
+      discount = autoEval.discountJod;
+      subtotalAfterDiscount = autoEval.subtotalAfterDiscountJod;
+      promotionId = autoEval.promotionId;
+      finalPromoCode = null;
+    }
+  }
+
   const shippingThreshold = await readFreeShippingThresholdJod();
   const freeShippingThresholdJod = shippingThreshold.value;
   const shippingJod = shippingForSubtotal(subtotalAfterDiscount, lines.length > 0, freeShippingThresholdJod);
@@ -333,7 +348,7 @@ export async function POST(req: NextRequest) {
 
   const insertedCartId = await db
     .withTransaction(async (trx) => {
-      if (promotionId) {
+      if (promotionId && discountSource === "CODE") {
         const consumed = await consumePromotionUsage(trx, promotionId);
         if (!consumed) {
           throw new Error(locale === "ar" ? "كود الخصم تجاوز حد الاستخدام" : "Promo code usage limit reached");

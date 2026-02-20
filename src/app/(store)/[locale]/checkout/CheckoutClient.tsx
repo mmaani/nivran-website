@@ -6,7 +6,7 @@ import { clearLocalCart, readLocalCart, type CartItem } from "@/lib/cartStore";
 
 type Locale = "en" | "ar";
 type JsonObject = Record<string, unknown>;
-type DiscountMode = "NONE" | "CODE";
+type DiscountMode = "NONE" | "CODE" | "AUTO";
 type HealthMode = "checking" | "db" | "fallback" | "error";
 
 type PromoState = {
@@ -119,6 +119,7 @@ export default function CheckoutClient() {
       promoApply: isAr ? "تطبيق" : "Apply",
       promoRemove: isAr ? "إزالة" : "Remove",
       promoApplied: isAr ? "تم تطبيق الكود بنجاح" : "Campaign code applied successfully",
+      seasonalApplied: isAr ? "تم تطبيق الخصم الموسمي" : "Seasonal discount applied",
       promoExpired: isAr ? "هذا الكود منتهي أو غير نشط" : "This code is expired or inactive",
       promoNotFound: isAr ? "الكود غير موجود" : "Code was not found",
       promoMinOrder: isAr ? "الحد الأدنى للطلب غير مستوفى" : "Minimum order requirement not met",
@@ -330,11 +331,15 @@ export default function CheckoutClient() {
       if (!silent) setPromoBusy(false);
     }
   }, [COPY.promoApplied, isAr, items, locale, mapPromoError]);
-
+\n  const runAutoValidation = useCallback(async (): Promise<void> => {\n    if (promoServiceUnavailable) return;\n    if (!items.length) {\n      if (selectedPromo?.mode === \"AUTO\") {\n        setSelectedPromo(null);\n        setDiscountMode(\"NONE\");\n        setPromoMsg(null);\n      }\n      return;\n    }\n\n    // Never override an explicit CODE promo\n    if (discountMode === \"CODE\") return;\n\n    try {\n      const res = await fetch(\"/api/promotions/validate\", {\n        method: \"POST\",\n        headers: { \"content-type\": \"application/json\" },\n        body: JSON.stringify({\n          mode: \"AUTO\",\n          locale,\n          items: items.map((i) => ({ slug: i.slug, qty: i.qty, variantId: i.variantId })),\n        }),\n      });\n\n      const data: unknown = await readJsonSafe(res);\n      if (!res.ok || !isObject(data) || data.ok !== true) return;\n\n      // No seasonal promo\n      if (!isObject(data.promo)) {\n        if (selectedPromo?.mode === \"AUTO\") {\n          setSelectedPromo(null);\n          setDiscountMode(\"NONE\");\n          setPromoMsg(null);\n        }\n        return;\n      }\n\n      const discountJod = toNum(data.promo.discountJod);\n      if (!(discountJod > 0)) {\n        if (selectedPromo?.mode === \"AUTO\") {\n          setSelectedPromo(null);\n          setDiscountMode(\"NONE\");\n          setPromoMsg(null);\n        }\n        return;\n      }\n\n      const title = isAr\n        ? toStr(data.promo.titleAr || data.promo.titleEn || (isAr ? \"خصم موسمي\" : \"Seasonal\"))\n        : toStr(data.promo.titleEn || data.promo.titleAr || \"Seasonal\");\n\n      setSelectedPromo({\n        mode: \"AUTO\",\n        code: null,\n        title,\n        discountJod,\n      });\n      setDiscountMode(\"AUTO\");\n      // Keep message quiet unless user just removed a code\n    } catch {\n      // ignore\n    }\n  }, [discountMode, isAr, items, locale, promoServiceUnavailable, selectedPromo?.mode]);\n
   useEffect(() => {
     if (!selectedPromo?.code || !items.length) return;
     runPromoValidation(selectedPromo.code, { silent: true }).catch(() => null);
   }, [items, selectedPromo?.code, runPromoValidation]);
+
+  useEffect(() => {
+    runAutoValidation().catch(() => null);
+  }, [items, discountMode, runAutoValidation]);
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((sum, i) => sum + Number(i.priceJod || 0) * Number(i.qty || 1), 0);

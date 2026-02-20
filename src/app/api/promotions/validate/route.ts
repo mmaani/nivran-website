@@ -2,12 +2,15 @@ import { NextResponse } from "next/server";
 import { db, isDbConnectivityError } from "@/lib/db";
 import { ensureCatalogTablesSafe } from "@/lib/catalog";
 import {
+  evaluateAutoPromotionForLines,
   evaluatePromoCodeForLines,
   type PricedOrderLine,
 } from "@/lib/promotions";
 
 type PromoMode = "CODE" | "AUTO";
+
 type IncomingItem = { slug?: string; qty?: number; variantId?: number | null };
+
 type ProductRow = {
   id: number;
   slug: string;
@@ -15,7 +18,14 @@ type ProductRow = {
   is_active: boolean;
   unit_price_jod: string | number;
 };
+
 type VariantRow = { id: number; product_id: number; price_jod: string | number };
+
+type JsonObject = Record<string, unknown>;
+
+function isObject(v: unknown): v is JsonObject {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
 
 function normalizeQty(value: unknown): number {
   const n = Number(value);
@@ -43,19 +53,28 @@ function normalizeItems(items: unknown): { slug: string; qty: number; variantId:
 
 function pickMode(value: unknown): PromoMode {
   const normalized = String(value || "").trim().toUpperCase();
-  return normalized === "AUTO" ? "AUTO" : "CODE";
+  return normalized === "AUTO" || normalized === "SEASONAL" ? "AUTO" : "CODE";
 }
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+async function readJsonSafe(res: Response): Promise<unknown> {
+  const raw = await res.text();
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET() {
   return NextResponse.json(
     {
       ok: true,
-      message: "Use POST /api/promotions/validate with mode, promoCode, locale, and items.",
+      message: "Use POST /api/promotions/validate with mode, promoCode (CODE only), locale, and items.",
       supportedMethods: ["POST"],
-      discountMode: "CODE",
       example: {
         mode: "CODE",
         promoCode: "WELCOME10",
@@ -82,45 +101,41 @@ export async function POST(req: Request) {
   }
 
   try {
-    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
-    if (!body) return NextResponse.json({ ok: false, error: "Invalid request" }, { status: 400 });
+    const body = (await req.json().catch(() => null)) as unknown;
+    if (!isObject(body)) return NextResponse.json({ ok: false, error: "Invalid request" }, { status: 400 });
 
     const locale = body.locale === "ar" ? "ar" : "en";
     const mode = pickMode(body.mode);
     const promoCode = String(body.promoCode || "").trim().toUpperCase();
     const normalized = normalizeItems(body.items);
 
+    if (!normalized.length) {
+      return NextResponse.json(
+        { ok: false, error: locale === "ar" ? "السلة فارغة" : "Cart items are required" },
+        { status: 400 }
+      );
+    }
+
     if (mode === "AUTO" && promoCode) {
       return NextResponse.json(
         {
           ok: false,
-          error: locale === "ar" ? "لا يمكن استخدام الكود مع وضع AUTO" : "Promo code is not allowed in AUTO mode",
+          error: locale === "ar" ? "لا يمكن استخدام كود مع الخصم الموسمي" : "Promo code is not allowed in seasonal mode",
           reason: "DISCOUNT_MODE_UNSUPPORTED",
         },
         { status: 400 }
       );
-    }
-
-    if (mode !== "CODE") {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: locale === "ar" ? "وضع الخصم غير مدعوم" : "Unsupported discount mode",
-          reason: "DISCOUNT_MODE_UNSUPPORTED",
-        },
-        { status: 400 }
-      );
-    }
-
-    if (!normalized.length) {
-      return NextResponse.json({ ok: false, error: locale === "ar" ? "السلة فارغة" : "Cart items are required" }, { status: 400 });
     }
 
     if (mode === "CODE" && !promoCode) {
-      return NextResponse.json({ ok: false, error: locale === "ar" ? "أدخل كود الخصم" : "Promo code is required" }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: locale === "ar" ? "أدخل كود الخصم" : "Promo code is required" },
+        { status: 400 }
+      );
     }
 
     const slugs = Array.from(new Set(normalized.map((i) => i.slug)));
+
     const productRes = await db.query<ProductRow>(
       `select p.id,
               p.slug,
@@ -139,9 +154,13 @@ export async function POST(req: Request) {
         where p.slug = any($1::text[])`,
       [slugs]
     );
+
     const productMap = new Map(productRes.rows.map((p) => [p.slug, p]));
 
-    const variantIds = Array.from(new Set(normalized.map((i) => i.variantId).filter((id): id is number => typeof id === "number")));
+    const variantIds = Array.from(
+      new Set(normalized.map((i) => i.variantId).filter((id): id is number => typeof id === "number"))
+    );
+
     const variantMap = new Map<number, VariantRow>();
     if (variantIds.length) {
       const vRes = await db.query<VariantRow>(
@@ -155,6 +174,7 @@ export async function POST(req: Request) {
     }
 
     const lines: PricedOrderLine[] = [];
+
     for (const item of normalized) {
       const product = productMap.get(item.slug);
       if (!product || !product.is_active) {
@@ -185,29 +205,57 @@ export async function POST(req: Request) {
     }
 
     const subtotal = Number(lines.reduce((sum, line) => sum + line.line_total_jod, 0).toFixed(2));
-    const result = await evaluatePromoCodeForLines(db, promoCode, lines, subtotal);
 
-    if (!result.ok) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: locale === "ar" ? "الخصم غير صالح أو غير متاح" : "Discount is invalid or not eligible",
-          reason: result.code,
+    if (mode === "CODE") {
+      const result = await evaluatePromoCodeForLines(db, promoCode, lines, subtotal);
+
+      if (!result.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: locale === "ar" ? "الخصم غير صالح أو غير متاح" : "Discount is invalid or not eligible",
+            reason: result.code,
+          },
+          { status: 200 }
+        );
+      }
+
+      return NextResponse.json({
+        ok: true,
+        promo: {
+          mode: "CODE",
+          promotionId: result.promotionId,
+          code: result.promoCode,
+          discountJod: result.discountJod,
+          subtotalAfterDiscountJod: result.subtotalAfterDiscountJod,
+          eligibleSubtotalJod: result.eligibleSubtotalJod,
+          discountType: result.meta.discountType,
+          discountValue: result.meta.discountValue,
+          titleEn: result.meta.titleEn,
+          titleAr: result.meta.titleAr,
         },
-        { status: 200 }
-      );
+      });
+    }
+
+    // AUTO / SEASONAL
+    const auto = await evaluateAutoPromotionForLines(db, lines, subtotal);
+    if (!auto.ok) {
+      return NextResponse.json({ ok: true, promo: null, reason: auto.code }, { status: 200 });
     }
 
     return NextResponse.json({
       ok: true,
       promo: {
-        mode: "CODE",
-        promotionId: result.promotionId,
-        code: result.promoCode,
-        discountJod: result.discountJod,
-        subtotalAfterDiscountJod: result.subtotalAfterDiscountJod,
-        eligibleSubtotalJod: result.eligibleSubtotalJod,
-        ...result.meta,
+        mode: "AUTO",
+        promotionId: auto.promotionId,
+        code: null,
+        discountJod: auto.discountJod,
+        subtotalAfterDiscountJod: auto.subtotalAfterDiscountJod,
+        eligibleSubtotalJod: auto.eligibleSubtotalJod,
+        discountType: auto.meta.discountType,
+        discountValue: auto.meta.discountValue,
+        titleEn: auto.meta.titleEn,
+        titleAr: auto.meta.titleAr,
       },
     });
   } catch (error: unknown) {
@@ -217,6 +265,9 @@ export async function POST(req: Request) {
         { status: 503, headers: { "retry-after": "30", "cache-control": "no-store" } }
       );
     }
-    throw error;
+    return NextResponse.json(
+      { ok: false, error: "Promotion validation failed" },
+      { status: 500, headers: { "cache-control": "no-store" } }
+    );
   }
 }
