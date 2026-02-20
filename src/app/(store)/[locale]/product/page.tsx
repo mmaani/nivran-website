@@ -108,11 +108,8 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
   try {
     const bootstrap = await ensureCatalogTablesSafe();
     if (!bootstrap.ok) {
-      categoriesRows = fallbackCategories();
-      productRows = fallbackCatalogRows();
-      campaignRows = [];
-      console.warn(`[catalog] Using fallback product catalog: ${bootstrap.reason}`);
-    } else {
+      console.warn(`[catalog] ensureCatalogTables skipped: ${bootstrap.reason}`);
+    }
       const categoriesRes = await db.query<CategoryRow>(
     `select key, name_en, name_ar, is_active, is_promoted, sort_order
        from categories
@@ -147,8 +144,8 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
             (
               case
                 when bp.id is null then null
-                when bp.discount_type='PERCENT' then greatest(0, coalesce(vm.min_variant_price_jod, p.price_jod) - (coalesce(vm.min_variant_price_jod, p.price_jod) * (bp.discount_value / 100)))
-                when bp.discount_type='FIXED' then greatest(0, coalesce(vm.min_variant_price_jod, p.price_jod) - bp.discount_value)
+                when bp.discount_type='PERCENT' then greatest(0, coalesce(vm.min_variant_price_jod, p.price_jod, 0) - (coalesce(vm.min_variant_price_jod, p.price_jod, 0) * (bp.discount_value / 100)))
+                when bp.discount_type='FIXED' then greatest(0, coalesce(vm.min_variant_price_jod, p.price_jod, 0) - bp.discount_value)
                 else null
               end
             )::text as discounted_price_jod,
@@ -177,10 +174,10 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
            and (pr.ends_at is null or pr.ends_at >= now())
            and (pr.category_keys is null or array_length(pr.category_keys, 1) is null or p.category_key = any(pr.category_keys))
            and (pr.product_slugs is null or array_length(pr.product_slugs, 1) is null or p.slug = any(pr.product_slugs))
-           and (pr.min_order_jod is null or pr.min_order_jod <= coalesce(vm.min_variant_price_jod, p.price_jod))
+           and (pr.min_order_jod is null or pr.min_order_jod <= coalesce(vm.min_variant_price_jod, p.price_jod, 0))
          order by pr.priority desc,
                   case
-                    when pr.discount_type='PERCENT' then (coalesce(vm.min_variant_price_jod, p.price_jod) * (pr.discount_value / 100))
+                    when pr.discount_type='PERCENT' then (coalesce(vm.min_variant_price_jod, p.price_jod, 0) * (pr.discount_value / 100))
                     when pr.discount_type='FIXED' then pr.discount_value
                     else 0
                   end desc,
@@ -205,7 +202,6 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
           limit 8`
       );
       campaignRows = campaignsRes.rows;
-    }
   } catch (error: unknown) {
     if (!isDbConnectivityError(error) && !isRecoverableCatalogSetupError(error)) throw error;
 

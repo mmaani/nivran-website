@@ -273,13 +273,8 @@ export default async function AdminCatalogPage({
   const params = (await searchParams) || {};
   const saved = String(params.saved || "") === "1";
   const errorCode = String(params.error || "").trim();
-const errorPgCode = String(
-  Array.isArray(params.error_code) ? (params.error_code[0] ?? "") : (params.error_code ?? "")
-).trim();
-
-const errorDetail = String(
-  Array.isArray(params.error_detail) ? (params.error_detail[0] ?? "") : (params.error_detail ?? "")
-).trim();
+  const errorPgCode = String((params as any).error_code || "").trim();
+  const errorDetail = String((params as any).error_detail || "").trim();
   const variantError = errorCode === "invalid-variant";
   const duplicateVariantLabelError = errorCode === "duplicate-variant-label";
   const uploaded = String(params.uploaded || "") === "1";
@@ -882,7 +877,7 @@ const errorDetail = String(
 
         {selectedPromo ? (
           <div style={{ border: "1px solid #b91c1c", background: "#fff1f2", padding: 10, borderRadius: 12, color: "#b91c1c", fontWeight: 600 }}>
-            {isAr ? `تم تحميل عرض موجود للتعديل (ID: ). سيتم استبدال القيم عند الحفظ.` : `Loaded existing promotion for editing (ID: ). Saving will overwrite its values.`}
+            {isAr ? `تم تحميل عرض موجود للتعديل (ID: ${selectedPromo.id}). سيتم استبدال القيم عند الحفظ.` : `Loaded existing promotion for editing (ID: ${selectedPromo.id}). Saving will overwrite its values.`}
           </div>
         ) : null}
 

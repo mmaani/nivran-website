@@ -11,7 +11,7 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function normalizeKey(v: unknown) {
+function normalizeKey(v: unknown): string {
   return String(v || "")
     .trim()
     .toLowerCase()
@@ -19,6 +19,15 @@ function normalizeKey(v: unknown) {
     .replace(/[^a-z0-9-]/g, "")
     .replace(/-+/g, "-")
     .replace(/(^-+|-+$)/g, "");
+}
+
+function keyCandidates(v: unknown): string[] {
+  const raw = String(v || "").trim();
+  const norm = normalizeKey(raw);
+  const out: string[] = [];
+  if (raw) out.push(raw);
+  if (norm && norm !== raw) out.push(norm);
+  return out;
 }
 
 export async function POST(req: Request) {
@@ -39,7 +48,8 @@ export async function POST(req: Request) {
       const key = normalizeKey(form.get("key"));
       const nameEn = String(form.get("name_en") || "").trim();
       const nameAr = String(form.get("name_ar") || "").trim();
-      const sortOrder = Number(form.get("sort_order") || 0);
+      const sortOrderRaw = Number(form.get("sort_order") || 0);
+      const sortOrder = Number.isFinite(sortOrderRaw) ? sortOrderRaw : 0;
       const isActive = String(form.get("is_active") || "") === "on";
       const isPromoted = String(form.get("is_promoted") || "") === "on";
 
@@ -57,40 +67,69 @@ export async function POST(req: Request) {
                is_active=excluded.is_active,
                is_promoted=excluded.is_promoted,
                updated_at=now()`,
-        [key, nameEn, nameAr, Number.isFinite(sortOrder) ? sortOrder : 0, isActive, isPromoted]
+        [key, nameEn, nameAr, sortOrder, isActive, isPromoted]
       );
+
+      return catalogSavedRedirect(req, form);
     }
 
     if (action === "update") {
-      const key = normalizeKey(form.get("key"));
+      const candidates = keyCandidates(form.get("key"));
+      if (!candidates.length) return catalogErrorRedirect(req, form, "invalid-category");
+
       const nameEn = String(form.get("name_en") || "").trim();
       const nameAr = String(form.get("name_ar") || "").trim();
-      const sortOrder = Number(form.get("sort_order") || 0);
+      const sortOrderRaw = Number(form.get("sort_order") || 0);
+      const sortOrder = Number.isFinite(sortOrderRaw) ? sortOrderRaw : 0;
       const isActive = String(form.get("is_active") || "") === "on";
       const isPromoted = String(form.get("is_promoted") || "") === "on";
 
-      if (key) {
-        await db.query(
+      let updated = false;
+      for (const key of candidates) {
+        const r = await db.query(
           `update categories
-             set name_en=$2,
-                 name_ar=$3,
-                 sort_order=$4,
-                 is_active=$5,
-                 is_promoted=$6,
-                 updated_at=now()
-           where key=$1`,
-          [key, nameEn, nameAr, Number.isFinite(sortOrder) ? sortOrder : 0, isActive, isPromoted]
+              set name_en=$2,
+                  name_ar=$3,
+                  sort_order=$4,
+                  is_active=$5,
+                  is_promoted=$6,
+                  updated_at=now()
+            where key=$1`,
+          [key, nameEn, nameAr, sortOrder, isActive, isPromoted]
         );
+        if ((r as { rowCount?: unknown }).rowCount === 1) {
+          updated = true;
+          break;
+        }
       }
+
+      if (!updated) return catalogErrorRedirect(req, form, "category-not-found");
+      return catalogSavedRedirect(req, form);
     }
 
     if (action === "delete") {
-      const key = normalizeKey(form.get("key"));
-      if (key) {
-        // Move any products pointing to this category BEFORE deletion.
-        await db.query(`update products set category_key='perfume' where category_key=$1`, [key]);
-        await db.query(`delete from categories where key=$1`, [key]);
+      const candidates = keyCandidates(form.get("key"));
+      if (!candidates.length) return catalogErrorRedirect(req, form, "invalid-category");
+
+      let deleted = false;
+      for (const key of candidates) {
+        await db.query("begin");
+        try {
+          await db.query(`update products set category_key='perfume' where category_key=$1`, [key]);
+          const r = await db.query(`delete from categories where key=$1`, [key]);
+          await db.query("commit");
+          if ((r as { rowCount?: unknown }).rowCount === 1) {
+            deleted = true;
+            break;
+          }
+        } catch (e: unknown) {
+          await db.query("rollback");
+          throw e;
+        }
       }
+
+      if (!deleted) return catalogErrorRedirect(req, form, "category-not-found");
+      return catalogSavedRedirect(req, form);
     }
 
     return catalogSavedRedirect(req, form);

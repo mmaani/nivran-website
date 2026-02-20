@@ -185,8 +185,8 @@ export async function POST(req: Request) {
         `update products
             set name_en=case when nullif($2,'') is null then name_en else $2 end,
                 name_ar=case when nullif($3,'') is null then name_ar else $3 end,
-                description_en=case when $4 is null then description_en else $4 end,
-                description_ar=case when $5 is null then description_ar else $5 end,
+                description_en=case when $4::text is null then description_en else $4::text end,
+                description_ar=case when $5::text is null then description_ar else $5::text end,
                 price_jod=coalesce($6::numeric, price_jod),
                 compare_at_price_jod=case when $7::boolean then $8::numeric else compare_at_price_jod end,
                 inventory_qty=$9::int,

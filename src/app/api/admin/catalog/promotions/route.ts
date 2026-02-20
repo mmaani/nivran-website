@@ -52,6 +52,20 @@ function parseIntOrNull(raw: unknown): number | null {
   return Math.trunc(n);
 }
 
+function normalizeDatetimeLocalToTimestamptz(value: string | null): string | null {
+  const v = (value ?? "").trim();
+  if (!v) return null;
+
+  // If already has timezone info, keep it as-is.
+  if (/[zZ]$/.test(v) || /[+-]\d{2}:?\d{2}$/.test(v)) return v;
+
+  // datetime-local usually: YYYY-MM-DDTHH:mm or YYYY-MM-DDTHH:mm:ss
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v)) return `${v}:00+03:00`;
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(v)) return `${v}+03:00`;
+
+  return v;
+}
+
 function readCategoryKeys(form: FormData): string[] | null {
   const raw = form
     .getAll("category_keys")
@@ -106,8 +120,8 @@ export async function POST(req: Request) {
       const titleAr = String(form.get("title_ar") || "").trim();
       const discountType = String(form.get("discount_type") || "PERCENT").toUpperCase() === "FIXED" ? "FIXED" : "PERCENT";
       const discountValue = parseMoney(form.get("discount_value"));
-      const startsAt = String(form.get("starts_at") || "").trim() || null;
-      const endsAt = String(form.get("ends_at") || "").trim() || null;
+      const startsAt = normalizeDatetimeLocalToTimestamptz(String(form.get("starts_at") || ""));
+      const endsAt = normalizeDatetimeLocalToTimestamptz(String(form.get("ends_at") || ""));
       const usageLimit = parseIntOrNull(form.get("usage_limit"));
       const minOrderJod = parseMoney(form.get("min_order_jod"));
       const priority = parseIntOrNull(form.get("priority")) ?? 0;
@@ -131,7 +145,7 @@ export async function POST(req: Request) {
           `insert into promotions
             (promo_kind, code, title_en, title_ar, discount_type, discount_value, starts_at, ends_at, usage_limit, min_order_jod, priority, product_slugs, is_active, category_keys)
            values
-            ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+            ($1,$2,$3,$4,$5,$6,$7::timestamptz,$8::timestamptz,$9::int,$10::numeric,$11::int,$12::text[],$13::boolean,$14::text[])
            on conflict (code) do update
              set promo_kind=excluded.promo_kind,
                  title_en=excluded.title_en,
@@ -179,15 +193,15 @@ export async function POST(req: Request) {
                 title_en=$4,
                 title_ar=$5,
                 discount_type=$6,
-                discount_value=$7,
-                starts_at=$8,
-                ends_at=$9,
-                usage_limit=$10,
-                min_order_jod=$11,
-                priority=$12,
-                product_slugs=$13,
-                is_active=$14,
-                category_keys=$15,
+                discount_value=$7::numeric,
+                starts_at=$8::timestamptz,
+                ends_at=$9::timestamptz,
+                usage_limit=$10::int,
+                min_order_jod=$11::numeric,
+                priority=$12::int,
+                product_slugs=$13::text[],
+                is_active=$14::boolean,
+                category_keys=$15::text[],
                 updated_at=now()
           where id=$1::bigint
           returning id::text as id`,
@@ -210,7 +224,8 @@ export async function POST(req: Request) {
         ]
       );
 
-      const updatedId = u.rows?.[0]?.id || idRaw;
+      const updatedId = u.rows?.[0]?.id;
+      if (!updatedId) return catalogErrorRedirect(req, form, "promo-not-found");
       return catalogSavedRedirect(req, form, { promoEditId: updatedId });
     }
 

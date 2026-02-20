@@ -215,7 +215,7 @@ export default async function ProductDetailPage({
   try {
 
   const bootstrap = await ensureCatalogTablesSafe();
-  if (!bootstrap.ok) return renderFallbackPdp(bootstrap.reason);
+  if (!bootstrap.ok) console.warn(`[pdp] ensureCatalogTables skipped: ${bootstrap.reason}`);
 
   const pr = await db.query<ProductRow>(
     `select p.id,
@@ -254,7 +254,7 @@ export default async function ProductDetailPage({
            and (pr.ends_at is null or pr.ends_at >= now())
            and (pr.category_keys is null or array_length(pr.category_keys, 1) is null or p.category_key = any(pr.category_keys))
            and (pr.product_slugs is null or array_length(pr.product_slugs, 1) is null or p.slug = any(pr.product_slugs))
-           and (pr.min_order_jod is null or pr.min_order_jod <= p.price_jod)
+           and (pr.min_order_jod is null or pr.min_order_jod <= coalesce(p.price_jod, 0))
          order by pr.priority desc,
                   case
                     when pr.discount_type='PERCENT' then (p.price_jod * (pr.discount_value / 100))
