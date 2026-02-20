@@ -19,5 +19,7 @@ This folder is the single place for SQL schema and patch scripts.
 8. `patches/008_promo_checkout_patch.sql`
 9. `patches/009_discount_mode_constraints.sql`
 10. `patches/010_promotions_targeting_and_code_nullability.sql`
+11. `patches/011_variants_tags_promotions_orders.sql`
+12. `patches/012_free_shipping_default_69.sql`
 
 Apply in numeric order for a fresh environment.

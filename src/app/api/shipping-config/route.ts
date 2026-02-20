@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
-import { db, isDbConnectivityError } from "@/lib/db";
+import { isDbConnectivityError } from "@/lib/db";
 import { ensureCatalogTablesSafe } from "@/lib/catalog";
+import {
+  DEFAULT_BASE_SHIPPING_JOD,
+  DEFAULT_FREE_SHIPPING_THRESHOLD_JOD,
+  readFreeShippingThresholdJod,
+} from "@/lib/shipping";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,8 +17,8 @@ export async function GET() {
       return NextResponse.json(
         {
           ok: true,
-          thresholdJod: 35,
-          baseShippingJod: 3.5,
+          thresholdJod: DEFAULT_FREE_SHIPPING_THRESHOLD_JOD,
+          baseShippingJod: DEFAULT_BASE_SHIPPING_JOD,
           fallback: true,
           reason: bootstrap.reason,
         },
@@ -21,19 +26,28 @@ export async function GET() {
       );
     }
 
-    const r = await db.query<{ value_number: string | number | null }>(
-      `select value_number from store_settings where key='free_shipping_threshold_jod' limit 1`
-    );
-    const thresholdJod = Number(r.rows[0]?.value_number || 35);
+    const shippingThreshold = await readFreeShippingThresholdJod();
 
     return NextResponse.json(
-      { ok: true, thresholdJod, baseShippingJod: 3.5, fallback: false },
+      {
+        ok: true,
+        thresholdJod: shippingThreshold.value,
+        baseShippingJod: DEFAULT_BASE_SHIPPING_JOD,
+        fallback: shippingThreshold.fallback,
+        reason: shippingThreshold.reason,
+      },
       { headers: { "cache-control": "no-store" } }
     );
   } catch (error: unknown) {
     if (isDbConnectivityError(error)) {
       return NextResponse.json(
-        { ok: true, thresholdJod: 35, baseShippingJod: 3.5, fallback: true, reason: "DB_CONNECTIVITY" },
+        {
+          ok: true,
+          thresholdJod: DEFAULT_FREE_SHIPPING_THRESHOLD_JOD,
+          baseShippingJod: DEFAULT_BASE_SHIPPING_JOD,
+          fallback: true,
+          reason: "DB_CONNECTIVITY",
+        },
         { headers: { "cache-control": "no-store" } }
       );
     }
