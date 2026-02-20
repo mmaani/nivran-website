@@ -1,4 +1,4 @@
--- Promote legacy default free-shipping threshold from 35 -> 69 JOD.
+-- Promote legacy default free-shipping threshold from 35 -> 50 JOD.
 -- We only auto-update when the value is still at legacy default (or null),
 -- so custom merchant-configured thresholds remain untouched.
 
@@ -8,4 +8,4 @@ on conflict (key) do update
 set value_number = 50,
     updated_at = now()
 where store_settings.value_number is null
-   or store_settings.value_number = 35;
+   or store_settings.value_number = 50;
