@@ -331,7 +331,74 @@ export default function CheckoutClient() {
       if (!silent) setPromoBusy(false);
     }
   }, [COPY.promoApplied, isAr, items, locale, mapPromoError]);
-\n  const runAutoValidation = useCallback(async (): Promise<void> => {\n    if (promoServiceUnavailable) return;\n    if (!items.length) {\n      if (selectedPromo?.mode === \"AUTO\") {\n        setSelectedPromo(null);\n        setDiscountMode(\"NONE\");\n        setPromoMsg(null);\n      }\n      return;\n    }\n\n    // Never override an explicit CODE promo\n    if (discountMode === \"CODE\") return;\n\n    try {\n      const res = await fetch(\"/api/promotions/validate\", {\n        method: \"POST\",\n        headers: { \"content-type\": \"application/json\" },\n        body: JSON.stringify({\n          mode: \"AUTO\",\n          locale,\n          items: items.map((i) => ({ slug: i.slug, qty: i.qty, variantId: i.variantId })),\n        }),\n      });\n\n      const data: unknown = await readJsonSafe(res);\n      if (!res.ok || !isObject(data) || data.ok !== true) return;\n\n      // No seasonal promo\n      if (!isObject(data.promo)) {\n        if (selectedPromo?.mode === \"AUTO\") {\n          setSelectedPromo(null);\n          setDiscountMode(\"NONE\");\n          setPromoMsg(null);\n        }\n        return;\n      }\n\n      const discountJod = toNum(data.promo.discountJod);\n      if (!(discountJod > 0)) {\n        if (selectedPromo?.mode === \"AUTO\") {\n          setSelectedPromo(null);\n          setDiscountMode(\"NONE\");\n          setPromoMsg(null);\n        }\n        return;\n      }\n\n      const title = isAr\n        ? toStr(data.promo.titleAr || data.promo.titleEn || (isAr ? \"خصم موسمي\" : \"Seasonal\"))\n        : toStr(data.promo.titleEn || data.promo.titleAr || \"Seasonal\");\n\n      setSelectedPromo({\n        mode: \"AUTO\",\n        code: null,\n        title,\n        discountJod,\n      });\n      setDiscountMode(\"AUTO\");\n      // Keep message quiet unless user just removed a code\n    } catch {\n      // ignore\n    }\n  }, [discountMode, isAr, items, locale, promoServiceUnavailable, selectedPromo?.mode]);\n
+
+
+  const runAutoValidation = useCallback(async (): Promise<void> => {
+    if (promoServiceUnavailable) return;
+
+    if (!items.length) {
+      if (selectedPromo?.mode === "AUTO") {
+        setSelectedPromo(null);
+        setDiscountMode("NONE");
+        setPromoMsg(null);
+      }
+      return;
+    }
+
+    // Never override an explicit CODE promo
+    if (discountMode === "CODE") return;
+
+    try {
+      const res = await fetch("/api/promotions/validate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: "AUTO",
+          locale,
+          items: items.map((i) => ({ slug: i.slug, qty: i.qty, variantId: i.variantId })),
+        }),
+      });
+
+      const data: unknown = await readJsonSafe(res);
+      if (!res.ok || !isObject(data) || data.ok !== true) return;
+
+      // No seasonal promo
+      if (!isObject(data.promo)) {
+        if (selectedPromo?.mode === "AUTO") {
+          setSelectedPromo(null);
+          setDiscountMode("NONE");
+          setPromoMsg(null);
+        }
+        return;
+      }
+
+      const discountJod = toNum(data.promo.discountJod);
+      if (!(discountJod > 0)) {
+        if (selectedPromo?.mode === "AUTO") {
+          setSelectedPromo(null);
+          setDiscountMode("NONE");
+          setPromoMsg(null);
+        }
+        return;
+      }
+
+      const title = isAr
+        ? toStr(data.promo.titleAr || data.promo.titleEn || "خصم موسمي")
+        : toStr(data.promo.titleEn || data.promo.titleAr || "Seasonal");
+
+      setSelectedPromo({
+        mode: "AUTO",
+        code: null,
+        title,
+        discountJod,
+      });
+      setDiscountMode("AUTO");
+    } catch {
+      // ignore
+    }
+  }, [discountMode, isAr, items, locale, promoServiceUnavailable, selectedPromo?.mode]);
+
+
   useEffect(() => {
     if (!selectedPromo?.code || !items.length) return;
     runPromoValidation(selectedPromo.code, { silent: true }).catch(() => null);
