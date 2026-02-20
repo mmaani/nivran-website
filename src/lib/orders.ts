@@ -1,14 +1,14 @@
 import "server-only";
 import { db, type DbExecutor } from "@/lib/db";
 
-export async function ensureOrdersTables() {
+export async function ensureOrdersTables(): Promise<void> {
   // 1) Create tables (only if missing)
   await db.query(`
     create table if not exists orders (
       id bigserial primary key,
       cart_id text not null unique,
       status text not null,
-      amount numeric(10,2) not null,
+      amount numeric(10,2) not null default 0,
       currency text not null default 'JOD'
     );
   `);
@@ -30,6 +30,7 @@ export async function ensureOrdersTables() {
   await db.query(`alter table orders add column if not exists customer jsonb`);
   await db.query(`alter table orders add column if not exists shipping jsonb`);
   await db.query(`alter table orders add column if not exists items jsonb`);
+
   await db.query(`alter table orders add column if not exists customer_name text`);
   await db.query(`alter table orders add column if not exists customer_phone text`);
   await db.query(`alter table orders add column if not exists customer_email text`);
@@ -37,27 +38,43 @@ export async function ensureOrdersTables() {
   await db.query(`alter table orders add column if not exists shipping_address text`);
   await db.query(`alter table orders add column if not exists shipping_country text`);
   await db.query(`alter table orders add column if not exists notes text`);
+
   await db.query(`alter table orders add column if not exists subtotal_before_discount_jod numeric(10,2)`);
   await db.query(`alter table orders add column if not exists discount_jod numeric(10,2)`);
   await db.query(`alter table orders add column if not exists subtotal_after_discount_jod numeric(10,2)`);
   await db.query(`alter table orders add column if not exists shipping_jod numeric(10,2)`);
   await db.query(`alter table orders add column if not exists total_jod numeric(10,2)`);
+
   await db.query(`alter table orders add column if not exists promo_code text`);
   await db.query(`alter table orders add column if not exists promotion_id bigint`);
   await db.query(`alter table orders add column if not exists discount_source text`);
+
   await db.query(`alter table orders add column if not exists promo_consumed boolean not null default false`);
   await db.query(`alter table orders add column if not exists promo_consumed_at timestamptz`);
   await db.query(`alter table orders add column if not exists promo_consume_failed boolean not null default false`);
   await db.query(`alter table orders add column if not exists promo_consume_error text`);
+
   await db.query(`alter table orders add column if not exists payment_method text not null default 'PAYTABS'`);
   await db.query(`alter table orders add column if not exists customer_id bigint`);
+
   await db.query(`alter table orders add column if not exists paytabs_tran_ref text`);
   await db.query(`alter table orders add column if not exists paytabs_last_payload text`);
   await db.query(`alter table orders add column if not exists paytabs_last_signature text`);
   await db.query(`alter table orders add column if not exists paytabs_response_status text`);
   await db.query(`alter table orders add column if not exists paytabs_response_message text`);
 
+  // inventory commit (decrement stock) idempotency
+  await db.query(`alter table orders add column if not exists inventory_committed_at timestamptz`);
 
+  // timestamps
+  await db.query(`alter table orders add column if not exists created_at timestamptz not null default now()`);
+  await db.query(`alter table orders add column if not exists updated_at timestamptz not null default now()`);
+
+  await db.query(`alter table paytabs_callbacks add column if not exists payload jsonb`);
+  await db.query(`alter table paytabs_callbacks add column if not exists created_at timestamptz not null default now()`);
+  await db.query(`alter table paytabs_callbacks add column if not exists received_at timestamptz not null default now()`);
+
+  // Constraints (only create if missing)
   await db.query(`
     do $$
     begin
@@ -87,6 +104,7 @@ export async function ensureOrdersTables() {
       end if;
     end $$;
   `);
+
   // Keep amount/currency in sync for legacy readers.
   await db.query(`
     update orders
@@ -101,18 +119,6 @@ export async function ensureOrdersTables() {
      where currency is null or currency = ''
   `);
 
-  // timestamps
-  
-  // inventory commit (decrement stock) idempotency
-  await db.query(`alter table orders add column if not exists inventory_committed_at timestamptz`);
-await db.query(`alter table orders add column if not exists created_at timestamptz not null default now()`);
-  await db.query(`alter table orders add column if not exists updated_at timestamptz not null default now()`);
-
-  await db.query(`alter table paytabs_callbacks add column if not exists payload jsonb`);
-  await db.query(`alter table paytabs_callbacks add column if not exists created_at timestamptz not null default now()`);
-
-  await db.query(`alter table paytabs_callbacks add column if not exists received_at timestamptz not null default now()`);
-
   // 3) Indexes last (so columns definitely exist)
   await db.query(`create index if not exists idx_orders_cart_id on orders(cart_id)`);
   await db.query(`create index if not exists idx_orders_status on orders(status)`);
@@ -120,9 +126,7 @@ await db.query(`alter table orders add column if not exists created_at timestamp
   await db.query(`create index if not exists idx_orders_paytabs_tran_ref on orders(paytabs_tran_ref)`);
   await db.query(`create index if not exists idx_orders_promo_code on orders(promo_code)`);
   await db.query(`create index if not exists idx_orders_discount_source on orders(discount_source)`);
-
   await db.query(`create index if not exists idx_orders_inventory_committed_at on orders(inventory_committed_at)`);
-
   await db.query(`create index if not exists idx_orders_promo_consumed on orders(promo_consumed)`);
   await db.query(`create index if not exists idx_orders_promo_consume_failed on orders(promo_consume_failed)`);
 
@@ -132,8 +136,11 @@ await db.query(`alter table orders add column if not exists created_at timestamp
   await db.query(`create index if not exists idx_paytabs_callbacks_received_at on paytabs_callbacks(received_at desc)`);
 }
 
-
 type InventoryDelta = { slug: string; qty: number };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
 function toNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -142,7 +149,7 @@ function toNonEmptyString(value: unknown): string | null {
 }
 
 function toQty(value: unknown): number {
-  const n = Number(value);
+  const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
   if (!Number.isFinite(n)) return 1;
   return Math.max(1, Math.min(999, Math.trunc(n)));
 }
@@ -160,16 +167,25 @@ function parseJsonIfString(value: unknown): unknown {
 
 function extractInventoryDeltas(itemsValue: unknown): InventoryDelta[] {
   const parsed = parseJsonIfString(itemsValue);
-  if (!Array.isArray(parsed)) return [];
+
+  const list: unknown =
+    Array.isArray(parsed)
+      ? parsed
+      : isRecord(parsed) && Array.isArray(parsed["items"])
+        ? parsed["items"]
+        : isRecord(parsed) && Array.isArray(parsed["lines"])
+          ? parsed["lines"]
+          : null;
+
+  if (!Array.isArray(list)) return [];
 
   const map = new Map<string, number>();
 
-  for (const entry of parsed) {
-    if (!entry || typeof entry !== "object") continue;
-    const obj = entry as Record<string, unknown>;
-    const slug = toNonEmptyString(obj.slug);
+  for (const entry of list) {
+    if (!isRecord(entry)) continue;
+    const slug = toNonEmptyString(entry["slug"]);
     if (!slug) continue;
-    const qty = toQty(obj.qty);
+    const qty = toQty(entry["qty"]);
     map.set(slug, (map.get(slug) || 0) + qty);
   }
 
@@ -207,11 +223,10 @@ export async function commitInventoryForPaidCart(trx: DbExecutor, cartId: string
 
   const deltas = extractInventoryDeltas(order.items);
 
-  // Mark committed even if deltas are empty (prevents repeated webhook attempts).
   for (const d of deltas) {
     await trx.query(
       `update products
-          set inventory_qty = greatest(0, inventory_qty - $2::int),
+          set inventory_qty = greatest(0, coalesce(inventory_qty, 0) - $2::int),
               updated_at = now()
         where slug = $1::text`,
       [d.slug, d.qty]
@@ -249,10 +264,11 @@ export async function commitInventoryForPaidOrderId(trx: DbExecutor, orderId: nu
   if (order.inventory_committed_at) return false;
 
   const deltas = extractInventoryDeltas(order.items);
+
   for (const d of deltas) {
     await trx.query(
       `update products
-          set inventory_qty = greatest(0, inventory_qty - $2::int),
+          set inventory_qty = greatest(0, coalesce(inventory_qty, 0) - $2::int),
               updated_at = now()
         where slug = $1::text`,
       [d.slug, d.qty]
@@ -270,5 +286,3 @@ export async function commitInventoryForPaidOrderId(trx: DbExecutor, orderId: nu
 
   return true;
 }
-
-

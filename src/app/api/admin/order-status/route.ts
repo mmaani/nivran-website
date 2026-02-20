@@ -1,3 +1,4 @@
+// src/app/api/admin/order-status/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureOrdersTables, commitInventoryForPaidOrderId } from "@/lib/orders";
@@ -6,39 +7,9 @@ import { consumePromotionUsage } from "@/lib/promotions";
 
 export const runtime = "nodejs";
 
-function isAllowedTransition(paymentMethod: string, current: string, next: string) {
-  const pm = String(paymentMethod || "").toUpperCase();
-
-  // PayTabs guardrail: can't ship unless PAID
-  if (pm === "PAYTABS") {
-    if ((next === "SHIPPED" || next === "DELIVERED") && current !== "PAID") return false;
-  }
-
-  // COD recommended flow
-  if (pm === "COD") {
-    const allowed = new Set([
-      "PENDING_COD_CONFIRM",
-      "PROCESSING",
-      "SHIPPED",
-      "DELIVERED",
-      "PAID_COD",
-      "CANCELED",
-    ]);
-    if (!allowed.has(next)) return false;
-  }
-
-  return true;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
-
-
-type OrderPromoRow = {
-  cart_id: string;
-  status: string;
-  discount_source: string | null;
-  promo_code: string | null;
-  promotion_id: string | number | null;
-  promo_consumed: boolean | null;
-};
 
 function toInt(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) return Math.trunc(value);
@@ -49,29 +20,86 @@ function toInt(value: unknown): number | null {
   return null;
 }
 
+function normalizeStatus(value: unknown): string {
+  return typeof value === "string" ? value.trim().toUpperCase() : "";
+}
+
+function normalizePaymentMethod(value: unknown): string {
+  return typeof value === "string" ? value.trim().toUpperCase() : "";
+}
+
+function isAllowedTransition(paymentMethod: string, current: string, next: string): boolean {
+  const pm = String(paymentMethod || "").toUpperCase();
+  const cur = String(current || "").toUpperCase();
+  const nxt = String(next || "").toUpperCase();
+
+  // Always allow cancel
+  if (nxt === "CANCELED") return true;
+
+  // PayTabs guardrail: can't ship/deliver unless PAID
+  if (pm === "PAYTABS") {
+    if ((nxt === "SHIPPED" || nxt === "DELIVERED") && cur !== "PAID") return false;
+  }
+
+  // COD flow
+  if (pm === "COD") {
+    const allowed = new Set([
+      "PENDING_COD_CONFIRM",
+      "PROCESSING",
+      "SHIPPED",
+      "DELIVERED",
+      "PAID_COD",
+      "CANCELED",
+    ]);
+    if (!allowed.has(nxt)) return false;
+  }
+
+  return true;
+}
+
+type OrderRow = {
+  id: number;
+  status: string;
+  payment_method: string;
+};
+
+type OrderPromoRow = {
+  status: string;
+  discount_source: string | null;
+  promo_code: string | null;
+  promotion_id: string | number | null;
+  promo_consumed: boolean | null;
+};
+
+async function tryCommitInventoryIfPaidById(orderId: number): Promise<void> {
+  await db.withTransaction(async (trx) => {
+    await commitInventoryForPaidOrderId(trx, orderId);
+  });
+}
+
 async function tryConsumeCodePromoIfPaidById(orderId: number): Promise<void> {
   await db.withTransaction(async (trx) => {
     const { rows } = await trx.query<OrderPromoRow>(
-      `select cart_id, status, discount_source, promo_code, promotion_id, promo_consumed
+      `select status, discount_source, promo_code, promotion_id, promo_consumed
          from orders
         where id = $1
         for update`,
       [orderId]
     );
 
-    const order = rows[0];
-    if (!order) return;
+    const row = rows[0];
+    if (!row) return;
 
-    const status = String(order.status || "").toUpperCase();
+    const status = String(row.status || "").toUpperCase();
     const isPaid = status === "PAID" || status === "PAID_COD";
     if (!isPaid) return;
 
-    const source = String(order.discount_source || "").toUpperCase();
+    const source = String(row.discount_source || "").toUpperCase();
     if (source !== "CODE") return;
 
-    if (order.promo_consumed === true) return;
+    if (row.promo_consumed === true) return;
 
-    const promotionId = toInt(order.promotion_id);
+    const promotionId = toInt(row.promotion_id);
     if (!promotionId) return;
 
     const consumed = await consumePromotionUsage(trx, promotionId);
@@ -97,43 +125,42 @@ async function tryConsumeCodePromoIfPaidById(orderId: number): Promise<void> {
               promo_consumed_at = coalesce(promo_consumed_at, now()),
               updated_at = now()
         where id = $1
-          and promo_consumed = false`,
+          and coalesce(promo_consumed, false) = false`,
       [orderId]
     );
   });
-
-async function tryCommitInventoryIfPaidById(orderId: number): Promise<void> {
-  await db.withTransaction(async (trx) => {
-    await commitInventoryForPaidOrderId(trx, orderId);
-  });
-}
-
 }
 
 export async function POST(req: Request) {
   const auth = requireAdmin(req);
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: 401 });
+
   await ensureOrdersTables();
-  const body = (await req.json().catch(() => ({}))) as { id?: number | string; status?: string };
-  const id = Number(body?.id);
-  const nextStatus = String(body?.status || "");
+
+  const parsed: unknown = await req.json().catch(() => ({}));
+  const body = isRecord(parsed) ? parsed : {};
+
+  const id = toInt(body["id"]);
+  const nextStatus = normalizeStatus(body["status"]);
 
   if (!id || !nextStatus) {
     return NextResponse.json({ ok: false, error: "id and status are required" }, { status: 400 });
   }
 
-  const pool = db;
-  const { rows } = await pool.query(
-    `select id, status, payment_method from orders where id=$1`,
+  const { rows } = await db.query<OrderRow>(
+    `select id, status, payment_method
+       from orders
+      where id = $1`,
     [id]
   );
+
   if (!rows.length) {
     return NextResponse.json({ ok: false, error: "Order not found" }, { status: 404 });
   }
 
   const order = rows[0];
-  const current = String(order.status || "");
-  const pm = String(order.payment_method || "");
+  const current = normalizeStatus(order.status);
+  const pm = normalizePaymentMethod(order.payment_method);
 
   if (!isAllowedTransition(pm, current, nextStatus)) {
     return NextResponse.json(
@@ -142,12 +169,9 @@ export async function POST(req: Request) {
     );
   }
 
-  await pool.query(
-    `update orders set status=$2, updated_at=now() where id=$1`,
-    [id, nextStatus]
-  );
+  await db.query(`update orders set status = $2, updated_at = now() where id = $1`, [id, nextStatus]);
 
-  if (nextStatus === "PAID_COD" || nextStatus === "PAID") {
+  if (nextStatus === "PAID" || nextStatus === "PAID_COD") {
     try {
       await tryCommitInventoryIfPaidById(id);
     } catch {

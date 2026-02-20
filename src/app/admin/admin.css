@@ -603,3 +603,30 @@
   background: var(--ink);
   color: var(--cream);
 }
+.admin-now {
+  font-size: 12px;
+  opacity: 0.55;
+  letter-spacing: 0.04em;
+  margin-inline-start: 10px;
+  white-space: nowrap;
+}
+
+.admin-link.is-active {
+  opacity: 1;
+  text-decoration: underline;
+  text-underline-offset: 6px;
+}
+
+.admin-action {
+  background: none;
+  border: 1px solid rgba(0,0,0,0.1);
+  padding: 6px 12px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.admin-action:hover {
+  background: rgba(0,0,0,0.04);
+}
