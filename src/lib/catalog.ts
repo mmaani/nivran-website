@@ -288,13 +288,14 @@ export function isRecoverableCatalogSetupError(error: unknown): boolean {
   const code = errorCodeOf(error);
   const message = errorMessageOf(error).toLowerCase();
 
-  if (code === "42501" || code === "25006" || code === "28P01" || code === "23514") return true; // permission denied, read-only, auth, check constraint
+  if (code === "42501" || code === "25006" || code === "28P01" || code === "23514" || code === "42P01") return true; // permission denied, read-only, auth, check constraint, undefined table
 
   return (
     message.includes("permission denied")
     || message.includes("must be owner")
     || message.includes("read-only")
     || message.includes("cannot execute")
+    || message.includes("relation") && message.includes("does not exist")
   );
 }
 

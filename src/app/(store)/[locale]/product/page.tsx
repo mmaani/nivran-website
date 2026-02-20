@@ -1,6 +1,6 @@
 import ProductGridClient from "./ProductGridClient";
 import { db, isDbConnectivityError } from "@/lib/db";
-import { ensureCatalogTables } from "@/lib/catalog";
+import { ensureCatalogTablesSafe, isRecoverableCatalogSetupError } from "@/lib/catalog";
 import {
   fallbackCatalogRows,
   fallbackCategories,
@@ -106,9 +106,14 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
   let campaignRows: CampaignRow[] = [];
 
   try {
-    await ensureCatalogTables();
-
-    const categoriesRes = await db.query<CategoryRow>(
+    const bootstrap = await ensureCatalogTablesSafe();
+    if (!bootstrap.ok) {
+      categoriesRows = fallbackCategories();
+      productRows = fallbackCatalogRows();
+      campaignRows = [];
+      console.warn(`[catalog] Using fallback product catalog: ${bootstrap.reason}`);
+    } else {
+      const categoriesRes = await db.query<CategoryRow>(
     `select key, name_en, name_ar, is_active, is_promoted, sort_order
        from categories
       where is_active=true
@@ -188,25 +193,26 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
     );
     productRows = productsRes.rows;
 
-    const campaignsRes = await db.query<CampaignRow>(
-      `select id, promo_kind, title_en, title_ar, discount_type, discount_value::text,
-              ends_at::text as ends_at, starts_at::text as starts_at, min_order_jod::text as min_order_jod,
-              category_keys, product_slugs
-         from promotions
-        where is_active=true
-          and (starts_at is null or starts_at <= now())
-          and (ends_at is null or ends_at >= now())
-        order by priority desc, created_at desc
-        limit 8`
-    );
-    campaignRows = campaignsRes.rows;
+      const campaignsRes = await db.query<CampaignRow>(
+        `select id, promo_kind, title_en, title_ar, discount_type, discount_value::text,
+                ends_at::text as ends_at, starts_at::text as starts_at, min_order_jod::text as min_order_jod,
+                category_keys, product_slugs
+           from promotions
+          where is_active=true
+            and (starts_at is null or starts_at <= now())
+            and (ends_at is null or ends_at >= now())
+          order by priority desc, created_at desc
+          limit 8`
+      );
+      campaignRows = campaignsRes.rows;
+    }
   } catch (error: unknown) {
-    if (!isDbConnectivityError(error)) throw error;
+    if (!isDbConnectivityError(error) && !isRecoverableCatalogSetupError(error)) throw error;
 
     categoriesRows = fallbackCategories();
     productRows = fallbackCatalogRows();
     campaignRows = [];
-    console.warn("[catalog] Falling back to static product catalog due to DB connectivity issue.");
+    console.warn("[catalog] Falling back to static product catalog due to recoverable DB issue.");
   }
 
   const catsMap = new Map<string, { key: string; label: string }>();
