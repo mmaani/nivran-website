@@ -23,6 +23,12 @@ type OrdersRow = {
   discount_jod: string | null;
   shipping_jod: string | null;
   total_jod: string | null;
+  discount_source: string | null;
+  promo_code: string | null;
+  promotion_id: string | null;
+  promo_consumed: boolean | null;
+  promo_consume_failed: boolean | null;
+  promo_consume_error: string | null;
 };
 
 async function hasColumn(columnName: string): Promise<boolean> {
@@ -45,11 +51,12 @@ export default async function AdminOrdersPage() {
   const lang = await getAdminLang();
   const t = adminT(lang);
 
-  const [hasPaymentMethod, hasTranRef, hasItems, hasTotals] = await Promise.all([
+  const [hasPaymentMethod, hasTranRef, hasItems, hasTotals, hasPromoMeta] = await Promise.all([
     hasColumn("payment_method"),
     hasColumn("paytabs_tran_ref"),
     hasColumn("items"),
     hasColumn("total_jod"),
+    hasColumn("discount_source"),
   ]);
 
   const paymentMethodSelect = hasPaymentMethod ? "payment_method" : "'PAYTABS'::text as payment_method";
@@ -59,6 +66,13 @@ export default async function AdminOrdersPage() {
   const discountSelect = hasTotals ? "discount_jod::text" : "null::text as discount_jod";
   const shippingSelect = hasTotals ? "shipping_jod::text" : "null::text as shipping_jod";
   const totalSelect = hasTotals ? "total_jod::text" : "null::text as total_jod";
+
+  const discountSourceSelect = hasPromoMeta ? "discount_source::text" : "null::text as discount_source";
+  const promoCodeSelect = hasPromoMeta ? "promo_code::text" : "null::text as promo_code";
+  const promotionIdSelect = hasPromoMeta ? "promotion_id::text" : "null::text as promotion_id";
+  const promoConsumedSelect = hasPromoMeta ? "promo_consumed" : "false as promo_consumed";
+  const promoConsumeFailedSelect = hasPromoMeta ? "promo_consume_failed" : "false as promo_consume_failed";
+  const promoConsumeErrorSelect = hasPromoMeta ? "promo_consume_error::text" : "null::text as promo_consume_error";
 
   const { rows } = await db.query<OrdersRow>(
     `select id, cart_id, status, amount, currency, locale,
@@ -71,7 +85,13 @@ export default async function AdminOrdersPage() {
             ${subtotalSelect},
             ${discountSelect},
             ${shippingSelect},
-            ${totalSelect}
+            ${totalSelect},
+            ${discountSourceSelect},
+            ${promoCodeSelect},
+            ${promotionIdSelect},
+            ${promoConsumedSelect},
+            ${promoConsumeFailedSelect},
+            ${promoConsumeErrorSelect}
      from orders
      order by created_at desc
      limit 200`

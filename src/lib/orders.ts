@@ -45,6 +45,10 @@ export async function ensureOrdersTables() {
   await db.query(`alter table orders add column if not exists promo_code text`);
   await db.query(`alter table orders add column if not exists promotion_id bigint`);
   await db.query(`alter table orders add column if not exists discount_source text`);
+  await db.query(`alter table orders add column if not exists promo_consumed boolean not null default false`);
+  await db.query(`alter table orders add column if not exists promo_consumed_at timestamptz`);
+  await db.query(`alter table orders add column if not exists promo_consume_failed boolean not null default false`);
+  await db.query(`alter table orders add column if not exists promo_consume_error text`);
   await db.query(`alter table orders add column if not exists payment_method text not null default 'PAYTABS'`);
   await db.query(`alter table orders add column if not exists customer_id bigint`);
   await db.query(`alter table orders add column if not exists paytabs_tran_ref text`);
@@ -113,6 +117,9 @@ export async function ensureOrdersTables() {
   await db.query(`create index if not exists idx_orders_paytabs_tran_ref on orders(paytabs_tran_ref)`);
   await db.query(`create index if not exists idx_orders_promo_code on orders(promo_code)`);
   await db.query(`create index if not exists idx_orders_discount_source on orders(discount_source)`);
+
+  await db.query(`create index if not exists idx_orders_promo_consumed on orders(promo_consumed)`);
+  await db.query(`create index if not exists idx_orders_promo_consume_failed on orders(promo_consume_failed)`);
 
   await db.query(`create index if not exists idx_paytabs_callbacks_cart_id on paytabs_callbacks(cart_id)`);
   await db.query(`create index if not exists idx_paytabs_callbacks_tran_ref on paytabs_callbacks(tran_ref)`);

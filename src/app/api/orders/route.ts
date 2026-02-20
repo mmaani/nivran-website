@@ -6,9 +6,7 @@ import { readFreeShippingThresholdJod, shippingForSubtotal } from "@/lib/shippin
 import { ensureOrdersTables } from "@/lib/orders";
 import { ensureCatalogTables } from "@/lib/catalog";
 import { getCustomerIdFromRequest } from "@/lib/identity";
-import {
-  consumePromotionUsage,
-  evaluateAutoPromotionForLines,
+import {  evaluateAutoPromotionForLines,
   evaluatePromoCodeForLines,
 } from "@/lib/promotions";
 
@@ -348,12 +346,6 @@ export async function POST(req: NextRequest) {
 
   const insertedCartId = await db
     .withTransaction(async (trx) => {
-      if (promotionId && discountSource === "CODE") {
-        const consumed = await consumePromotionUsage(trx, promotionId);
-        if (!consumed) {
-          throw new Error(locale === "ar" ? "كود الخصم تجاوز حد الاستخدام" : "Promo code usage limit reached");
-        }
-      }
 
       const r = hasExtendedOrderColumns
         ? await trx.query<{ cart_id: string }>(

@@ -45,6 +45,12 @@ type Row = {
   discount_jod: string | null;
   shipping_jod: string | null;
   total_jod: string | null;
+  discount_source?: string | null;
+  promo_code?: string | null;
+  promotion_id?: string | null;
+  promo_consumed?: boolean | null;
+  promo_consume_failed?: boolean | null;
+  promo_consume_error?: string | null;
 };
 
 const STATUS_OPTIONS = [
@@ -282,6 +288,8 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                             <strong>{L.totals}</strong>
                             <div className="mono" style={{ marginTop: 4 }}>
                               subtotal: {toNum(r.subtotal_before_discount_jod).toFixed(2)} JOD • discount: {toNum(r.discount_jod).toFixed(2)} JOD • shipping: {toNum(r.shipping_jod).toFixed(2)} JOD • total: {toNum(r.total_jod ?? r.amount).toFixed(2)} JOD
+                              <br />
+                              promo: {String(r.discount_source || "-")} {r.promo_code ? `(${r.promo_code})` : ""} {r.promotion_id ? `#${r.promotion_id}` : ""} • consumed: {r.promo_consumed ? "yes" : "no"}{r.promo_consume_failed ? ` • consume_failed: ${String(r.promo_consume_error || "").trim() || "yes"}` : ""}
                             </div>
                           </div>
                         </div>
