@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db, isDbConnectivityError } from "@/lib/db";
-import { ensureCatalogTablesSafe } from "@/lib/catalog";
+import { ensureCatalogTablesSafe, isRecoverableCatalogSetupError } from "@/lib/catalog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,20 +19,31 @@ export async function GET() {
       catalogBootstrapReason: bootstrap.ok ? null : bootstrap.reason,
     }, { headers: { "cache-control": "no-store" } });
   } catch (error: unknown) {
-    if (!isDbConnectivityError(error)) {
-      return NextResponse.json(
-        { ok: false, db: "error", mode: "error", reason: "unexpected", catalogBootstrap: "unavailable" },
-        { status: 500, headers: { "cache-control": "no-store" } }
-      );
+    if (isDbConnectivityError(error)) {
+      return NextResponse.json({
+        ok: true,
+        db: "down",
+        mode: "fallback",
+        reason: "connectivity",
+        catalogBootstrap: "unavailable",
+        catalogBootstrapReason: "DB_CONNECTIVITY",
+      }, { headers: { "cache-control": "no-store" } });
     }
 
-    return NextResponse.json({
-      ok: true,
-      db: "down",
-      mode: "fallback",
-      reason: "connectivity",
-      catalogBootstrap: "unavailable",
-      catalogBootstrapReason: "DB_CONNECTIVITY",
-    }, { headers: { "cache-control": "no-store" } });
+    if (isRecoverableCatalogSetupError(error)) {
+      return NextResponse.json({
+        ok: true,
+        db: "degraded",
+        mode: "fallback",
+        reason: "catalog_recoverable",
+        catalogBootstrap: "degraded",
+        catalogBootstrapReason: "CATALOG_RECOVERABLE_ERROR",
+      }, { headers: { "cache-control": "no-store" } });
+    }
+
+    return NextResponse.json(
+      { ok: false, db: "error", mode: "error", reason: "unexpected", catalogBootstrap: "unavailable" },
+      { status: 500, headers: { "cache-control": "no-store" } }
+    );
   }
 }

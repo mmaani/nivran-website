@@ -20,7 +20,7 @@ pnpm check:readme-checklist
 
 This executes:
 - runbook contract check
-- CI guard checks (including product catalog fallback contract)
+- CI guard checks (including product page + catalog API fallback contracts)
 - lint
 - production build
 

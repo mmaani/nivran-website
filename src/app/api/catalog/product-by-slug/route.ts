@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, isDbConnectivityError } from "@/lib/db";
-import { ensureCatalogTablesSafe } from "@/lib/catalog";
+import { ensureCatalogTablesSafe, isRecoverableCatalogSetupError } from "@/lib/catalog";
 import { fallbackProductBySlug, syntheticVariantId } from "@/lib/catalogFallback";
 
 export const runtime = "nodejs";
@@ -96,19 +96,20 @@ export async function GET(req: NextRequest) {
       { status: 200, headers: { "cache-control": "no-store" } }
     );
   } catch (error: unknown) {
-    if (!isDbConnectivityError(error)) throw error;
+    if (!isDbConnectivityError(error) && !isRecoverableCatalogSetupError(error)) throw error;
 
     const p = fallbackProductBySlug(slug);
     if (!p) return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
 
-    console.warn("[api/catalog/product-by-slug] Serving fallback payload due to DB connectivity issue.");
+    const reason = isDbConnectivityError(error) ? "DB_CONNECTIVITY" : "CATALOG_RECOVERABLE_ERROR";
+    console.warn(`[api/catalog/product-by-slug] Serving fallback payload due to ${reason}.`);
 
     const defaultVariant = p.variants?.find((v) => v.isDefault) || p.variants?.[0] || null;
     return NextResponse.json(
       {
         ok: true,
         fallback: true,
-        reason: "DB_CONNECTIVITY",
+        reason,
         product: {
           slug: p.slug,
           name_en: p.name.en,
