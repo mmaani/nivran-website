@@ -210,7 +210,7 @@ export async function ensureCatalogTables() {
 
   await db.query(`
     insert into store_settings (key, value_number)
-    values ('free_shipping_threshold_jod', 35)
+    values ('free_shipping_threshold_jod', 69)
     on conflict (key) do nothing;
   `);
 
