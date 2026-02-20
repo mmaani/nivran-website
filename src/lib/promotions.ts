@@ -10,7 +10,9 @@ export type PricedOrderLine = {
 
 type PromotionRow = {
   id: number;
-  promo_kind: "SEASONAL" | "PROMO" | "REFERRAL" | string;
+  // DB-compatible promo kinds.
+  // Back-compat: some older code paths used SEASONAL/PROMO/REFERRAL.
+  promo_kind: "AUTO" | "CODE" | "SEASONAL" | "PROMO" | "REFERRAL" | string;
   code: string | null;
   title_en: string | null;
   title_ar: string | null;
@@ -32,7 +34,7 @@ export type PromotionEvaluation =
       ok: true;
       promotionId: number;
       promoCode: string | null;
-      promoKind: "SEASONAL" | "PROMO" | "REFERRAL";
+      promoKind: "AUTO" | "CODE";
       discountJod: number;
       eligibleSubtotalJod: number;
       subtotalAfterDiscountJod: number;
@@ -66,10 +68,11 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function parsePromoKind(value: unknown): "SEASONAL" | "PROMO" | "REFERRAL" {
+function parsePromoKind(value: unknown): "AUTO" | "CODE" {
   const kind = String(value || "").toUpperCase();
-  if (kind === "SEASONAL" || kind === "REFERRAL") return kind;
-  return "PROMO";
+  if (kind === "AUTO" || kind === "SEASONAL") return "AUTO";
+  // Treat PROMO/REFERRAL as CODE for back-compat.
+  return "CODE";
 }
 
 function evaluatePromotionRow(
@@ -164,7 +167,7 @@ export async function evaluatePromoCodeForLines(
             starts_at::text, ends_at::text,
             usage_limit, used_count, is_active, category_keys, product_slugs, min_order_jod, priority
        from promotions
-      where code = $1 and promo_kind in ('SEASONAL','PROMO','REFERRAL')
+      where code = $1 and promo_kind in ('CODE','PROMO','REFERRAL')
       limit 1`,
     [promoCode]
   );

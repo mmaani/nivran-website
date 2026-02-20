@@ -120,7 +120,9 @@ export async function ensureCatalogTables() {
     );
   `);
 
-  await db.query(`alter table promotions add column if not exists promo_kind text not null default 'PROMO';`);
+  // NOTE: DB uses promo_kind = 'CODE' (promo code) or 'AUTO' (automatic discount)
+  // Back-compat: older code paths used SEASONAL/PROMO/REFERRAL.
+  await db.query(`alter table promotions add column if not exists promo_kind text not null default 'CODE';`);
   await db.query(`alter table promotions add column if not exists code text;`);
   await db.query(`alter table promotions add column if not exists title_en text;`);
   await db.query(`alter table promotions add column if not exists title_ar text;`);
@@ -167,15 +169,16 @@ export async function ensureCatalogTables() {
   `);
 
 
+  // Normalize promo_kind to the DB-compatible set.
   await db.query(`
     update promotions
        set promo_kind = case
-         when promo_kind='AUTO' then 'SEASONAL'
-         when promo_kind='CODE' then 'PROMO'
-         when promo_kind in ('SEASONAL','PROMO','REFERRAL') then promo_kind
-         else 'PROMO'
+         when promo_kind in ('AUTO','SEASONAL') then 'AUTO'
+         when promo_kind in ('CODE','PROMO','REFERRAL') then 'CODE'
+         else 'CODE'
        end
-     where promo_kind is null or promo_kind not in ('SEASONAL','PROMO','REFERRAL') or promo_kind in ('AUTO','CODE')
+     where promo_kind is null
+        or promo_kind not in ('AUTO','CODE')
   `);
 
   await db.query(`
@@ -190,12 +193,14 @@ export async function ensureCatalogTables() {
       alter table promotions
         add constraint promotions_kind_code_chk
         check (
-          promo_kind in ('SEASONAL','PROMO','REFERRAL')
-          and (
-            promo_kind = 'SEASONAL'
-            or (code is not null and btrim(code) <> '')
+          (
+            (promo_kind = 'AUTO' and ((code is null) or (btrim(code) = '')))
+            or
+            (promo_kind = 'CODE' and (code is not null) and (btrim(code) <> ''))
           )
         );
+    exception when others then
+      null;
     end $$;
   `);
   // ---------- STORE SETTINGS ----------

@@ -53,7 +53,9 @@ type CatalogVariantRow = {
 
 type PromoRow = {
   id: number;
-  promo_kind: "SEASONAL" | "PROMO" | "REFERRAL" | string;
+  // DB-compatible promo kinds.
+  // Back-compat: older code paths used SEASONAL/PROMO/REFERRAL.
+  promo_kind: "AUTO" | "CODE" | "SEASONAL" | "PROMO" | "REFERRAL" | string;
   code: string | null;
   title_en: string;
   title_ar: string;
@@ -69,6 +71,13 @@ type PromoRow = {
   ends_at: string | null;
   product_slugs: string[] | null;
 };
+
+function normalizePromoKind(value: unknown): "AUTO" | "CODE" {
+  const kind = String(value || "").trim().toUpperCase();
+  if (kind === "AUTO" || kind === "SEASONAL") return "AUTO";
+  // Treat PROMO/REFERRAL as CODE for back-compat.
+  return "CODE";
+}
 
 function labelCategory(lang: "en" | "ar", c: CategoryRow) {
   return lang === "ar" ? c.name_ar : c.name_en;
@@ -172,7 +181,7 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
              select count(*)::int as auto_promo_count
                from promotions pr
               where pr.is_active=true
-                and pr.promo_kind='SEASONAL'
+                and pr.promo_kind in ('AUTO','SEASONAL')
                 and (pr.starts_at is null or pr.starts_at <= now())
                 and (pr.ends_at is null or pr.ends_at >= now())
                 and (pr.category_keys is null or array_length(pr.category_keys,1) is null or p.category_key = any(pr.category_keys))
@@ -341,9 +350,9 @@ export default async function AdminCatalogPage({
   const productActive = data.products.filter((p) => p.is_active).length;
   const outOfStockCount = data.products.filter((p) => Number(p.inventory_qty || 0) <= 0).length;
   const variantsActive = data.variants.filter((v) => v.is_active).length;
-  const activeSeasonalPromos = data.promos.filter((r) => String(r.promo_kind || "PROMO").toUpperCase() === "SEASONAL" && r.is_active).length;
-  const activePromoCodes = data.promos.filter((r) => String(r.promo_kind || "PROMO").toUpperCase() === "PROMO" && r.is_active).length;
-  const activeReferralCodes = data.promos.filter((r) => String(r.promo_kind || "PROMO").toUpperCase() === "REFERRAL" && r.is_active).length;
+  const activeSeasonalPromos = data.promos.filter((r) => normalizePromoKind(r.promo_kind) === "AUTO" && r.is_active).length;
+  const activePromoCodes = data.promos.filter((r) => normalizePromoKind(r.promo_kind) === "CODE" && r.is_active).length;
+  const activeReferralCodes = data.promos.filter((r) => String(r.promo_kind || "").toUpperCase() === "REFERRAL" && r.is_active).length;
   const productsWithSeasonalCampaign = data.products.filter((p) => Number(p.auto_promo_count || 0) > 0).length;
 
   const qProducts = String(params.qProducts || "").trim().toLowerCase();
@@ -375,12 +384,13 @@ export default async function AdminCatalogPage({
     : data.products;
 
   const filteredPromos = data.promos.filter((r) => {
-    const kind = String(r.promo_kind || "PROMO").toUpperCase();
+    const rawKind = String(r.promo_kind || "").toUpperCase();
+    const kind = normalizePromoKind(rawKind);
     if (promoState === "active" && !r.is_active) return false;
     if (promoState === "inactive" && r.is_active) return false;
-    if (promoState === "seasonal" && kind !== "SEASONAL") return false;
-    if (promoState === "promo" && kind !== "PROMO") return false;
-    if (promoState === "referral" && kind !== "REFERRAL") return false;
+    if (promoState === "seasonal" && kind !== "AUTO") return false;
+    if (promoState === "promo" && kind !== "CODE") return false;
+    if (promoState === "referral" && rawKind !== "REFERRAL") return false;
     if (!qPromos) return true;
     const haystack = [r.code || "", r.title_en, r.title_ar, ...(r.category_keys || []), ...(r.product_slugs || [])].join(" ").toLowerCase();
     return haystack.includes(qPromos);
@@ -507,9 +517,8 @@ export default async function AdminCatalogPage({
               <option value="all">{isAr ? "كل الأنواع" : "All types"}</option>
               <option value="active">{isAr ? "مفعّل" : "Active"}</option>
               <option value="inactive">{isAr ? "مخفي" : "Hidden"}</option>
-              <option value="seasonal">Seasonal</option>
-              <option value="promo">Promo</option>
-              <option value="referral">Referral</option>
+              <option value="seasonal">{L.autoPromo}</option>
+              <option value="promo">{L.codePromo}</option>
             </select>
             <button className={styles.adminBtn} type="submit">{isAr ? "تصفية العروض" : "Filter promotions"}</button>
           </form>
@@ -847,12 +856,11 @@ export default async function AdminCatalogPage({
                 <input type="hidden" name="return_to" value={returnTo} />
           <input type="hidden" name="action" value="create" />
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
-            <select name="promo_kind" defaultValue="PROMO" className={styles.adminSelect}>
-              <option value="SEASONAL">Seasonal</option>
-              <option value="PROMO">Promo</option>
-              <option value="REFERRAL">Referral</option>
+            <select name="promo_kind" defaultValue="CODE" className={styles.adminSelect}>
+              <option value="AUTO">{L.autoPromo}</option>
+              <option value="CODE">{L.codePromo}</option>
             </select>
-            <input name="code" required placeholder="NIVRAN10" className={`${styles.adminInput} ${styles.ltr}`} />
+            <input name="code" placeholder="NIVRAN10" className={`${styles.adminInput} ${styles.ltr}`} />
             <select name="discount_type" defaultValue="PERCENT" className={styles.adminSelect}>
               <option value="PERCENT">{L.percent}</option>
               <option value="FIXED">{L.fixed}</option>
@@ -935,7 +943,7 @@ export default async function AdminCatalogPage({
                 {L.promoProducts}: {!r.product_slugs || r.product_slugs.length === 0 ? L.allCats : r.product_slugs.join(", ")}
               </div>
               <div style={{ fontSize: 12, opacity: 0.82 }}>
-                {L.promoType}: {String(r.promo_kind || "PROMO").toUpperCase()} • {L.promoPriority}: {r.priority || 0} • {L.promoUsage}: {r.used_count || 0}{r.usage_limit ? ` / ${r.usage_limit}` : ""} • {L.promoMin}: {r.min_order_jod || "0"} JOD
+                {L.promoType}: {normalizePromoKind(r.promo_kind)} • {L.promoPriority}: {r.priority || 0} • {L.promoUsage}: {r.used_count || 0}{r.usage_limit ? ` / ${r.usage_limit}` : ""} • {L.promoMin}: {r.min_order_jod || "0"} JOD
               </div>
               <form action="/api/admin/catalog/promotions" method="post" style={{ marginTop: 8 }}>
                 <input type="hidden" name="return_to" value={returnTo} />

@@ -7,6 +7,15 @@ import { catalogErrorRedirect, catalogSavedRedirect, catalogUnauthorizedRedirect
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type PromoKind = "AUTO" | "CODE";
+
+function normalizePromoKind(value: unknown): PromoKind {
+  const kind = String(value || "").trim().toUpperCase();
+  // Back-compat: older UI/data used SEASONAL/PROMO/REFERRAL.
+  if (kind === "AUTO" || kind === "SEASONAL") return "AUTO";
+  return "CODE";
+}
+
 function readCategoryKeys(form: FormData): string[] | null {
   const raw = form.getAll("category_keys").map((v) => String(v || "").trim()).filter(Boolean);
   if (!raw.length || raw.includes("__ALL__")) return null;
@@ -37,10 +46,9 @@ export async function POST(req: Request) {
     const action = String(form.get("action") || "create");
 
     if (action === "create") {
-      const rawKind = String(form.get("promo_kind") || "PROMO").trim().toUpperCase();
-      const promoKind = rawKind === "SEASONAL" || rawKind === "REFERRAL" ? rawKind : "PROMO";
+      const promoKind = normalizePromoKind(form.get("promo_kind"));
       const codeRaw = String(form.get("code") || "").trim().toUpperCase();
-      const code = codeRaw || null;
+      const code = promoKind === "CODE" ? (codeRaw || null) : null;
       const titleEn = String(form.get("title_en") || "").trim();
       const titleAr = String(form.get("title_ar") || "").trim();
       const discountType = String(form.get("discount_type") || "PERCENT").toUpperCase() === "FIXED" ? "FIXED" : "PERCENT";
@@ -65,7 +73,7 @@ export async function POST(req: Request) {
         return catalogErrorRedirect(req, form, "invalid-promo");
       }
 
-      if (promoKind !== "SEASONAL" && !code) {
+      if (promoKind === "CODE" && !code) {
         return catalogErrorRedirect(req, form, "missing-code");
       }
 
