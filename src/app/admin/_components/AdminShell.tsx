@@ -142,8 +142,14 @@ export default function AdminShell({
   }, [menuOpen]);
 
   return (
-    <div className="admin-shell" data-lang={lang} dir={lang === "ar" ? "rtl" : "ltr"} lang={lang}>
-      <header className="admin-topbar">
+      <div
+        className="admin-shell"
+        data-lang={lang}
+        data-density="comfortable"
+        dir={lang === "ar" ? "rtl" : "ltr"}
+        lang={lang}
+      >
+        <header className="admin-topbar">
         <div className="admin-topbar-inner">
           <div className="admin-topbar-main">
             <div className="admin-brand">
