@@ -1,25 +1,5 @@
 /* src/app/admin/admin.css */
 
-
-.admin-topbar {
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  background: rgba(245, 242, 236, 0.95);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-}
-
-.admin-topbar-inner {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 16px 20px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-}
-
 .admin-shell {
   min-height: 100dvh;
   background:
@@ -34,6 +14,25 @@
 .admin-shell[data-lang="ar"] .t-ar { display: inline; }
 .admin-shell .t-en.block,
 .admin-shell .t-ar.block { display: block; }
+
+.admin-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  border-bottom: 1px solid rgba(20, 20, 20, 0.12);
+  background: rgba(245, 240, 231, 0.85);
+  backdrop-filter: blur(14px);
+}
+
+.admin-topbar-inner {
+  max-width: 1220px;
+  margin: 0 auto;
+  padding: 12px 16px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
 
 .admin-brand {
   display: grid;
@@ -541,92 +540,4 @@
 .admin-mini-link:hover {
   color: #141414;
   border-color: rgba(20,20,20,.24);
-}
-
-
-.admin-brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.admin-logo {
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  font-size: 14px;
-  text-decoration: none;
-  color: var(--ink);
-}
-
-.admin-badge {
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  opacity: 0.6;
-}
-
-.admin-nav {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
-}
-
-.admin-link {
-  text-decoration: none;
-  font-size: 13px;
-  letter-spacing: 0.06em;
-  color: var(--ink);
-  opacity: 0.7;
-  transition: opacity 0.2s ease;
-}
-
-.admin-link:hover {
-  opacity: 1;
-}
-
-.admin-actions {
-  display: flex;
-  align-items: center;
-}
-
-.admin-logout {
-  background: none;
-  border: 1px solid rgba(0,0,0,0.1);
-  padding: 6px 14px;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.admin-logout:hover {
-  background: var(--ink);
-  color: var(--cream);
-}
-.admin-now {
-  font-size: 12px;
-  opacity: 0.55;
-  letter-spacing: 0.04em;
-  margin-inline-start: 10px;
-  white-space: nowrap;
-}
-
-.admin-link.is-active {
-  opacity: 1;
-  text-decoration: underline;
-  text-underline-offset: 6px;
-}
-
-.admin-action {
-  background: none;
-  border: 1px solid rgba(0,0,0,0.1);
-  padding: 6px 12px;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.admin-action:hover {
-  background: rgba(0,0,0,0.04);
 }
