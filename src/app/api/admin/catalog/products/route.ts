@@ -183,14 +183,14 @@ export async function POST(req: Request) {
 
       await db.query(
         `update products
-            set name_en=case when nullif($2,'') is null then name_en else $2 end,
-                name_ar=case when nullif($3,'') is null then name_ar else $3 end,
-                description_en=case when $4::text is null then description_en else $4::text end,
-                description_ar=case when $5::text is null then description_ar else $5::text end,
+            set name_en=coalesce(nullif($2::text,''), name_en),
+                name_ar=coalesce(nullif($3::text,''), name_ar),
+                description_en=coalesce(nullif($4::text,''), description_en),
+                description_ar=coalesce(nullif($5::text,''), description_ar),
                 price_jod=coalesce($6::numeric, price_jod),
                 compare_at_price_jod=case when $7::boolean then $8::numeric else compare_at_price_jod end,
                 inventory_qty=$9::int,
-                category_key=coalesce(nullif($10,''), category_key),
+                category_key=coalesce(nullif($10::text,''), category_key),
                 is_active=$11::boolean,
                 wear_times=$12::text[],
                 seasons=$13::text[],

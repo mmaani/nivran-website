@@ -215,7 +215,7 @@ export default async function ProductDetailPage({
   try {
 
   const bootstrap = await ensureCatalogTablesSafe();
-  if (!bootstrap.ok) console.warn(`[pdp] ensureCatalogTables skipped: ${bootstrap.reason}`);
+  if (!bootstrap.ok) return renderFallbackPdp(bootstrap.reason);
 
   const pr = await db.query<ProductRow>(
     `select p.id,
@@ -248,13 +248,25 @@ export default async function ProductDetailPage({
        left join lateral (
          select pr.id, pr.discount_type, pr.discount_value, pr.priority, pr.ends_at, pr.starts_at
          from promotions pr
-         where pr.promo_kind in ('AUTO','SEASONAL')
+         where pr.promo_kind='AUTO'
            and pr.is_active=true
            and (pr.starts_at is null or pr.starts_at <= now())
            and (pr.ends_at is null or pr.ends_at >= now())
-           and (pr.category_keys is null or array_length(pr.category_keys, 1) is null or p.category_key = any(pr.category_keys))
-           and (pr.product_slugs is null or array_length(pr.product_slugs, 1) is null or p.slug = any(pr.product_slugs))
-           and (pr.min_order_jod is null or pr.min_order_jod <= coalesce(p.price_jod, 0))
+           and (
+             (
+               coalesce(array_length(pr.category_keys, 1), 0) = 0
+               and coalesce(array_length(pr.product_slugs, 1), 0) = 0
+             )
+             or (
+               coalesce(array_length(pr.category_keys, 1), 0) > 0
+               and p.category_key = any(pr.category_keys)
+             )
+             or (
+               coalesce(array_length(pr.product_slugs, 1), 0) > 0
+               and p.slug = any(pr.product_slugs)
+             )
+           )
+           and (pr.min_order_jod is null or pr.min_order_jod <= p.price_jod)
          order by pr.priority desc,
                   case
                     when pr.discount_type='PERCENT' then (p.price_jod * (pr.discount_value / 100))
@@ -282,7 +294,7 @@ export default async function ProductDetailPage({
   const cat = cr.rows[0];
 
   const imgs = await db.query<{ id: number }>(
-    `select id::int as id
+    `select id
        from product_images
       where product_id=$1
       order by "position" asc, id asc`,
@@ -290,7 +302,7 @@ export default async function ProductDetailPage({
   );
 
   const variantsRes = await db.query<VariantRow>(
-    `select id::int as id, label, price_jod::text as price_jod, compare_at_price_jod::text as compare_at_price_jod, is_default, sort_order
+    `select id, label, price_jod::text as price_jod, compare_at_price_jod::text as compare_at_price_jod, is_default, sort_order
        from product_variants
       where product_id=$1 and is_active=true
       order by is_default desc, sort_order asc, id asc`,
@@ -305,7 +317,7 @@ export default async function ProductDetailPage({
             vm.min_variant_price_jod::text as min_variant_price_jod,
             p.price_jod::text as price_jod,
             (
-                            select pi.id::int
+              select pi.id
               from product_images pi
               where pi.product_id=p.id
               order by pi."position" asc, pi.id asc

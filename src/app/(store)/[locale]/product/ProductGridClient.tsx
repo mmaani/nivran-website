@@ -32,9 +32,9 @@ type SortKey = "recommended" | "price-asc" | "price-desc" | "name";
 
 function promoBadgeText(locale: Locale, promoType: string | null, promoValue: number): string {
   if (promoType === "PERCENT") {
-    return locale === "ar" ? `AUTO • وفر ${promoValue}%` : `AUTO • Save ${promoValue}%`;
+    return locale === "ar" ? `موسمي • وفر ${promoValue}%` : `Seasonal • Save ${promoValue}%`;
   }
-  return locale === "ar" ? `AUTO • وفر ${promoValue.toFixed(2)} د.أ` : `AUTO • Save ${promoValue.toFixed(2)} JOD`;
+  return locale === "ar" ? `موسمي • وفر ${promoValue.toFixed(2)} د.أ` : `Seasonal • Save ${promoValue.toFixed(2)} JOD`;
 }
 
 function normalizeText(value: string): string {

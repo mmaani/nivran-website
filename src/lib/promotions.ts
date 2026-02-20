@@ -75,6 +75,13 @@ function parsePromoKind(value: unknown): "AUTO" | "CODE" {
   return "CODE";
 }
 
+function normalizeCategoryKey(value: unknown): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-");
+}
+
 function evaluatePromotionRow(
   promo: PromotionRow,
   lines: PricedOrderLine[],
@@ -105,18 +112,36 @@ function evaluatePromotionRow(
   }
 
   const keys = Array.isArray(promo.category_keys)
-    ? promo.category_keys.map((k) => String(k || "").trim()).filter(Boolean)
+    ? promo.category_keys
+        .map((k) => normalizeCategoryKey(k))
+        .filter(Boolean)
     : [];
   const hasScopedCategories = keys.length > 0;
 
   const scopedSlugs = Array.isArray(promo.product_slugs)
-    ? promo.product_slugs.map((s) => String(s || "").trim()).filter(Boolean)
+    ? promo.product_slugs
+        .map((s) => String(s || "").trim().toLowerCase())
+        .filter(Boolean)
     : [];
+  const hasScopedSlugs = scopedSlugs.length > 0;
 
+  // Targeting semantics:
+  // - No category_keys and no product_slugs: applies to all lines.
+  // - Only category_keys: applies to matching categories.
+  // - Only product_slugs: applies to matching products.
+  // - Both provided: applies if EITHER category matches OR slug matches.
   const eligibleLines = lines.filter((line) => {
-    const categoryOk = !hasScopedCategories || (line.category_key ? keys.includes(line.category_key) : false);
-    const slugOk = scopedSlugs.length === 0 || scopedSlugs.includes(line.slug);
-    return categoryOk && slugOk;
+    if (!hasScopedCategories && !hasScopedSlugs) return true;
+
+    const lineCat = normalizeCategoryKey(line.category_key);
+    const lineSlug = String(line.slug || "").trim().toLowerCase();
+
+    const categoryMatch = hasScopedCategories && !!lineCat && keys.includes(lineCat);
+    const slugMatch = hasScopedSlugs && !!lineSlug && scopedSlugs.includes(lineSlug);
+
+    if (hasScopedCategories && hasScopedSlugs) return categoryMatch || slugMatch;
+    if (hasScopedCategories) return categoryMatch;
+    return slugMatch;
   });
 
   const eligibleSubtotal = round2(eligibleLines.reduce((sum, line) => sum + toNum(line.line_total_jod), 0));

@@ -72,11 +72,11 @@ type PromoRow = {
   product_slugs: string[] | null;
 };
 
-function normalizePromoKind(value: unknown): "AUTO" | "CODE" {
+function normalizePromoKind(value: unknown): "SEASONAL" | "CODE" {
   const kind = String(value || "").trim().toUpperCase();
-  if (kind === "AUTO" || kind === "SEASONAL") return "AUTO";
-  // Treat PROMO/REFERRAL as CODE for back-compat.
-  return "CODE";
+  if (kind === "CODE" || kind === "PROMO" || kind === "REFERRAL") return "CODE";
+  // DB stores seasonal/automatic discounts as promo_kind='AUTO'.
+  return "SEASONAL";
 }
 
 function labelCategory(lang: "en" | "ar", c: CategoryRow) {
@@ -273,12 +273,8 @@ export default async function AdminCatalogPage({
   const params = (await searchParams) || {};
   const saved = String(params.saved || "") === "1";
   const errorCode = String(params.error || "").trim();
-  const errorPgCode = String(
-  Array.isArray(params.error_code) ? (params.error_code[0] ?? "") : (params.error_code ?? "")
-).trim();
-  const errorDetail = String(
-  Array.isArray(params.error_detail) ? (params.error_detail[0] ?? "") : (params.error_detail ?? "")
-).trim();
+  const errorPgCode = String((params as any).error_code || "").trim();
+  const errorDetail = String((params as any).error_detail || "").trim();
   const variantError = errorCode === "invalid-variant";
   const duplicateVariantLabelError = errorCode === "duplicate-variant-label";
   const uploaded = String(params.uploaded || "") === "1";
@@ -914,8 +910,8 @@ export default async function AdminCatalogPage({
 
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
             <select name="promo_kind" defaultValue={selectedPromo ? normalizePromoKind(selectedPromo.promo_kind) : "CODE"} className={styles.adminSelect}>
-              <option value="AUTO">{L.autoPromo}</option>
-              <option value="CODE">{L.codePromo}</option>
+              <option value="SEASONAL">{isAr ? "موسمي (خصم تلقائي)" : "Seasonal (automatic discount)"}</option>
+              <option value="CODE">{isAr ? "كود خصم" : "Discount code"}</option>
             </select>
             <input name="code" placeholder="NIVRAN10" defaultValue={selectedPromo?.code || ""} className={`${styles.adminInput} ${styles.ltr}`} />
 

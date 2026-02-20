@@ -319,9 +319,19 @@ export async function ensureCatalogTablesSafe(): Promise<{ ok: true } | { ok: fa
     }
 
     if (isRecoverableCatalogSetupError(error)) {
-      const reason = errorMessageOf(error).slice(0, 180);
-      console.warn(`[catalog] ensureCatalogTables skipped: ${reason}`);
-      return { ok: false, reason };
+      // If DDL is blocked (common on managed Neon roles), we can still proceed
+      // as long as the catalog tables already exist and are readable.
+      try {
+        await db.query(`select 1 from products limit 1`);
+        await db.query(`select 1 from categories limit 1`);
+        await db.query(`select 1 from promotions limit 1`);
+        console.warn("[catalog] ensureCatalogTables skipped (DDL blocked), but catalog tables exist; proceeding read-only.");
+        return { ok: true };
+      } catch (probeError: unknown) {
+        const reason = errorMessageOf(error).slice(0, 180);
+        console.warn(`[catalog] ensureCatalogTables skipped: ${reason}`);
+        return { ok: false, reason };
+      }
     }
     throw error;
   }

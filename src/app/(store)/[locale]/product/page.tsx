@@ -108,8 +108,11 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
   try {
     const bootstrap = await ensureCatalogTablesSafe();
     if (!bootstrap.ok) {
-      console.warn(`[catalog] ensureCatalogTables skipped: ${bootstrap.reason}`);
-    }
+      categoriesRows = fallbackCategories();
+      productRows = fallbackCatalogRows();
+      campaignRows = [];
+      console.warn(`[catalog] Using fallback product catalog: ${bootstrap.reason}`);
+    } else {
       const categoriesRes = await db.query<CategoryRow>(
     `select key, name_en, name_ar, is_active, is_promoted, sort_order
        from categories
@@ -127,13 +130,13 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
             p.description_ar,
             p.price_jod::text as price_jod,
             vm.min_variant_price_jod::text as min_variant_price_jod,
-            dv.id::int as default_variant_id,
+            dv.id as default_variant_id,
             dv.label as default_variant_label,
             dv.price_jod::text as default_variant_price_jod,
             p.category_key,
             p.inventory_qty,
             (
-                            select pi.id::int
+              select pi.id
               from product_images pi
               where pi.product_id=p.id
               order by pi."position" asc, pi.id asc
@@ -144,8 +147,8 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
             (
               case
                 when bp.id is null then null
-                when bp.discount_type='PERCENT' then greatest(0, coalesce(vm.min_variant_price_jod, p.price_jod, 0) - (coalesce(vm.min_variant_price_jod, p.price_jod, 0) * (bp.discount_value / 100)))
-                when bp.discount_type='FIXED' then greatest(0, coalesce(vm.min_variant_price_jod, p.price_jod, 0) - bp.discount_value)
+                when bp.discount_type='PERCENT' then greatest(0, coalesce(vm.min_variant_price_jod, p.price_jod) - (coalesce(vm.min_variant_price_jod, p.price_jod) * (bp.discount_value / 100)))
+                when bp.discount_type='FIXED' then greatest(0, coalesce(vm.min_variant_price_jod, p.price_jod) - bp.discount_value)
                 else null
               end
             )::text as discounted_price_jod,
@@ -168,16 +171,28 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
        left join lateral (
          select pr.id, pr.discount_type, pr.discount_value, pr.priority
          from promotions pr
-         where pr.promo_kind in ('AUTO','SEASONAL')
+         where pr.promo_kind='AUTO'
            and pr.is_active=true
            and (pr.starts_at is null or pr.starts_at <= now())
            and (pr.ends_at is null or pr.ends_at >= now())
-           and (pr.category_keys is null or array_length(pr.category_keys, 1) is null or p.category_key = any(pr.category_keys))
-           and (pr.product_slugs is null or array_length(pr.product_slugs, 1) is null or p.slug = any(pr.product_slugs))
-           and (pr.min_order_jod is null or pr.min_order_jod <= coalesce(vm.min_variant_price_jod, p.price_jod, 0))
+           and (
+             (
+               coalesce(array_length(pr.category_keys, 1), 0) = 0
+               and coalesce(array_length(pr.product_slugs, 1), 0) = 0
+             )
+             or (
+               coalesce(array_length(pr.category_keys, 1), 0) > 0
+               and p.category_key = any(pr.category_keys)
+             )
+             or (
+               coalesce(array_length(pr.product_slugs, 1), 0) > 0
+               and p.slug = any(pr.product_slugs)
+             )
+           )
+           and (pr.min_order_jod is null or pr.min_order_jod <= coalesce(vm.min_variant_price_jod, p.price_jod))
          order by pr.priority desc,
                   case
-                    when pr.discount_type='PERCENT' then (coalesce(vm.min_variant_price_jod, p.price_jod, 0) * (pr.discount_value / 100))
+                    when pr.discount_type='PERCENT' then (coalesce(vm.min_variant_price_jod, p.price_jod) * (pr.discount_value / 100))
                     when pr.discount_type='FIXED' then pr.discount_value
                     else 0
                   end desc,
@@ -191,7 +206,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
     productRows = productsRes.rows;
 
       const campaignsRes = await db.query<CampaignRow>(
-        `select id::int as id, promo_kind, title_en, title_ar, discount_type, discount_value::text,
+        `select id, promo_kind, title_en, title_ar, discount_type, discount_value::text,
                 ends_at::text as ends_at, starts_at::text as starts_at, min_order_jod::text as min_order_jod,
                 category_keys, product_slugs
            from promotions
@@ -202,6 +217,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
           limit 8`
       );
       campaignRows = campaignsRes.rows;
+    }
   } catch (error: unknown) {
     if (!isDbConnectivityError(error) && !isRecoverableCatalogSetupError(error)) throw error;
 
@@ -234,7 +250,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
       discountValue: toSafeNumber(c.discount_value),
       minOrderJod: toSafeNumber(c.min_order_jod),
     }))
-    .filter((c) => { const k = String(c.promo_kind || "").toUpperCase(); return k === "AUTO" || k === "SEASONAL"; })
+    .filter((c) => String(c.promo_kind || "").toUpperCase() === "AUTO")
     .map((c) => ({
       id: c.id,
       title: (isAr ? c.title_ar : c.title_en) || (isAr ? "عرض خاص" : "Special campaign"),
