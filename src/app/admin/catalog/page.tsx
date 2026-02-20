@@ -72,10 +72,16 @@ type PromoRow = {
   product_slugs: string[] | null;
 };
 
+function isSeasonalPromoKind(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const k = value.trim().toUpperCase();
+  return k === "AUTO" || k === "SEASONAL";
+}
+
 function normalizePromoKind(value: unknown): "SEASONAL" | "CODE" {
-  const kind = String(value || "").trim().toUpperCase();
+  const kind = typeof value === "string" ? value.trim().toUpperCase() : "";
   if (kind === "CODE" || kind === "PROMO" || kind === "REFERRAL") return "CODE";
-  // DB stores seasonal/automatic discounts as promo_kind='AUTO'.
+  // Treat AUTO (DB) + SEASONAL (legacy/UI) as the same “seasonal” bucket
   return "SEASONAL";
 }
 
@@ -273,8 +279,12 @@ export default async function AdminCatalogPage({
   const params = (await searchParams) || {};
   const saved = String(params.saved || "") === "1";
   const errorCode = String(params.error || "").trim();
-  const errorPgCode = String((params as any).error_code || "").trim();
-  const errorDetail = String((params as any).error_detail || "").trim();
+  const errorPgCode = String(
+  Array.isArray(params.error_code) ? (params.error_code[0] ?? "") : (params.error_code ?? "")
+).trim();
+  const errorDetail = String(
+  Array.isArray(params.error_detail) ? (params.error_detail[0] ?? "") : (params.error_detail ?? "")
+).trim();
   const variantError = errorCode === "invalid-variant";
   const duplicateVariantLabelError = errorCode === "duplicate-variant-label";
   const uploaded = String(params.uploaded || "") === "1";
@@ -360,7 +370,9 @@ export default async function AdminCatalogPage({
   const productActive = data.products.filter((p) => p.is_active).length;
   const outOfStockCount = data.products.filter((p) => Number(p.inventory_qty || 0) <= 0).length;
   const variantsActive = data.variants.filter((v) => v.is_active).length;
-  const activeSeasonalPromos = data.promos.filter((r) => normalizePromoKind(r.promo_kind) === "AUTO" && r.is_active).length;
+const activeSeasonalPromos = data.promos.filter(
+  (r: { promo_kind: unknown; is_active: boolean }) => isSeasonalPromoKind(r.promo_kind) && r.is_active
+).length;
   const activePromoCodes = data.promos.filter((r) => normalizePromoKind(r.promo_kind) === "CODE" && r.is_active).length;
   const activeReferralCodes = data.promos.filter((r) => String(r.promo_kind || "").toUpperCase() === "REFERRAL" && r.is_active).length;
   const productsWithSeasonalCampaign = data.products.filter((p) => Number(p.auto_promo_count || 0) > 0).length;
@@ -398,7 +410,7 @@ export default async function AdminCatalogPage({
     const kind = normalizePromoKind(rawKind);
     if (promoState === "active" && !r.is_active) return false;
     if (promoState === "inactive" && r.is_active) return false;
-    if (promoState === "seasonal" && kind !== "AUTO") return false;
+    if (promoState === "seasonal" && kind !== "SEASONAL") return false;
     if (promoState === "promo" && kind !== "CODE") return false;
     if (promoState === "referral" && rawKind !== "REFERRAL") return false;
     if (!qPromos) return true;
