@@ -1,6 +1,6 @@
 import "server-only";
 
-export const DEFAULT_FREE_SHIPPING_THRESHOLD_JOD = 69;
+export const DEFAULT_FREE_SHIPPING_THRESHOLD_JOD = 50;
 export const DEFAULT_BASE_SHIPPING_JOD = 3.5;
 
 export function normalizeFreeShippingThreshold(value: string | number | null | undefined): number {
