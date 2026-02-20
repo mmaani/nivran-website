@@ -76,7 +76,7 @@ export default function CheckoutClient() {
   const [discountMode, setDiscountMode] = useState<DiscountMode>("NONE");
   const [selectedPromo, setSelectedPromo] = useState<PromoState | null>(null);
   const [promoBusy, setPromoBusy] = useState(false);
-  const [freeShippingThresholdJod, setFreeShippingThresholdJod] = useState(35);
+  const [freeShippingThresholdJod, setFreeShippingThresholdJod] = useState(69);
   const [baseShippingJod, setBaseShippingJod] = useState(3.5);
   const [promoMsg, setPromoMsg] = useState<string | null>(null);
   const [healthMode, setHealthMode] = useState<HealthMode>("checking");

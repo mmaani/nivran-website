@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { db, isDbConnectivityError } from "@/lib/db";
 import { ensureCatalogTablesSafe } from "@/lib/catalog";
+import { DEFAULT_FREE_SHIPPING_THRESHOLD_JOD } from "@/lib/shipping";
 import { getAdminLang } from "@/lib/admin-lang";
 import styles from "./page.module.css";
 
@@ -123,7 +124,7 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
         products: [],
         variants: [],
         promos: [],
-        freeShippingThresholdJod: 35,
+        freeShippingThresholdJod: DEFAULT_FREE_SHIPPING_THRESHOLD_JOD,
         bootstrapNote: "DB_CONNECTIVITY",
         errorMessage: message,
       };
@@ -135,7 +136,7 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
       products: [],
       variants: [],
       promos: [],
-      freeShippingThresholdJod: 35,
+      freeShippingThresholdJod: DEFAULT_FREE_SHIPPING_THRESHOLD_JOD,
       bootstrapNote: "CATALOG_BOOTSTRAP_UNAVAILABLE",
       errorMessage: message,
     };
@@ -223,7 +224,7 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
       products: productsRes.rows,
       variants: variantsRes.rows,
       promos: promosRes.rows,
-      freeShippingThresholdJod: Number(settingsRes.rows[0]?.free_shipping_threshold_jod || 35),
+      freeShippingThresholdJod: Number(settingsRes.rows[0]?.free_shipping_threshold_jod || DEFAULT_FREE_SHIPPING_THRESHOLD_JOD),
       bootstrapNote,
     };
   } catch (error: unknown) {
@@ -235,7 +236,7 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
         products: [],
         variants: [],
         promos: [],
-        freeShippingThresholdJod: 35,
+        freeShippingThresholdJod: DEFAULT_FREE_SHIPPING_THRESHOLD_JOD,
         bootstrapNote,
         errorMessage: message,
       };
@@ -247,7 +248,7 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
       products: [],
       variants: [],
       promos: [],
-      freeShippingThresholdJod: 35,
+      freeShippingThresholdJod: DEFAULT_FREE_SHIPPING_THRESHOLD_JOD,
       bootstrapNote,
       errorMessage: message,
     };
@@ -553,7 +554,7 @@ export default async function AdminCatalogPage({
         <h2 style={{ marginTop: 0 }}>{L.freeShipping}</h2>
         <form action="/api/admin/catalog/settings" method="post" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <input type="hidden" name="return_to" value={returnTo} />
-          <input name="free_shipping_threshold_jod" type="number" min="0" step="0.01" defaultValue={Number(data.freeShippingThresholdJod || 35)} className={`${styles.adminInput} ${styles.ltr}`} style={{ width: 220 }} />
+          <input name="free_shipping_threshold_jod" type="number" min="0" step="0.01" defaultValue={Number(data.freeShippingThresholdJod || DEFAULT_FREE_SHIPPING_THRESHOLD_JOD)} className={`${styles.adminInput} ${styles.ltr}`} style={{ width: 220 }} />
           <button className={`${styles.adminBtn} ${styles.adminBtnPrimary}`} type="submit">{L.update}</button>
           <span className="muted">{isAr ? "عند هذا الحد يصبح الشحن مجانياً في صفحة الدفع." : "At this threshold, shipping becomes free in checkout."}</span>
         </form>
