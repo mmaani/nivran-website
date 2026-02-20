@@ -394,8 +394,7 @@ export default function CheckoutClient() {
       }
     }
 
-    const ok = isObject(data) && data.ok === true;
-    if (!res.ok || !ok) {
+    if (!res.ok || !isObject(data) || data.ok !== true) {
       const msg = isObject(data) && typeof data.error === "string" ? data.error : "";
       throw new Error(msg || `Order create failed (${res.status})`);
     }
@@ -463,16 +462,24 @@ export default function CheckoutClient() {
 
   return (
     <div style={{ padding: "1.2rem 0" }}>
-      <h1 className="title" style={{ marginTop: 0 }}>{COPY.title}</h1>
-      <p className="lead" style={{ marginTop: 0 }}>{COPY.subtitle}</p>
+      <h1 className="title" style={{ marginTop: 0 }}>
+        {COPY.title}
+      </h1>
+      <p className="lead" style={{ marginTop: 0 }}>
+        {COPY.subtitle}
+      </p>
 
       {loadingBuyNow ? <p className="muted">{COPY.loadingProduct}</p> : null}
 
       {items.length === 0 ? (
         <div className="panel">
-          <p className="muted" style={{ margin: 0 }}>{COPY.empty}</p>
+          <p className="muted" style={{ margin: 0 }}>
+            {COPY.empty}
+          </p>
           <div style={{ marginTop: 12 }}>
-            <a className="btn btn-outline" href={`/${locale}/product`}>{COPY.backToShop}</a>
+            <a className="btn btn-outline" href={`/${locale}/product`}>
+              {COPY.backToShop}
+            </a>
           </div>
         </div>
       ) : (

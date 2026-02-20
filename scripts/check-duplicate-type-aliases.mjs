@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const CRITICAL_FILES = [
@@ -49,19 +49,27 @@ function collectTypeAliases(source) {
     const line = lines[index];
     const match = line.match(typeRegex);
     if (!match) continue;
+
     const name = match[1];
-    const list = aliases.get(name) ?? [];
-    list.push(index + 1);
-    aliases.set(name, list);
+    const entries = aliases.get(name) ?? [];
+    entries.push(index + 1);
+    aliases.set(name, entries);
   }
 
   return aliases;
 }
 
 const issues = [];
+const missingFiles = [];
 
 for (const relativeFile of CRITICAL_FILES) {
   const absoluteFile = resolve(process.cwd(), relativeFile);
+
+  if (!existsSync(absoluteFile)) {
+    missingFiles.push(relativeFile);
+    continue;
+  }
+
   const source = readFileSync(absoluteFile, "utf8");
   const aliases = collectTypeAliases(source);
 
@@ -69,6 +77,14 @@ for (const relativeFile of CRITICAL_FILES) {
     if (lines.length < 2) continue;
     issues.push({ file: relativeFile, name, lines });
   }
+}
+
+if (missingFiles.length > 0) {
+  console.error("Critical files missing for duplicate-type check:\n");
+  for (const file of missingFiles) {
+    console.error(`- ${file}`);
+  }
+  process.exit(1);
 }
 
 if (issues.length > 0) {
