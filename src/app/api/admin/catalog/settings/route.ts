@@ -18,7 +18,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
     }
 
-    await ensureCatalogTablesSafe();
+    const bootstrap = await ensureCatalogTablesSafe();
+    if (!bootstrap.ok) {
+      return catalogErrorRedirect(req, form, "settings-store-unavailable");
+    }
     const threshold = Number(form.get("free_shipping_threshold_jod") || 0);
     if (!Number.isFinite(threshold) || threshold < 0) {
       return catalogErrorRedirect(req, form, "invalid-free-shipping-threshold");

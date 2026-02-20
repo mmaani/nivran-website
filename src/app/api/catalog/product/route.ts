@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db, isDbConnectivityError } from "@/lib/db";
-import { ensureCatalogTables } from "@/lib/catalog";
+import { ensureCatalogTablesSafe } from "@/lib/catalog";
 import { fallbackProductBySlug } from "@/lib/catalogFallback";
 
 export const runtime = "nodejs";
@@ -70,7 +70,42 @@ export async function GET(req: Request) {
   }
 
   try {
-    await ensureCatalogTables();
+    const bootstrap = await ensureCatalogTablesSafe();
+    if (!bootstrap.ok) {
+      const fallback = slug ? fallbackProductBySlug(slug) : null;
+      if (!fallback) {
+        return NextResponse.json(
+          { ok: false, error: "Catalog temporarily unavailable", reason: bootstrap.reason },
+          { status: 503, headers: { "cache-control": "no-store" } }
+        );
+      }
+
+      const baseFallback = Number(fallback.priceJod || 0);
+      const fallbackImage = fallback.images?.[0] || "";
+      return NextResponse.json(
+        {
+          ok: true,
+          fallback: true,
+          reason: bootstrap.reason,
+          product: {
+            id: 0,
+            slug: fallback.slug,
+            category_key: fallback.category,
+            name_en: fallback.name.en,
+            name_ar: fallback.name.ar,
+            description_en: fallback.description.en,
+            description_ar: fallback.description.ar,
+            price_jod: baseFallback,
+            final_price_jod: baseFallback,
+            compare_at_price_jod: null,
+            inventory_qty: 99,
+            images: fallbackImage ? [{ id: 0, url: fallbackImage }] : [],
+          },
+          promotion: null,
+        },
+        { headers: { "cache-control": "no-store" } }
+      );
+    }
 
     const pr = await db.query<ProductRow>(
     `select id, slug, slug_en, slug_ar, name_en, name_ar, description_en, description_ar,
@@ -145,7 +180,7 @@ export async function GET(req: Request) {
             category_keys: promo.category_keys || null,
           }
         : null,
-    });
+    }, { headers: { "cache-control": "no-store" } });
   } catch (error: unknown) {
     if (!isDbConnectivityError(error)) throw error;
 
@@ -162,6 +197,8 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       ok: true,
+      fallback: true,
+      reason: "DB_CONNECTIVITY",
       product: {
         id: 0,
         slug: fallback.slug,
@@ -177,6 +214,6 @@ export async function GET(req: Request) {
         images: image ? [{ id: 0, url: image }] : [],
       },
       promotion: null,
-    });
+    }, { headers: { "cache-control": "no-store" } });
   }
 }
