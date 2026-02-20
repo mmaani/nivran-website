@@ -24,6 +24,31 @@ function normalizeSlug(v: unknown) {
     .replace(/(^-+|-+$)/g, "");
 }
 
+function normalizeDigits(value: string): string {
+  // Arabic-Indic (٠١٢٣٤٥٦٧٨٩) + Eastern Arabic (۰۱۲۳۴۵۶۷۸۹)
+  const map: Record<string, string> = {
+    "٠": "0", "١": "1", "٢": "2", "٣": "3", "٤": "4", "٥": "5", "٦": "6", "٧": "7", "٨": "8", "٩": "9",
+    "۰": "0", "۱": "1", "۲": "2", "۳": "3", "۴": "4", "۵": "5", "۶": "6", "۷": "7", "۸": "8", "۹": "9",
+  };
+  return value.replace(/[٠-٩۰-۹]/g, (d) => map[d] ?? d);
+}
+
+function parseLocaleNumber(input: unknown): number | null {
+  const raw = normalizeDigits(String(input ?? "").trim());
+  if (!raw) return null;
+
+  // Arabic decimal/thousands separators
+  let s = raw.replace(/٬/g, "").replace(/٫/g, ".");
+
+  // If only comma exists, treat it as decimal separator; otherwise, strip commas.
+  if (s.includes(",") && !s.includes(".")) s = s.replace(/,/g, ".");
+  else s = s.replace(/,/g, "");
+
+  s = s.replace(/\s+/g, "");
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
 export async function POST(req: Request) {
   let form: FormData | null = null;
   try {
@@ -44,16 +69,17 @@ export async function POST(req: Request) {
       const nameAr = String(form.get("name_ar") || "").trim();
       const descriptionEn = String(form.get("description_en") || "").trim() || null;
       const descriptionAr = String(form.get("description_ar") || "").trim() || null;
-      const price = Number(form.get("price_jod") || 0);
-      const compareAt = String(form.get("compare_at_price_jod") || "").trim();
-      const inventory = Math.max(0, Number(form.get("inventory_qty") || 0));
+      const price = parseLocaleNumber(form.get("price_jod"));
+      const compareAt = parseLocaleNumber(form.get("compare_at_price_jod"));
+      const inventoryRaw = parseLocaleNumber(form.get("inventory_qty"));
+      const inventory = inventoryRaw == null ? 0 : Math.max(0, Math.trunc(inventoryRaw));
       const categoryKey = String(form.get("category_key") || "perfume").trim() || "perfume";
       const isActive = String(form.get("is_active") || "") === "on";
       const wearTimes = pickMulti(form, "wear_times");
       const seasons = pickMulti(form, "seasons");
       const audiences = pickMulti(form, "audiences");
 
-      if (!slug || !nameEn || !nameAr || !Number.isFinite(price) || price <= 0) {
+      if (!slug || !nameEn || !nameAr || price == null || price <= 0) {
         return catalogErrorRedirect(req, form, "invalid-product");
       }
 
@@ -62,7 +88,7 @@ export async function POST(req: Request) {
           (slug, slug_en, slug_ar, category_key, name_en, name_ar, description_en, description_ar, price_jod, compare_at_price_jod, inventory_qty, is_active, wear_times, seasons, audiences)
          values
           ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::text[],$14::text[],$15::text[])
-         on conflict (slug) do update
+         on conflict (slug_en) do update
            set slug_en=excluded.slug_en,
                slug_ar=excluded.slug_ar,
                category_key=excluded.category_key,
@@ -78,23 +104,7 @@ export async function POST(req: Request) {
                seasons=excluded.seasons,
                audiences=excluded.audiences,
                updated_at=now()`,
-        [
-          slug,
-          slug,
-          slug,
-          categoryKey,
-          nameEn,
-          nameAr,
-          descriptionEn,
-          descriptionAr,
-          price,
-          compareAt ? Number(compareAt) : null,
-          inventory,
-          isActive,
-          wearTimes,
-          seasons,
-          audiences,
-        ]
+        [slug, slug, slug, categoryKey, nameEn, nameAr, descriptionEn, descriptionAr, price, compareAt, inventory, isActive, wearTimes, seasons, audiences]
       );
     }
 
@@ -104,9 +114,10 @@ export async function POST(req: Request) {
       const nameAr = String(form.get("name_ar") || "").trim();
       const descriptionEn = String(form.get("description_en") || "").trim();
       const descriptionAr = String(form.get("description_ar") || "").trim();
-      const price = Number(form.get("price_jod") || 0);
-      const compareAt = String(form.get("compare_at_price_jod") || "").trim();
-      const inventory = Math.max(0, Number(form.get("inventory_qty") || 0));
+      const price = parseLocaleNumber(form.get("price_jod"));
+      const compareAt = parseLocaleNumber(form.get("compare_at_price_jod"));
+      const inventoryRaw = parseLocaleNumber(form.get("inventory_qty"));
+      const inventory = inventoryRaw == null ? null : Math.max(0, Math.trunc(inventoryRaw));
       const categoryKey = String(form.get("category_key") || "").trim();
       const isActive = String(form.get("is_active") || "") === "on";
       const wearTimes = pickMulti(form, "wear_times");
@@ -120,9 +131,9 @@ export async function POST(req: Request) {
                  name_ar=case when nullif($3,'') is null then name_ar else $3 end,
                  description_en=case when $4 is null then description_en else $4 end,
                  description_ar=case when $5 is null then description_ar else $5 end,
-                 price_jod=case when $6 > 0 then $6 else price_jod end,
+                 price_jod=case when $6 is not null and $6 > 0 then $6 else price_jod end,
                  compare_at_price_jod=$7,
-                 inventory_qty=$8,
+                 inventory_qty=coalesce($8, inventory_qty),
                  category_key=coalesce(nullif($9,''), category_key),
                  is_active=$10,
                  wear_times=$11::text[],
@@ -130,21 +141,7 @@ export async function POST(req: Request) {
                  audiences=$13::text[],
                  updated_at=now()
            where id=$1`,
-          [
-            id,
-            nameEn,
-            nameAr,
-            descriptionEn || null,
-            descriptionAr || null,
-            price,
-            compareAt ? Number(compareAt) : null,
-            inventory,
-            categoryKey,
-            isActive,
-            wearTimes,
-            seasons,
-            audiences,
-          ]
+          [id, nameEn, nameAr, descriptionEn || null, descriptionAr || null, price, compareAt, inventory, categoryKey, isActive, wearTimes, seasons, audiences]
         );
       }
     }

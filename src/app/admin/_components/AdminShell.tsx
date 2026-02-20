@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -29,7 +29,16 @@ export default function AdminShell({
   const [lang, setLang] = useState<"en" | "ar">(initialLang);
   const [savingLang, setSavingLang] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const nowLabel = new Date().toLocaleString(lang === "ar" ? "ar-JO" : "en-GB", { dateStyle: "medium", timeStyle: "short" });
+  // Avoid hydration mismatch: this component is SSR-ed, but time formatting differs between server and client.
+  // Render a placeholder on the server, then fill on the client.
+  const [nowLabel, setNowLabel] = useState<string>("");
+
+  useEffect(() => {
+    const format = () => new Date().toLocaleString(lang === "ar" ? "ar-JO" : "en-GB", { dateStyle: "medium", timeStyle: "short" });
+    setNowLabel(format());
+    const timer = setInterval(() => setNowLabel(format()), 60_000);
+    return () => clearInterval(timer);
+  }, [lang]);
 
   const nav = useMemo(
     () => [
@@ -117,7 +126,9 @@ export default function AdminShell({
           {authed ? (
             <div className="admin-context-row">
               <span className="admin-pill"><T en="Live operations" ar="تشغيل مباشر" /></span>
-              <span className="admin-pill admin-pill-muted">{nowLabel}</span>
+              <span className="admin-pill admin-pill-muted" suppressHydrationWarning>
+                {nowLabel || "—"}
+              </span>
               <Link className="admin-mini-link" href="/admin/catalog#promos-section"><T en="Campaigns" ar="الحملات" /></Link>
               <Link className="admin-mini-link" href="/admin/catalog#variants-section"><T en="Variants" ar="المتغيرات" /></Link>
               <Link className="admin-mini-link" href="/admin/orders"><T en="Order queue" ar="قائمة الطلبات" /></Link>

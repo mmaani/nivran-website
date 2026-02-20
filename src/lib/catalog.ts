@@ -101,16 +101,20 @@ export async function ensureCatalogTables() {
     );
   `);
 
-  // Seed your default category set (only if missing; does not overwrite edits)
+  // Seed the default categories ONLY when the table is empty.
+  // Otherwise, admins cannot delete categories because the bootstrap would re-insert them.
   await db.query(`
     insert into categories (key, name_en, name_ar, sort_order, is_active, is_promoted)
-    values
-      ('perfume', 'Perfume', 'عطر', 10, true, true),
-      ('hand-gel', 'Hand Gel', 'معقم يدين', 20, true, true),
-      ('cream', 'Cream', 'كريم', 30, true, true),
-      ('air-freshener', 'Air Freshener', 'معطر جو', 40, true, true),
-      ('soap', 'Soap', 'صابون', 50, true, true)
-    on conflict (key) do nothing;
+    select v.key, v.name_en, v.name_ar, v.sort_order, v.is_active, v.is_promoted
+      from (
+        values
+          ('perfume', 'Perfume', 'عطر', 10, true, true),
+          ('hand-gel', 'Hand Gel', 'معقم يدين', 20, true, true),
+          ('cream', 'Cream', 'كريم', 30, true, true),
+          ('air-freshener', 'Air Freshener', 'معطر جو', 40, true, true),
+          ('soap', 'Soap', 'صابون', 50, true, true)
+      ) as v(key, name_en, name_ar, sort_order, is_active, is_promoted)
+     where not exists (select 1 from categories limit 1);
   `);
 
   // ---------- PROMOTIONS ----------
@@ -293,7 +297,7 @@ export function isRecoverableCatalogSetupError(error: unknown): boolean {
   const code = errorCodeOf(error);
   const message = errorMessageOf(error).toLowerCase();
 
-  if (code === "42501" || code === "25006" || code === "28P01" || code === "23514" || code === "42P01") return true; // permission denied, read-only, auth, check constraint, undefined table
+  if (code === "42501" || code === "25006" || code === "28P01" || code === "23514" || code === "23505" || code === "42P01") return true; // permission denied, read-only, auth, check/unique constraint, undefined table
 
   return (
     message.includes("permission denied")

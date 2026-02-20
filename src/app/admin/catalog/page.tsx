@@ -93,6 +93,14 @@ function promoStatusLabel(lang: "en" | "ar", row: PromoRow): string {
   return lang === "ar" ? "مباشر" : "Live";
 }
 
+function toDatetimeLocalValue(value: string | null): string {
+  if (!value) return "";
+  const d = new Date(String(value));
+  if (!Number.isFinite(d.getTime())) return "";
+  // Keep UTC-based formatting to match how our server parses datetime-local strings.
+  return d.toISOString().slice(0, 16);
+}
+
 function promoEstimatedCoverage(row: PromoRow, products: ProductRow[]): number {
   const productSlugs = row.product_slugs || [];
   const categoryKeys = row.category_keys || [];
@@ -397,24 +405,27 @@ export default async function AdminCatalogPage({
   });
 
   const promoInsights = filteredPromos.map((promo) => ({
-    id: promo.id,
+    id: Number(promo.id),
     status: promoStatusLabel(lang, promo),
     estimatedCoverage: promoEstimatedCoverage(promo, data.products),
   }));
 
   const selectedProductIdParam = Number(params.variantProductId || 0);
-  const selectedProduct = productsForVariantSection.find((p) => p.id === selectedProductIdParam)
+  const selectedProduct = productsForVariantSection.find((p) => Number(p.id) === selectedProductIdParam)
     || productsForVariantSection[0]
     || null;
   const selectedProductVariants = selectedProduct
     ? filteredVariants.filter((v) => v.product_id === selectedProduct.id)
     : [];
 
-  const selectedEditProductId = Number(params.productEditId || selectedProduct?.id || 0);
-  const selectedEditProduct = data.products.find((p) => p.id === selectedEditProductId) || null;
+  const selectedEditProductId = Number(params.productEditId || (selectedProduct ? Number(selectedProduct.id) : 0) || 0);
+  const selectedEditProduct = data.products.find((p) => Number(p.id) === selectedEditProductId) || null;
+
+  const selectedPromoEditId = Number(params.promoEditId || 0);
+  const selectedPromo = data.promos.find((r) => Number(r.id) === selectedPromoEditId) || null;
 
   const returnQuery = new URLSearchParams();
-  const carry = ["qProducts", "qVariants", "qPromos", "productState", "variantState", "promoState"] as const;
+  const carry = ["qProducts", "qVariants", "qPromos", "productState", "variantState", "promoState", "productEditId", "promoEditId"] as const;
   for (const key of carry) {
     const value = String(params[key] || "").trim();
     if (value) returnQuery.set(key, value);
@@ -429,9 +440,13 @@ export default async function AdminCatalogPage({
     return query.size ? `/admin/catalog?${query.toString()}` : "/admin/catalog";
   };
 
-  const returnTo = buildCatalogPath(selectedEditProduct ? { productEditId: selectedEditProduct.id } : undefined);
+  const returnExtra: Record<string, string | number> = {};
+  if (selectedEditProduct) returnExtra.productEditId = Number(selectedEditProduct.id);
+  if (selectedPromo) returnExtra.promoEditId = Number(selectedPromo.id);
+
+  const returnTo = buildCatalogPath(Object.keys(returnExtra).length ? returnExtra : undefined);
   const editReturnTo = selectedEditProduct
-    ? buildCatalogPath({ productEditId: selectedEditProduct.id, variantProductId: selectedEditProduct.id })
+    ? buildCatalogPath({ ...returnExtra, productEditId: Number(selectedEditProduct.id), variantProductId: Number(selectedEditProduct.id) })
     : returnTo;
 
   return (
@@ -850,51 +865,110 @@ export default async function AdminCatalogPage({
       </section>
 
 <section id="promos-section" className={styles.adminCard}>
-        <h2 style={{ marginTop: 0 }}>{L.addPromo}</h2>
+        <h2 style={{ marginTop: 0 }}>{isAr ? "إضافة / تعديل عرض" : "Add / Edit promotion"}</h2>
         <p className="muted" style={{ marginTop: -4 }}>{isAr ? `نتائج: ${filteredPromos.length}` : `Results: ${filteredPromos.length}`}</p>
+
+        <form method="get" action="/admin/catalog" className={styles.adminGrid} style={{ marginBottom: 12 }}>
+          <div style={{ display: "grid", gap: 8, gridTemplateColumns: "minmax(0,1fr) auto" }}>
+            <select name="promoEditId" className={styles.adminSelect} defaultValue={selectedPromo ? String(selectedPromo.id) : "0"}>
+              <option value="0">{isAr ? "عرض جديد" : "New promotion"}</option>
+              {data.promos.map((p) => (
+                <option key={`promo-edit-${p.id}`} value={p.id}>
+                  {(isAr ? p.title_ar : p.title_en) || p.code || `PROMO #${p.id}`}
+                </option>
+              ))}
+            </select>
+            <button className={styles.adminBtn} type="submit">{isAr ? "تحميل العرض" : "Load promotion"}</button>
+          </div>
+          <input type="hidden" name="qProducts" value={qProducts} />
+          <input type="hidden" name="qVariants" value={qVariants} />
+          <input type="hidden" name="qPromos" value={qPromos} />
+          <input type="hidden" name="productState" value={productState} />
+          <input type="hidden" name="variantState" value={variantState} />
+          <input type="hidden" name="promoState" value={promoState} />
+          {selectedEditProduct ? <input type="hidden" name="productEditId" value={String(selectedEditProduct.id)} /> : null}
+          {selectedProduct ? <input type="hidden" name="variantProductId" value={String(selectedProduct.id)} /> : null}
+        </form>
+
         <form action="/api/admin/catalog/promotions" method="post" className={styles.adminGrid}>
-                <input type="hidden" name="return_to" value={returnTo} />
-          <input type="hidden" name="action" value="create" />
+          <input type="hidden" name="return_to" value={returnTo} />
+          <input type="hidden" name="action" value={selectedPromo ? "update" : "create"} />
+          {selectedPromo ? <input type="hidden" name="id" value={selectedPromo.id} /> : null}
+
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>
-            <select name="promo_kind" defaultValue="CODE" className={styles.adminSelect}>
+            <select name="promo_kind" defaultValue={selectedPromo ? normalizePromoKind(selectedPromo.promo_kind) : "CODE"} className={styles.adminSelect}>
               <option value="AUTO">{L.autoPromo}</option>
               <option value="CODE">{L.codePromo}</option>
             </select>
-            <input name="code" placeholder="NIVRAN10" className={`${styles.adminInput} ${styles.ltr}`} />
-            <select name="discount_type" defaultValue="PERCENT" className={styles.adminSelect}>
+            <input name="code" placeholder="NIVRAN10" defaultValue={selectedPromo?.code || ""} className={`${styles.adminInput} ${styles.ltr}`} />
+
+            <select name="discount_type" defaultValue={selectedPromo ? String(selectedPromo.discount_type || "PERCENT") : "PERCENT"} className={styles.adminSelect}>
               <option value="PERCENT">{L.percent}</option>
               <option value="FIXED">{L.fixed}</option>
             </select>
-            <input name="discount_value" type="number" min="0" step="0.01" required placeholder="Discount value" className={`${styles.adminInput} ${styles.ltr}`} />
-            <input name="usage_limit" type="number" min="1" placeholder="Usage limit" className={`${styles.adminInput} ${styles.ltr}`} />
-            <input name="min_order_jod" type="number" min="0" step="0.01" placeholder="Min order (JOD)" className={`${styles.adminInput} ${styles.ltr}`} />
-            <input name="priority" type="number" defaultValue={0} placeholder={L.promoPriority} className={`${styles.adminInput} ${styles.ltr}`} />
-            <input name="product_slugs" placeholder={L.promoProducts} className={`${styles.adminInput} ${styles.ltr}`} style={{ gridColumn: "1 / -1" }} />
-            <input name="title_en" required placeholder="Promotion title (EN)" className={styles.adminInput} />
-            <input name="title_ar" required placeholder="عنوان العرض (AR)" className={styles.adminInput} />
-            <input name="starts_at" type="datetime-local" className={`${styles.adminInput} ${styles.ltr}`} />
-            <input name="ends_at" type="datetime-local" className={`${styles.adminInput} ${styles.ltr}`} />
+            <input
+              name="discount_value"
+              type="number"
+              min="0"
+              step="0.01"
+              required
+              placeholder="Discount value"
+              defaultValue={selectedPromo ? Number(selectedPromo.discount_value || 0) : ""}
+              className={`${styles.adminInput} ${styles.ltr}`}
+            />
+
+            <input name="usage_limit" type="number" min="1" placeholder="Usage limit" defaultValue={selectedPromo?.usage_limit ?? ""} className={`${styles.adminInput} ${styles.ltr}`} />
+            <input name="min_order_jod" type="number" min="0" step="0.01" placeholder="Min order (JOD)" defaultValue={selectedPromo?.min_order_jod ?? ""} className={`${styles.adminInput} ${styles.ltr}`} />
+            <input name="priority" type="number" defaultValue={selectedPromo?.priority ?? 0} placeholder={L.promoPriority} className={`${styles.adminInput} ${styles.ltr}`} />
+
+            <input
+              name="product_slugs"
+              placeholder={L.promoProducts}
+              defaultValue={selectedPromo?.product_slugs?.join(", ") || ""}
+              className={`${styles.adminInput} ${styles.ltr}`}
+              style={{ gridColumn: "1 / -1" }}
+            />
+
+            <input name="title_en" required placeholder="Promotion title (EN)" defaultValue={selectedPromo?.title_en || ""} className={styles.adminInput} />
+            <input name="title_ar" required placeholder="عنوان العرض (AR)" defaultValue={selectedPromo?.title_ar || ""} className={styles.adminInput} />
+
+            <input name="starts_at" type="datetime-local" defaultValue={toDatetimeLocalValue(selectedPromo?.starts_at ?? null)} className={`${styles.adminInput} ${styles.ltr}`} />
+            <input name="ends_at" type="datetime-local" defaultValue={toDatetimeLocalValue(selectedPromo?.ends_at ?? null)} className={`${styles.adminInput} ${styles.ltr}`} />
           </div>
 
           <div style={{ display: "grid", gap: 8 }}>
             <div style={{ fontWeight: 600 }}>{L.promoCats}</div>
             <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input type="checkbox" name="category_keys" value="__ALL__" defaultChecked /> {L.allCats}
+              <input
+                type="checkbox"
+                name="category_keys"
+                value="__ALL__"
+                defaultChecked={!selectedPromo?.category_keys || selectedPromo.category_keys.length === 0}
+              />
+              {L.allCats}
             </label>
             <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
               {data.categories.map((c) => (
                 <label key={c.key} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <input type="checkbox" name="category_keys" value={c.key} /> {labelCategory(lang, c)}
+                  <input
+                    type="checkbox"
+                    name="category_keys"
+                    value={c.key}
+                    defaultChecked={!!selectedPromo?.category_keys?.includes(c.key)}
+                  />
+                  {labelCategory(lang, c)}
                 </label>
               ))}
             </div>
           </div>
 
           <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input type="checkbox" name="is_active" defaultChecked /> {L.active}
+            <input type="checkbox" name="is_active" defaultChecked={selectedPromo ? selectedPromo.is_active : true} /> {L.active}
           </label>
 
-          <button className={`${styles.adminBtn} ${styles.adminBtnPrimary}`} style={{ width: "fit-content" }}>{L.savePromo}</button>
+          <button className={`${styles.adminBtn} ${styles.adminBtnPrimary}`} style={{ width: "fit-content" }}>
+            {selectedPromo ? (isAr ? "تحديث العرض" : "Update promotion") : L.savePromo}
+          </button>
         </form>
       </section>
 
@@ -912,7 +986,7 @@ export default async function AdminCatalogPage({
             </thead>
             <tbody>
               {filteredPromos.map((promo) => {
-                const insight = promoInsights.find((x) => x.id === promo.id);
+                const insight = promoInsights.find((x) => x.id === Number(promo.id));
                 return (
                   <tr key={`insight-${promo.id}`}>
                     <td>{(isAr ? promo.title_ar : promo.title_en) || promo.code || "PROMO"}</td>
@@ -944,6 +1018,11 @@ export default async function AdminCatalogPage({
               </div>
               <div style={{ fontSize: 12, opacity: 0.82 }}>
                 {L.promoType}: {normalizePromoKind(r.promo_kind)} • {L.promoPriority}: {r.priority || 0} • {L.promoUsage}: {r.used_count || 0}{r.usage_limit ? ` / ${r.usage_limit}` : ""} • {L.promoMin}: {r.min_order_jod || "0"} JOD
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                <Link className={styles.adminBtn} href={buildCatalogPath({ promoEditId: Number(r.id) })}>
+                  {isAr ? "تعديل" : "Edit"}
+                </Link>
               </div>
               <form action="/api/admin/catalog/promotions" method="post" style={{ marginTop: 8 }}>
                 <input type="hidden" name="return_to" value={returnTo} />
