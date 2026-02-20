@@ -85,6 +85,8 @@ export default function CheckoutClient() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const promoServiceUnavailable = healthMode === "fallback" || healthMode === "error";
+
   const COPY = useMemo(
     () => ({
       title: isAr ? "الدفع" : "Checkout",
@@ -132,7 +134,8 @@ export default function CheckoutClient() {
     if (reason === "PROMO_MIN_ORDER") return COPY.promoMinOrder;
     if (reason === "PROMO_CATEGORY_MISMATCH") return COPY.promoCoverage;
     if (reason === "PROMO_EXPIRED" || reason === "PROMO_INACTIVE") return COPY.promoExpired;
-    if (reason === "DB_CONNECTIVITY") return isAr ? "الخدمة غير متاحة مؤقتًا. حاول لاحقًا." : "Service is temporarily unavailable. Please retry.";
+    if (reason === "CATALOG_BOOTSTRAP_UNAVAILABLE" || reason === "DB_CONNECTIVITY") return isAr ? "الخدمة غير متاحة مؤقتًا. حاول لاحقًا." : "Service is temporarily unavailable. Please retry.";
+    if (reason === "DISCOUNT_MODE_UNSUPPORTED") return isAr ? "طريقة الخصم غير مدعومة حالياً." : "Discount mode is currently unsupported.";
     return fallbackMessage;
   }, [COPY, isAr]);
 
@@ -272,6 +275,7 @@ export default function CheckoutClient() {
       if (!res.ok || !isObject(data)) {
         throw new Error(isAr ? "تعذر التحقق من الكود الآن" : "Unable to validate code right now");
       }
+
       if (data.ok !== true || !isObject(data.promo)) {
         const reason = toStr(data.reason).trim();
         const fallbackMessage = typeof data.error === "string" ? data.error : isAr ? "كود غير صالح" : "Invalid code";
@@ -288,11 +292,11 @@ export default function CheckoutClient() {
         code,
         title: isAr ? toStr(data.promo.titleAr || data.promo.titleEn || code) : toStr(data.promo.titleEn || data.promo.titleAr || code),
         discountJod: toNum(data.promo.discountJod),
-
       });
       setDiscountMode("CODE");
       if (!silent) setPromoMsg(COPY.promoApplied);
       setPromoOpen(false);
+
       try {
         window.localStorage.setItem(PROMO_CODE_STORAGE_KEY, code);
       } catch {
@@ -340,7 +344,11 @@ export default function CheckoutClient() {
   }
 
   async function applyPromoCode() {
-  await runPromoValidation(promoInput);
+    if (promoServiceUnavailable) {
+      setPromoMsg(COPY.systemFallback);
+      return;
+    }
+    await runPromoValidation(promoInput);
   }
 
   function removePromoCode() {
@@ -351,13 +359,11 @@ export default function CheckoutClient() {
     setPromoInput("");
     setPromoMsg(null);
     setPromoOpen(false);
-  
     try {
       window.localStorage.removeItem(PROMO_CODE_STORAGE_KEY);
     } catch {
       // no-op
     }
-
   }
 
   async function createOrder(paymentMethod: "PAYTABS" | "COD") {
@@ -567,7 +573,7 @@ export default function CheckoutClient() {
                       placeholder={COPY.promoPlaceholder}
                       disabled={promoBusy}
                     />
-                    <button className="btn btn-outline" type="button" disabled={promoBusy || !promoInput.trim()} onClick={applyPromoCode}>
+                    <button className="btn btn-outline" type="button" disabled={promoBusy || !promoInput.trim() || promoServiceUnavailable} onClick={applyPromoCode}>
                       {COPY.promoApply}
                     </button>
                     {selectedPromo?.mode === "CODE" ? (
@@ -575,6 +581,9 @@ export default function CheckoutClient() {
                     ) : null}
                   </div>
                 </>
+              ) : null}
+              {promoOpen && promoServiceUnavailable && !promoMsg ? (
+                <p className="muted" style={{ margin: 0 }}>{COPY.systemFallback}</p>
               ) : null}
               {promoMsg ? <p className="muted" style={{ margin: 0 }}>{promoMsg}</p> : null}
               {selectedPromo ? (

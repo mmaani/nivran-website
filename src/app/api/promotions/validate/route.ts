@@ -56,6 +56,12 @@ export async function GET() {
       message: "Use POST /api/promotions/validate with mode, promoCode, locale, and items.",
       supportedMethods: ["POST"],
       discountMode: "CODE",
+      example: {
+        mode: "CODE",
+        promoCode: "WELCOME10",
+        locale: "en",
+        items: [{ slug: "example-product", qty: 1, variantId: null }],
+      },
     },
     { headers: { "cache-control": "no-store" } }
   );
@@ -65,8 +71,13 @@ export async function POST(req: Request) {
   const bootstrap = await ensureCatalogTablesSafe();
   if (!bootstrap.ok) {
     return NextResponse.json(
-      { ok: false, error: "Catalog is currently unavailable", reason: "CATALOG_BOOTSTRAP_UNAVAILABLE" },
-      { status: 503 }
+      {
+        ok: false,
+        error: "Promotion validation temporarily unavailable",
+        reason: "CATALOG_BOOTSTRAP_UNAVAILABLE",
+        details: { catalogBootstrapReason: bootstrap.reason || null },
+      },
+      { status: 503, headers: { "retry-after": "30", "cache-control": "no-store" } }
     );
   }
 
@@ -75,7 +86,7 @@ export async function POST(req: Request) {
     if (!body) return NextResponse.json({ ok: false, error: "Invalid request" }, { status: 400 });
 
     const locale = body.locale === "ar" ? "ar" : "en";
-    const mode = String(body.mode || "CODE").toUpperCase();
+    const mode = pickMode(body.mode);
     const promoCode = String(body.promoCode || "").trim().toUpperCase();
     const normalized = normalizeItems(body.items);
 
@@ -203,7 +214,7 @@ export async function POST(req: Request) {
     if (isDbConnectivityError(error)) {
       return NextResponse.json(
         { ok: false, error: "Promotion validation temporarily unavailable", reason: "DB_CONNECTIVITY" },
-        { status: 503 }
+        { status: 503, headers: { "retry-after": "30", "cache-control": "no-store" } }
       );
     }
     throw error;
