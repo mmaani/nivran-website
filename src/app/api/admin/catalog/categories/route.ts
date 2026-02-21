@@ -11,8 +11,8 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function normalizeKey(v: unknown): string {
-  return String(v || "")
+function normalizeKey(value: unknown): string {
+  return String(value ?? "")
     .trim()
     .toLowerCase()
     .replace(/[_\s]+/g, "-")
@@ -21,8 +21,8 @@ function normalizeKey(v: unknown): string {
     .replace(/(^-+|-+$)/g, "");
 }
 
-function keyCandidates(v: unknown): string[] {
-  const raw = String(v || "").trim();
+function keyCandidates(value: unknown): string[] {
+  const raw = String(value ?? "").trim();
   if (!raw) return [];
 
   const base = raw.toLowerCase();
@@ -32,7 +32,7 @@ function keyCandidates(v: unknown): string[] {
 
   const out = new Set<string>();
   for (const k of [base, hyphen, underscore, norm]) {
-    const kk = String(k || "").trim();
+    const kk = String(k ?? "").trim();
     if (!kk) continue;
     out.add(kk);
     const nk = normalizeKey(kk);
@@ -42,26 +42,37 @@ function keyCandidates(v: unknown): string[] {
   return Array.from(out);
 }
 
-function mergeCategoryKeySql(oldKey: string, newKey: string) {
+/**
+ * Returns SQL + mutable args arrays (unknown[]) so db.query() accepts them.
+ */
+function mergeCategoryKeySql(fromKey: string, toKey: string): {
+  updateProducts: [string, unknown[]];
+  updatePromotions: [string, unknown[]];
+} {
   return {
     updateProducts: [
       `update products set category_key=$2 where category_key=$1`,
-      [oldKey, newKey],
-    ] as const,
+      [fromKey, toKey],
+    ],
     updatePromotions: [
       `update promotions
-          set category_keys = array_replace(category_keys, $1::text, $2::text)
+          set category_keys = (
+            select array_agg(case when x=$1 then $2 else x end)
+            from unnest(category_keys) x
+          )
         where category_keys is not null
-          and category_keys @> array[$1::text]::text[]`,
-      [oldKey, newKey],
-    ] as const,
+          and $1 = any(category_keys)`,
+      [fromKey, toKey],
+    ],
   };
 }
 
 export async function POST(req: Request) {
   let form: FormData | null = null;
+
   try {
     form = await req.formData();
+
     const auth = requireAdmin(req);
     if (!auth.ok) {
       const accept = req.headers.get("accept") || "";
@@ -70,16 +81,32 @@ export async function POST(req: Request) {
     }
 
     await ensureCatalogTablesSafe();
+
     const action = String(form.get("action") || "create");
 
+    // ------------------------------------------------------------
+    // CREATE
+    // ------------------------------------------------------------
     if (action === "create") {
       const rawKey = String(form.get("key") || "");
       const key = normalizeKey(rawKey);
       const candidates = keyCandidates(rawKey);
 
-      // If legacy keys exist (e.g. hand_gel / air_freshener), unify them to the normalized key (hand-gel / air-freshener).
-      // We merge *all* found variants, not just the first match.
-      if (key && candidates.length) {
+      const nameEn = String(form.get("name_en") || "").trim();
+      const nameAr = String(form.get("name_ar") || "").trim();
+
+      const sortOrderRaw = Number(form.get("sort_order") || 0);
+      const sortOrder = Number.isFinite(sortOrderRaw) ? sortOrderRaw : 0;
+
+      const isActive = String(form.get("is_active") || "") === "on";
+      const isPromoted = String(form.get("is_promoted") || "") === "on";
+
+      if (!key || !nameEn || !nameAr) {
+        return catalogErrorRedirect(req, form, "invalid-category");
+      }
+
+      // If legacy keys exist (e.g. hand_gel / air_freshener), unify them to normalized hyphen key.
+      if (candidates.length) {
         const existing = await db.query<{ key: string }>(
           `select key from categories where key = any($1::text[])`,
           [candidates]
@@ -93,10 +120,13 @@ export async function POST(req: Request) {
           await db.query("begin");
           try {
             // Ensure the normalized key exists: if not, rename the first legacy key to the normalized key.
-            const target = await db.query("select 1 from categories where key=$1 limit 1", [key]);
-            const hasTarget = (target as { rowCount?: unknown }).rowCount === 1;
+            const target = await db.query<{ ok: number }>(
+              `select 1 as ok from categories where key=$1 limit 1`,
+              [key]
+            );
+            const hasTarget = (target.rowCount ?? 0) > 0;
 
-            let remaining = existingKeys.slice();
+            const remaining = existingKeys.slice();
             if (!hasTarget) {
               const first = remaining.shift();
               if (first) {
@@ -104,11 +134,13 @@ export async function POST(req: Request) {
               }
             }
 
-            // Now merge all remaining legacy keys into the normalized key.
+            // Merge all remaining legacy keys into normalized key.
             for (const oldKey of remaining) {
               const merge = mergeCategoryKeySql(oldKey, key);
+
               await db.query(merge.updateProducts[0], merge.updateProducts[1]);
               await db.query(merge.updatePromotions[0], merge.updatePromotions[1]);
+
               await db.query(`delete from categories where key=$1`, [oldKey]);
             }
 
@@ -118,17 +150,6 @@ export async function POST(req: Request) {
             throw e;
           }
         }
-      }
-
-      const nameEn = String(form.get("name_en") || "").trim();
-      const nameAr = String(form.get("name_ar") || "").trim();
-      const sortOrderRaw = Number(form.get("sort_order") || 0);
-      const sortOrder = Number.isFinite(sortOrderRaw) ? sortOrderRaw : 0;
-      const isActive = String(form.get("is_active") || "") === "on";
-      const isPromoted = String(form.get("is_promoted") || "") === "on";
-
-      if (!key || !nameEn || !nameAr) {
-        return catalogErrorRedirect(req, form, "invalid-category");
       }
 
       await db.query(
@@ -147,18 +168,24 @@ export async function POST(req: Request) {
       return catalogSavedRedirect(req, form);
     }
 
+    // ------------------------------------------------------------
+    // UPDATE
+    // ------------------------------------------------------------
     if (action === "update") {
       const candidates = keyCandidates(form.get("key"));
       if (!candidates.length) return catalogErrorRedirect(req, form, "invalid-category");
 
       const nameEn = String(form.get("name_en") || "").trim();
       const nameAr = String(form.get("name_ar") || "").trim();
+
       const sortOrderRaw = Number(form.get("sort_order") || 0);
       const sortOrder = Number.isFinite(sortOrderRaw) ? sortOrderRaw : 0;
+
       const isActive = String(form.get("is_active") || "") === "on";
       const isPromoted = String(form.get("is_promoted") || "") === "on";
 
       let updated = false;
+
       for (const key of candidates) {
         const r = await db.query(
           `update categories
@@ -171,7 +198,7 @@ export async function POST(req: Request) {
             where key=$1`,
           [key, nameEn, nameAr, sortOrder, isActive, isPromoted]
         );
-        if ((r as { rowCount?: unknown }).rowCount === 1) {
+        if ((r.rowCount ?? 0) === 1) {
           updated = true;
           break;
         }
@@ -181,19 +208,35 @@ export async function POST(req: Request) {
       return catalogSavedRedirect(req, form);
     }
 
+    // ------------------------------------------------------------
+    // DELETE
+    // ------------------------------------------------------------
     if (action === "delete") {
       const candidates = keyCandidates(form.get("key"));
       if (!candidates.length) return catalogErrorRedirect(req, form, "invalid-category");
 
       let deleted = false;
+
       for (const key of candidates) {
         await db.query("begin");
         try {
+          // Move products off the category being deleted (fallback to 'perfume')
           await db.query(`update products set category_key='perfume' where category_key=$1`, [key]);
-          await db.query(`update promotions set category_keys = array_remove(category_keys, $1::text) where category_keys is not null and category_keys @> array[$1::text]::text[]`, [key]);
+
+          // Remove category key from promotions arrays
+          await db.query(
+            `update promotions
+                set category_keys = array_remove(category_keys, $1::text)
+              where category_keys is not null
+                and category_keys @> array[$1::text]::text[]`,
+            [key]
+          );
+
           const r = await db.query(`delete from categories where key=$1`, [key]);
+
           await db.query("commit");
-          if ((r as { rowCount?: unknown }).rowCount === 1) {
+
+          if ((r.rowCount ?? 0) === 1) {
             deleted = true;
             break;
           }
@@ -207,6 +250,7 @@ export async function POST(req: Request) {
       return catalogSavedRedirect(req, form);
     }
 
+    // Unknown action: treat as saved
     return catalogSavedRedirect(req, form);
   } catch (error: unknown) {
     console.error("[admin/catalog/categories] route error", error);
