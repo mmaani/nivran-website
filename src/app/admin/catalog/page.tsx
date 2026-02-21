@@ -1088,6 +1088,17 @@ const activeSeasonalPromos = data.promos.filter(
           <button className={`${styles.adminBtn} ${styles.adminBtnPrimary}`} style={{ width: "fit-content" }}>{L.saveCategory}</button>
         </form>
 
+        <form action="/api/admin/catalog/categories" method="post" style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <input type="hidden" name="return_to" value={returnTo} />
+          <input type="hidden" name="action" value="normalize-all" />
+          <button className={styles.adminBtn} type="submit">
+            {isAr ? "توحيد مفاتيح الفئات (نقرة واحدة)" : "Normalize category keys (one click)"}
+          </button>
+          <span style={{ opacity: 0.75, fontSize: 12 }}>
+            {isAr ? "سيتم دمج hand_gel/hand-gel وغيرها وتحديث المنتجات والعروض." : "Merges hand_gel/hand-gel etc, updates products & promotions."}
+          </span>
+        </form>
+
         <h2 style={{ marginBottom: 0 }}>{L.categories}</h2>
         <div className={styles.adminTableWrap}>
           <table className={styles.adminTable}>
