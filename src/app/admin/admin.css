@@ -782,3 +782,147 @@
   /* Cards/padding a bit tighter */
   .admin-content { padding: 14px 12px 22px; }
 }
+/* =========================================================
+   Mobile header ergonomics + login-route tuning
+   Paste at END of admin.css
+   ========================================================= */
+
+/* Make header content reorder nicely on mobile */
+@media (max-width: 640px) {
+  .admin-topbar-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  /* Reduce brand block height */
+  .admin-brand {
+    min-width: 100%;
+  }
+
+  .admin-subtitle,
+  .admin-context {
+    display: none;
+  }
+
+  /* Put actions directly under brand */
+  .admin-actions {
+    width: 100%;
+    margin-inline-start: 0;
+    justify-content: space-between;
+  }
+
+  /* Keep nav swipeable and not wrapping */
+  .admin-nav {
+    gap: 10px;
+    padding-bottom: 6px;
+  }
+
+  /* Make the pill row swipeable (instead of wrapping) */
+  .admin-context-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 8px;
+    padding-bottom: 6px;
+  }
+  .admin-context-row::-webkit-scrollbar { height: 0; }
+  .admin-context-row > * { flex: 0 0 auto; }
+}
+
+/* LOGIN route: keep the header minimal */
+.admin-shell[data-route="login"] .admin-nav,
+.admin-shell[data-route="login"] .admin-context-row {
+  display: none;
+}
+
+/* On login, keep the chip but compact everything */
+@media (max-width: 640px) {
+  .admin-shell[data-route="login"] .admin-topbar-inner {
+    gap: 8px;
+  }
+
+  /* Center chip and actions on login */
+  .admin-shell[data-route="login"] .admin-login-chip {
+    align-self: center;
+  }
+
+  .admin-shell[data-route="login"] .admin-actions {
+    justify-content: center;
+    gap: 10px;
+  }
+
+  /* Optional: hide header language toggle on login (use the form toggle instead)
+     If you want to keep it in header, delete this rule. */
+  .admin-shell[data-route="login"] .admin-actions > .btn:first-child {
+    display: none;
+  }
+}
+
+/* Login layout: reduce the big black panel on phones */
+@media (max-width: 640px) {
+  .admin-login-card {
+    margin: 16px auto 6px;
+    border-radius: 18px;
+  }
+
+  .admin-login-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-login-side {
+    padding: 16px;
+    border-inline-end: none;
+  }
+
+  /* Hide long bullet list on mobile to save space */
+  .admin-login-side ul {
+    display: none;
+  }
+
+  .admin-login-form {
+    padding: 16px;
+    gap: 12px;
+  }
+
+  /* Token input actions stack nicely */
+  .admin-token-field {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .admin-token-actions {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .admin-token-actions .btn {
+    flex: 1;
+    min-height: 44px;
+  }
+
+  /* Make primary button feel better on mobile */
+  .admin-login-form .btn-primary {
+    min-height: 48px;
+  }
+}
+
+/* Desktop/tablet: keep token actions inline */
+@media (min-width: 641px) {
+  .admin-token-field {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .admin-token-actions {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+  }
+}

@@ -25,6 +25,7 @@ export default function AdminShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const isLoginRoute = pathname === "/admin/login" || pathname.startsWith("/admin/login?");
   const router = useRouter();
   const [lang, setLang] = useState<"en" | "ar">(initialLang);
   const [savingLang, setSavingLang] = useState(false);
@@ -142,13 +143,14 @@ export default function AdminShell({
   }, [menuOpen]);
 
   return (
-      <div
-        className="admin-shell"
-        data-lang={lang}
-        data-density="comfortable"
-        dir={lang === "ar" ? "rtl" : "ltr"}
-        lang={lang}
-      >
+        <div
+          className="admin-shell"
+          data-lang={lang}
+          data-density="comfortable"
+          data-route={isLoginRoute ? "login" : "app"}
+          dir={lang === "ar" ? "rtl" : "ltr"}
+          lang={lang}
+        >
         <header className="admin-topbar">
         <div className="admin-topbar-inner">
           <div className="admin-topbar-main">
@@ -189,19 +191,21 @@ export default function AdminShell({
             )}
 
             <div className="admin-actions" ref={menuRef}>
-              <button
-                type="button"
-                className="btn"
-                onClick={toggleLang}
-                title={lang === "en" ? "Switch to Arabic" : "التبديل إلى الإنجليزية"}
-                disabled={savingLang}
-              >
-                {lang === "en" ? "AR" : "EN"}
-              </button>
+                <Link className="btn" href="/">
+                  <T en="Storefront" ar="واجهة المتجر" />
+                </Link>
 
-              <Link className="btn" href="/">
-                <T en="Storefront" ar="واجهة المتجر" />
-              </Link>
+                {authed ? (
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={toggleLang}
+                    title={lang === "en" ? "Switch to Arabic" : "التبديل إلى الإنجليزية"}
+                    disabled={savingLang}
+                  >
+                    {lang === "en" ? "AR" : "EN"}
+                  </button>
+                ) : null}
 
               {authed ? (
                 <div className="admin-user">

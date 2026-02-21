@@ -198,85 +198,74 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
             <label htmlFor="admin-token-input" className="admin-label" style={{ marginBottom: 6, display: "block", fontWeight: 800 }}>
               {t.tokenLabel}
             </label>
+          <div className="admin-token-field">
+            <input
+              id="admin-token-input"
+              className="admin-input"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder={t.tokenPlaceholder}
+              autoComplete="off"
+              spellCheck={false}
+              type={reveal ? "text" : "password"}
+              aria-invalid={!!err}
+              disabled={loading}
+              autoFocus
+              style={{
+                width: "100%",
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+              }}
+            />
 
-            <div style={{ position: "relative" }}>
-              <input
-                id="admin-token-input"
-                className="admin-input"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder={t.tokenPlaceholder}
-                autoComplete="off"
-                spellCheck={false}
-                type={reveal ? "text" : "password"}
-                aria-invalid={!!err}
+            <div className="admin-token-actions">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setReveal((v) => !v)}
                 disabled={loading}
-                autoFocus
-                style={{
-                  width: "100%",
-                  paddingInlineEnd: 160,
-                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                }}
-              />
-
-              <div
-                style={{
-                  position: "absolute",
-                  top: 6,
-                  insetInlineEnd: 6,
-                  display: "flex",
-                  gap: 6,
-                  alignItems: "center",
-                }}
+                aria-pressed={reveal}
               >
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => setReveal((v) => !v)}
-                  disabled={loading}
-                  aria-pressed={reveal}
-                >
-                  {reveal ? t.hide : t.show}
-                </button>
+                {reveal ? t.hide : t.show}
+              </button>
 
-                <button type="button" className="btn" onClick={onPasteToken} disabled={loading}>
-                  {t.paste}
-                </button>
+              <button type="button" className="btn" onClick={onPasteToken} disabled={loading}>
+                {t.paste}
+              </button>
 
-                <button type="button" className="btn" onClick={() => setToken("")} disabled={loading || !token}>
-                  {t.clear}
-                </button>
-              </div>
+              <button type="button" className="btn" onClick={() => setToken("")} disabled={loading || !token}>
+                {t.clear}
+              </button>
             </div>
           </div>
+        </div>
 
-          {err ? (
-            <div
-              role="alert"
-              aria-live="polite"
-              style={{
-                border: "1px solid rgba(180, 35, 24, .25)",
-                background: "rgba(255, 242, 242, .9)",
-                color: "#b42318",
-                borderRadius: 14,
-                padding: "10px 12px",
-                fontWeight: 700,
-              }}
-            >
-              {t.errorPrefix}
-              {err}
-            </div>
-          ) : null}
+        {err ? (
+          <div
+            role="alert"
+            aria-live="polite"
+            style={{
+              border: "1px solid rgba(180, 35, 24, .25)",
+              background: "rgba(255, 242, 242, .9)",
+              color: "#b42318",
+              borderRadius: 14,
+              padding: "10px 12px",
+              fontWeight: 700,
+            }}
+          >
+            {t.errorPrefix}
+            {err}
+          </div>
+        ) : null}
 
-          <button className="btn btn-primary" type="submit" disabled={loading || !token.trim()}>
-            {loading ? t.signingIn : t.signIn}
-          </button>
+        <button className="btn btn-primary" type="submit" disabled={loading || !token.trim()}>
+          {loading ? t.signingIn : t.signIn}
+        </button>
 
-          <p className="admin-login-note" style={{ marginTop: 4 }}>
-            {t.help}
-          </p>
-        </form>
-      </div>
+        <p className="admin-login-note" style={{ marginTop: 4 }}>
+          {t.help}
+        </p>
+      </form>
     </div>
-  );
+  </div>
+);
 }
