@@ -16,7 +16,11 @@ function toInt(value: unknown): number {
 }
 
 type Delta = {
-  slug: string;
+  raw: string | null;
+  normalized: string | null;
+  resolved: string | null;
+  resolvedVia: "DIRECT" | "NORMALIZED" | "VARIANT" | "MISSING";
+  variantId: number | null;
   qty: number;
   current: number | null;
   after: number | null;
@@ -47,23 +51,54 @@ type PostAllResponse = {
   results?: unknown;
 };
 
+function normDelta(value: unknown): Delta | null {
+  if (!isRecord(value)) return null;
+
+  const resolvedViaRaw = typeof value["resolvedVia"] === "string" ? value["resolvedVia"].toUpperCase() : "MISSING";
+  const resolvedVia: Delta["resolvedVia"] =
+    resolvedViaRaw === "DIRECT" || resolvedViaRaw === "NORMALIZED" || resolvedViaRaw === "VARIANT" ? (resolvedViaRaw as Delta["resolvedVia"]) : "MISSING";
+
+  const raw = typeof value["raw"] === "string" ? value["raw"] : null;
+  const normalized = typeof value["normalized"] === "string" ? value["normalized"] : null;
+  const resolved = typeof value["resolved"] === "string" ? value["resolved"] : null;
+
+  const qty = Math.max(1, toInt(value["qty"]) || 1);
+
+  const current =
+    typeof value["current"] === "number" && Number.isFinite(value["current"])
+      ? (value["current"] as number)
+      : value["current"] == null
+        ? null
+        : toInt(value["current"]);
+
+  const after =
+    typeof value["after"] === "number" && Number.isFinite(value["after"])
+      ? (value["after"] as number)
+      : value["after"] == null
+        ? null
+        : toInt(value["after"]);
+
+  const variantId =
+    typeof value["variantId"] === "number" && Number.isFinite(value["variantId"]) && value["variantId"] > 0
+      ? Math.trunc(value["variantId"] as number)
+      : typeof value["variantId"] === "string"
+        ? toInt(value["variantId"])
+        : null;
+
+  return { raw, normalized, resolved, resolvedVia, variantId, qty, current, after };
+}
+
 function normalizeRows(value: unknown): Row[] {
   if (!Array.isArray(value)) return [];
+
   return value
     .map((r): Row | null => {
       if (!isRecord(r)) return null;
+
       const deltasRaw = r["deltas"];
       const deltas: Delta[] = Array.isArray(deltasRaw)
         ? deltasRaw
-            .map((d): Delta | null => {
-              if (!isRecord(d)) return null;
-              const slug = typeof d["slug"] === "string" ? d["slug"] : "";
-              if (!slug) return null;
-              const qty = Math.max(1, toInt(d["qty"]) || 1);
-              const current = typeof d["current"] === "number" && Number.isFinite(d["current"]) ? d["current"] : d["current"] == null ? null : toInt(d["current"]);
-              const after = typeof d["after"] === "number" && Number.isFinite(d["after"]) ? d["after"] : d["after"] == null ? null : toInt(d["after"]);
-              return { slug, qty, current, after };
-            })
+            .map((d) => normDelta(d))
             .filter((x): x is Delta => x !== null)
         : [];
 
@@ -78,6 +113,55 @@ function normalizeRows(value: unknown): Row[] {
       };
     })
     .filter((x): x is Row => x !== null && x.id > 0 && !!x.cart_id);
+}
+
+function pillStyle(variant: "ok" | "warn" | "danger" | "info") {
+  if (variant === "danger") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      padding: "2px 8px",
+      borderRadius: 999,
+      border: "1px solid rgba(210,65,65,.25)",
+      background: "rgba(255,242,242,.9)",
+      fontWeight: 800,
+      fontSize: 12,
+    } as const;
+  }
+  if (variant === "warn") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      padding: "2px 8px",
+      borderRadius: 999,
+      border: "1px solid rgba(199,165,106,.35)",
+      background: "rgba(255,250,242,.9)",
+      fontWeight: 800,
+      fontSize: 12,
+    } as const;
+  }
+  if (variant === "info") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      padding: "2px 8px",
+      borderRadius: 999,
+      border: "1px solid rgba(20,20,20,.12)",
+      background: "rgba(251,248,243,.9)",
+      fontWeight: 800,
+      fontSize: 12,
+    } as const;
+  }
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "2px 8px",
+    borderRadius: 999,
+    border: "1px solid rgba(20,20,20,.12)",
+    background: "rgba(251,248,243,.9)",
+    fontWeight: 800,
+    fontSize: 12,
+  } as const;
 }
 
 export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
@@ -100,10 +184,12 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
         cart: "السلة",
         status: "الحالة",
         created: "التاريخ",
-        deltas: "التغييرات",
+        deltas: "المنتجات",
         stock: "المخزون",
         none: "لا يوجد",
-        ok: "تم",
+        missing: "غير معروف",
+        viaVariant: "عبر المتغير",
+        normalized: "تمت المعالجة",
       };
     }
     return {
@@ -117,10 +203,12 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
       cart: "Cart",
       status: "Status",
       created: "Created",
-      deltas: "Deltas",
+      deltas: "Items",
       stock: "Stock",
       none: "None",
-      ok: "OK",
+      missing: "Unresolved",
+      viaVariant: "via variant",
+      normalized: "normalized",
     };
   }, [lang]);
 
@@ -160,7 +248,6 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
       const data: PostOneResponse = isRecord(raw) ? (raw as PostOneResponse) : {};
       if (!res.ok || data.ok !== true) throw new Error(data.error || "Commit failed");
 
-      // Remove row if committed (or if already committed)
       setRows((prev) => prev.filter((r) => r.id !== id));
       setTotalPending((p) => Math.max(0, p - 1));
     } catch (e: unknown) {
@@ -198,7 +285,9 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
       <div className="admin-card" style={{ display: "grid", gap: 10 }}>
         <div className="admin-row" style={{ justifyContent: "space-between" }}>
           <div>
-            <p className="admin-kicker" style={{ marginBottom: 6 }}>{L.title}</p>
+            <p className="admin-kicker" style={{ marginBottom: 6 }}>
+              {L.title}
+            </p>
             <p className="admin-muted">{L.subtitle}</p>
           </div>
 
@@ -233,22 +322,13 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ padding: 14, opacity: 0.7 }}>{L.none}</td>
+                <td colSpan={8} style={{ padding: 14, opacity: 0.7 }}>
+                  {L.none}
+                </td>
               </tr>
             ) : (
               rows.map((r) => {
-                const badgeStyle = (ok: boolean) => ({
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "2px 8px",
-                  borderRadius: 999,
-                  border: `1px solid ${ok ? "rgba(20,20,20,.12)" : "rgba(210,65,65,.25)"}`,
-                  background: ok ? "rgba(251,248,243,.9)" : "rgba(255,242,242,.9)",
-                  fontWeight: 800,
-                  fontSize: 12,
-                });
-
-                const hasMissing = r.deltas.some((d) => d.current == null);
+                const hasMissing = r.deltas.some((d) => d.resolved == null);
 
                 return (
                   <tr key={r.id}>
@@ -256,46 +336,104 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
                     <td className="ltr">{r.cart_id}</td>
                     <td className="ltr">
                       {r.status} / {r.payment_method}
-                      {hasMissing ? <span style={{ marginInlineStart: 8, ...badgeStyle(false) }}>Missing SKU</span> : null}
+                      {hasMissing ? <span style={{ marginInlineStart: 8, ...pillStyle("danger") }}>{L.missing}</span> : null}
                     </td>
                     <td style={{ fontSize: 12, opacity: 0.85 }}>{new Date(r.created_at).toLocaleString()}</td>
+
                     <td>
-                      <div style={{ display: "grid", gap: 6 }}>
-                        {r.deltas.length ? r.deltas.map((d) => (
-                          <div key={`${r.id}-${d.slug}`} className="ltr" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                            <span className="badge" style={{ fontWeight: 800 }}>{d.slug}</span>
-                            <span style={{ ...badgeStyle(true) }}>- {d.qty}</span>
-                          </div>
-                        )) : <span style={{ opacity: 0.7 }}>{L.none}</span>}
+                      <div style={{ display: "grid", gap: 10 }}>
+                        {r.deltas.length ? (
+                          r.deltas.map((d, idx) => {
+                            const showRaw = typeof d.raw === "string" && d.raw.trim().length > 0;
+                            const showNorm = typeof d.normalized === "string" && d.normalized.trim().length > 0;
+                            const showResolved = typeof d.resolved === "string" && d.resolved.trim().length > 0;
+
+                            const rawLower = showRaw ? d.raw!.trim().toLowerCase() : null;
+                            const isNormalizedDifferent = showRaw && showNorm && rawLower !== d.normalized;
+                            const isResolvedDifferentFromNorm = showResolved && showNorm && d.resolved !== d.normalized;
+
+                            const shouldShowResolvedBadge =
+                              showResolved &&
+                              (!showRaw || isNormalizedDifferent || isResolvedDifferentFromNorm || d.resolvedVia === "VARIANT");
+
+                            return (
+                              <div key={`${r.id}-${idx}`} className="ltr" style={{ display: "grid", gap: 6 }}>
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                                  {showRaw ? (
+                                    <span className="badge" style={{ fontWeight: 800, opacity: isNormalizedDifferent ? 0.85 : 1 }}>
+                                      {d.raw}
+                                    </span>
+                                  ) : null}
+
+                                  {isNormalizedDifferent ? <span style={{ opacity: 0.65 }}>→</span> : null}
+
+                                  {isNormalizedDifferent && showNorm ? (
+                                    <span className="badge" style={{ fontWeight: 900, borderColor: "rgba(199,165,106,.35)", background: "rgba(255,250,242,.9)" }}>
+                                      {d.normalized}
+                                    </span>
+                                  ) : null}
+
+                                  {isResolvedDifferentFromNorm ? <span style={{ opacity: 0.65 }}>→</span> : null}
+
+                                  {shouldShowResolvedBadge ? (
+                                    <span
+                                      className="badge"
+                                      style={{
+                                        fontWeight: 900,
+                                        borderColor: d.resolvedVia === "MISSING" ? "rgba(210,65,65,.25)" : "rgba(20,20,20,.12)",
+                                        background: d.resolvedVia === "MISSING" ? "rgba(255,242,242,.9)" : "rgba(251,248,243,.9)",
+                                      }}
+                                    >
+                                      {d.resolved}
+                                    </span>
+                                  ) : (
+                                    <span style={{ ...pillStyle("danger") }}>{L.missing}</span>
+                                  )}
+
+                                  {d.resolvedVia === "VARIANT" ? (
+                                    <span style={{ ...pillStyle("warn") }} title={d.variantId ? `variantId=${d.variantId}` : undefined}>
+                                      {L.viaVariant}
+                                    </span>
+                                  ) : null}
+
+                                  {d.resolvedVia === "NORMALIZED" && isNormalizedDifferent ? (
+                                    <span style={{ ...pillStyle("info") }}>{L.normalized}</span>
+                                  ) : null}
+
+                                  <span style={{ ...pillStyle("ok") }}>- {d.qty}</span>
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <span style={{ opacity: 0.7 }}>{L.none}</span>
+                        )}
                       </div>
                     </td>
+
                     <td>
-                      <div style={{ display: "grid", gap: 6 }}>
-                        {r.deltas.length ? r.deltas.map((d) => (
-                          <div key={`${r.id}-${d.slug}-stock`} className="ltr" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                            <span style={{ ...badgeStyle(d.current != null) }}>
-                              {d.current == null ? "?" : d.current}
-                            </span>
-                            <span style={{ opacity: 0.75 }}>→</span>
-                            <span style={{ ...badgeStyle(d.after != null) }}>
-                              {d.after == null ? "?" : d.after}
-                            </span>
-                          </div>
-                        )) : <span style={{ opacity: 0.7 }}>{L.none}</span>}
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {r.deltas.length ? (
+                          r.deltas.map((d, idx) => (
+                            <div key={`${r.id}-${idx}-stock`} className="ltr" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                              <span style={{ ...pillStyle(d.current != null ? "ok" : "danger") }}>{d.current == null ? "?" : d.current}</span>
+                              <span style={{ opacity: 0.75 }}>→</span>
+                              <span style={{ ...pillStyle(d.after != null ? "ok" : "danger") }}>{d.after == null ? "?" : d.after}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <span style={{ opacity: 0.7 }}>{L.none}</span>
+                        )}
                       </div>
                     </td>
+
                     <td>
                       <Link className="btn" href={`/admin/orders/${r.id}`}>
                         {L.open}
                       </Link>
                     </td>
                     <td>
-                      <button
-                        className="btn btn-primary"
-                        type="button"
-                        onClick={() => commitOne(r.id)}
-                        disabled={busyId === r.id || busy}
-                      >
+                      <button className="btn btn-primary" type="button" onClick={() => commitOne(r.id)} disabled={busyId === r.id || busy}>
                         {busyId === r.id ? "…" : L.commit}
                       </button>
                     </td>

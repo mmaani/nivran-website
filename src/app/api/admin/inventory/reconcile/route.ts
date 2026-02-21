@@ -20,7 +20,28 @@ type ProductStockRow = {
   inventory_qty: number | null;
 };
 
-type InventoryDelta = { slug: string; qty: number };
+type VariantMapRow = {
+  id: number;
+  product_slug: string | null;
+};
+
+type ReconDelta = {
+  raw: string | null;
+  normalized: string | null;
+  variantId: number | null;
+  qty: number;
+};
+
+type ReconDeltaOut = {
+  raw: string | null;
+  normalized: string | null;
+  resolved: string | null;
+  resolvedVia: "DIRECT" | "NORMALIZED" | "VARIANT" | "MISSING";
+  variantId: number | null;
+  qty: number;
+  current: number | null;
+  after: number | null;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -30,6 +51,15 @@ function toNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const s = value.trim();
   return s ? s : null;
+}
+
+function toPosInt(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return Math.trunc(value);
+  if (typeof value === "string") {
+    const n = Number(value.trim());
+    if (Number.isFinite(n) && n > 0) return Math.trunc(n);
+  }
+  return null;
 }
 
 function toQty(value: unknown): number {
@@ -49,7 +79,13 @@ function parseJsonIfString(value: unknown): unknown {
   }
 }
 
-function extractInventoryDeltas(itemsValue: unknown): InventoryDelta[] {
+function isSafeSlug(value: string): boolean {
+  // Product slugs in this project are normalized (lowercase + hyphens).
+  // This prevents sending junk candidates to Postgres.
+  return /^[a-z0-9-]+$/.test(value);
+}
+
+function extractReconDeltas(itemsValue: unknown): ReconDelta[] {
   const parsed = parseJsonIfString(itemsValue);
 
   const list: unknown =
@@ -63,23 +99,99 @@ function extractInventoryDeltas(itemsValue: unknown): InventoryDelta[] {
 
   if (!Array.isArray(list)) return [];
 
-  const map = new Map<string, number>();
+  // Aggregate by (normalized slug) or (variantId) to avoid repeated lines.
+  const map = new Map<string, ReconDelta>();
 
   for (const entry of list) {
     if (!isRecord(entry)) continue;
+
     const raw =
       toNonEmptyString(entry["slug"]) ||
       toNonEmptyString(entry["productSlug"]) ||
       toNonEmptyString(entry["product_slug"]) ||
       toNonEmptyString(entry["sku"]);
 
-    const slug = normalizeSkuForInventory(raw);
-    if (!slug) continue;
+    const normalized = normalizeSkuForInventory(raw);
+    const variantId = toPosInt(entry["variantId"] ?? entry["variant_id"]);
     const qty = toQty(entry["qty"]);
-    map.set(slug, (map.get(slug) || 0) + qty);
+
+    const key = normalized ? `slug:${normalized}` : variantId ? `variant:${variantId}` : null;
+    if (!key) continue;
+
+    const prev = map.get(key);
+    if (!prev) {
+      map.set(key, { raw, normalized, variantId, qty });
+    } else {
+      map.set(key, {
+        raw: prev.raw || raw,
+        normalized: prev.normalized || normalized,
+        variantId: prev.variantId || variantId,
+        qty: Math.max(1, Math.min(999, prev.qty + qty)),
+      });
+    }
   }
 
-  return Array.from(map.entries()).map(([slug, qty]) => ({ slug, qty }));
+  return Array.from(map.values());
+}
+
+function buildCandidates(delta: ReconDelta, variantSlug: string | null): { list: string[]; variantSet: Set<string> } {
+  const out: string[] = [];
+  const variantSet = new Set<string>();
+
+  const push = (v: string | null, markVariant: boolean) => {
+    if (!v) return;
+    const s = v.trim();
+    if (!s) return;
+    if (!isSafeSlug(s)) return;
+    if (!out.includes(s)) out.push(s);
+    if (markVariant) variantSet.add(s);
+  };
+
+  // Preferred: normalized
+  push(delta.normalized, false);
+
+  // Raw-derived candidates (may already be normalized)
+  if (delta.raw) {
+    const rawLower = delta.raw.trim().toLowerCase();
+    push(rawLower, false);
+    push(rawLower.replace(/_/g, "-"), false);
+    push(rawLower.replace(/\s+/g, "-"), false);
+    push(normalizeSkuForInventory(rawLower), false);
+  }
+
+  // Variant-derived candidates (only if we have variantSlug)
+  if (variantSlug) {
+    const v = variantSlug.trim();
+    push(v, true);
+    const vn = normalizeSkuForInventory(v);
+    if (vn && vn !== v) push(vn, true);
+  }
+
+  return { list: out, variantSet };
+}
+
+async function loadVariantMap(trx: typeof db, ids: number[]): Promise<Map<number, string>> {
+  const map = new Map<number, string>();
+  if (!ids.length) return map;
+
+  // Best-effort: variants table may not exist in some deployments.
+  try {
+    const r = await trx.query<VariantMapRow>(
+      `select id::int as id, product_slug::text as product_slug
+         from variants
+        where id = any($1::int[])`,
+      [ids]
+    );
+
+    for (const row of r.rows) {
+      const slug = typeof row.product_slug === "string" ? row.product_slug.trim() : "";
+      if (slug) map.set(row.id, slug);
+    }
+  } catch {
+    // ignore
+  }
+
+  return map;
 }
 
 function toInt(value: unknown): number | null {
@@ -125,8 +237,8 @@ export async function GET(req: Request) {
     [limit]
   );
 
-  const orders = rows.map((r) => {
-    const deltas = extractInventoryDeltas(r.items);
+  const base = rows.map((r) => {
+    const deltas = extractReconDeltas(r.items);
     return {
       id: r.id,
       cart_id: r.cart_id,
@@ -138,22 +250,43 @@ export async function GET(req: Request) {
     };
   });
 
-  const slugs = Array.from(
+  // Collect variant IDs for best-effort resolution labels
+  const variantIds = Array.from(
     new Set(
-      orders
-        .flatMap((o) => o.deltas.map((d) => d.slug))
+      base
+        .flatMap((o) => o.deltas.map((d) => d.variantId))
+        .filter((x): x is number => typeof x === "number" && Number.isFinite(x) && x > 0)
+    )
+  );
+
+  const variantMap = await loadVariantMap(db, variantIds);
+
+  // Build candidate lists per delta + collect all candidates
+  const perOrder = base.map((o) => {
+    const expanded = o.deltas.map((d) => {
+      const variantSlug = d.variantId ? variantMap.get(d.variantId) || null : null;
+      const c = buildCandidates(d, variantSlug);
+      return { d, candidates: c.list, variantSet: c.variantSet };
+    });
+    return { ...o, expanded };
+  });
+
+  const allCandidates = Array.from(
+    new Set(
+      perOrder
+        .flatMap((o) => o.expanded.flatMap((x) => x.candidates))
         .filter((s) => typeof s === "string" && s.length > 0)
     )
   );
 
   const stockMap = new Map<string, number>();
 
-  if (slugs.length) {
+  if (allCandidates.length) {
     const stockRes = await db.query<ProductStockRow>(
-      `select slug, inventory_qty
+      `select slug::text as slug, inventory_qty
          from products
         where slug = any($1::text[])`,
-      [slugs]
+      [allCandidates]
     );
 
     for (const p of stockRes.rows) {
@@ -162,18 +295,47 @@ export async function GET(req: Request) {
     }
   }
 
-  const enriched = orders.map((o) => {
-    const deltas = o.deltas.map((d) => {
-      const current = stockMap.has(d.slug) ? (stockMap.get(d.slug) as number) : null;
+  const enriched = perOrder.map((o) => {
+    const deltas: ReconDeltaOut[] = o.expanded.map((x) => {
+      const rawLower = x.d.raw ? x.d.raw.trim().toLowerCase() : null;
+      const normalized = x.d.normalized;
+      const resolved = x.candidates.find((c) => stockMap.has(c)) || null;
+
+      const current = resolved && stockMap.has(resolved) ? (stockMap.get(resolved) as number) : null;
+      const after = current == null ? null : Math.max(0, current - x.d.qty);
+
+      let resolvedVia: ReconDeltaOut["resolvedVia"] = "MISSING";
+      if (resolved) {
+        if (x.variantSet.has(resolved)) {
+          resolvedVia = "VARIANT";
+        } else if (rawLower && normalized && rawLower === normalized) {
+          resolvedVia = "DIRECT";
+        } else {
+          resolvedVia = "NORMALIZED";
+        }
+      }
+
       return {
-        slug: d.slug,
-        qty: d.qty,
+        raw: x.d.raw,
+        normalized,
+        resolved,
+        resolvedVia,
+        variantId: x.d.variantId,
+        qty: x.d.qty,
         current,
-        after: current == null ? null : Math.max(0, current - d.qty),
+        after,
       };
     });
 
-    return { ...o, deltas };
+    return {
+      id: o.id,
+      cart_id: o.cart_id,
+      status: o.status,
+      payment_method: o.payment_method,
+      created_at: o.created_at,
+      inventory_committed_at: o.inventory_committed_at,
+      deltas,
+    };
   });
 
   return NextResponse.json({ ok: true, totalPending, rows: enriched });
