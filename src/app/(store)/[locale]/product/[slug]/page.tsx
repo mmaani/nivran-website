@@ -101,6 +101,8 @@ type ProductRow = {
   promo_type: "PERCENT" | "FIXED" | null;
   promo_value: string | null;
   discounted_price_jod: string | null;
+  promo_min_order_jod: string | null;
+  promo_eligible: boolean | null;
   promo_ends_at: string | null;
   promo_starts_at: string | null;
   wear_times: string[];
@@ -173,6 +175,7 @@ export default async function ProductDetailPage({
               variants={safeVariants}
               promoType={null}
               promoValue={0}
+              promoMinOrderJod={null}
               outOfStock={false}
             />
           </div>
@@ -246,7 +249,14 @@ export default async function ProductDetailPage({
             coalesce(p.audiences, '{}'::text[]) as audiences
        from products p
        left join lateral (
-         select pr.id, pr.discount_type, pr.discount_value, pr.priority, pr.ends_at, pr.starts_at
+         select pr.id,
+                pr.discount_type,
+                pr.discount_value,
+                pr.priority,
+                pr.ends_at,
+                pr.starts_at,
+                pr.min_order_jod,
+                (pr.min_order_jod is null or pr.min_order_jod <= p.price_jod) as eligible
          from promotions pr
          where pr.promo_kind in ('AUTO','SEASONAL')
            and pr.is_active=true
@@ -257,8 +267,9 @@ export default async function ProductDetailPage({
              or (pr.category_keys is not null and array_length(pr.category_keys, 1) is not null and p.category_key = any(pr.category_keys))
              or (pr.product_slugs is not null and array_length(pr.product_slugs, 1) is not null and p.slug = any(pr.product_slugs))
            )
-           and (pr.min_order_jod is null or pr.min_order_jod <= p.price_jod)
-         order by pr.priority desc,
+         order by
+                  case when pr.min_order_jod is null or pr.min_order_jod <= p.price_jod then 1 else 0 end desc,
+                  pr.priority desc,
                   case
                     when pr.discount_type='PERCENT' then (p.price_jod * (pr.discount_value / 100))
                     when pr.discount_type='FIXED' then pr.discount_value
@@ -331,8 +342,10 @@ export default async function ProductDetailPage({
 
   const promoType = product.promo_type;
   const promoValue = Number(product.promo_value || 0);
-  const hasPromo = promoType === "PERCENT" || promoType === "FIXED";
-  const promoTiming = hasPromo ? promoTimingLabel(locale, product.promo_starts_at, product.promo_ends_at) : null;
+  const promoExists = (promoType === "PERCENT" || promoType === "FIXED") && promoValue > 0;
+  const promoMinOrder = product.promo_min_order_jod != null ? Number(product.promo_min_order_jod) : null;
+  const promoEligible = product.promo_eligible === true;
+  const promoTiming = promoExists ? promoTimingLabel(locale, product.promo_starts_at, product.promo_ends_at) : null;
   const outOfStock = Number(product.inventory_qty || 0) <= 0;
 
   const variants = variantsRes.rows.length
@@ -371,7 +384,7 @@ export default async function ProductDetailPage({
       <div className={styles.grid2} style={{ alignItems: "start" }}>
         <div style={{ position: "relative" }}>
           <ProductImageGallery name={name} images={imageUrls} fallbackSrc={fallbackSrc} />
-          {hasPromo ? (
+          {promoExists ? (
             <div
               style={{
                 position: "absolute",
@@ -396,10 +409,15 @@ export default async function ProductDetailPage({
             {name}
           </h1>
 
-          {hasPromo && promoType ? (
+          {promoExists && promoType ? (
             <div className="panel" style={{ padding: 12, marginBottom: 12, background: "linear-gradient(130deg,#fff,#fff8ee)", border: "1px solid #f0e1c4" }}>
               <strong>{promoBadgeText(locale, promoType, promoValue)}</strong>
               <p className="muted" style={{ margin: "6px 0 0" }}>{promoTiming}</p>
+              {promoMinOrder != null && !promoEligible ? (
+                <p className="muted" style={{ margin: "6px 0 0" }}>
+                  {isAr ? `ينطبق الخصم على الطلبات فوق ${promoMinOrder.toFixed(2)} JOD` : `Discount applies on orders over ${promoMinOrder.toFixed(2)} JOD`}
+                </p>
+              ) : null}
             </div>
           ) : null}
 
@@ -420,6 +438,7 @@ export default async function ProductDetailPage({
             variants={variants}
             promoType={promoType}
             promoValue={promoValue}
+            promoMinOrderJod={promoMinOrder}
             outOfStock={outOfStock}
           />
         </div>

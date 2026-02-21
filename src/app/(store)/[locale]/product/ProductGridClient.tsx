@@ -21,6 +21,8 @@ type ProductCard = {
   promoType: "PERCENT" | "FIXED" | null;
   promoValue: number;
   discountedPrice: number | null;
+  promoMinOrderJod: number | null;
+  promoEligible: boolean;
   imageSrc: string;
   fallbackSrc: string;
   tags: string[];
@@ -174,13 +176,15 @@ export default function ProductGridClient({
           const promoValueNum = Number(p.promoValue || 0);
           const promoType = p.promoType;
           const hasPromo = !!promoType && Number.isFinite(promoValueNum) && promoValueNum > 0;
+          const promoMinOrder = p.promoMinOrderJod != null ? Number(p.promoMinOrderJod) : null;
+          const eligibleForMinOrder = promoMinOrder == null || Number(p.defaultVariantPrice || 0) >= promoMinOrder;
           const defaultPrice = Number(p.defaultVariantPrice || 0);
-          const defaultDiscounted = hasPromo
+          const defaultDiscounted = hasPromo && eligibleForMinOrder
             ? promoType === 'PERCENT'
               ? Math.max(0, defaultPrice - defaultPrice * (promoValueNum / 100))
               : Math.max(0, defaultPrice - promoValueNum)
             : defaultPrice;
-          const showPromoPrice = hasPromo && defaultDiscounted < defaultPrice;
+          const showPromoPrice = hasPromo && eligibleForMinOrder && defaultDiscounted < defaultPrice;
           return (
             <article key={p.slug} className="panel">
               <p className="muted" style={{ marginTop: 0 }}>
@@ -243,7 +247,15 @@ export default function ProductGridClient({
                   : `Current price (${p.defaultVariantLabel || "Default"}): ${defaultPrice.toFixed(2)} JOD`}
               </p>
 
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+              {hasPromo && !eligibleForMinOrder && promoMinOrder != null ? (
+                <p className="muted" style={{ marginTop: 0 }}>
+                  {isAr
+                    ? `ينطبق الخصم على الطلبات فوق ${promoMinOrder.toFixed(2)} JOD`
+                    : `Discount applies on orders over ${promoMinOrder.toFixed(2)} JOD`}
+                </p>
+              ) : null}
+
+              <div style={{ display: "flex",  gap: 6, flexWrap: "wrap", marginTop: 6 }}>
                 {p.tags.slice(0, 2).map((chip) => (
                   <span key={`${p.slug}-${chip}`} className="badge" style={{ fontSize: 11, padding: "2px 8px" }}>
                     {chip}

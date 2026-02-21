@@ -22,6 +22,7 @@ export default function ProductPurchasePanel({
   variants,
   promoType,
   promoValue,
+  promoMinOrderJod,
   outOfStock,
 }: {
   locale: "en" | "ar";
@@ -30,6 +31,7 @@ export default function ProductPurchasePanel({
   variants: Variant[];
   promoType: "PERCENT" | "FIXED" | null;
   promoValue: number;
+  promoMinOrderJod: number | null;
   outOfStock: boolean;
 }) {
   const isAr = locale === "ar";
@@ -45,13 +47,17 @@ export default function ProductPurchasePanel({
 
   const basePrice = selected.priceJod;
   const compareAt = selected.compareAtPriceJod;
+  const eligibleForMinOrder =
+    promoType != null && (promoMinOrderJod == null || basePrice >= promoMinOrderJod);
+
   const discountedPrice =
-    promoType === "PERCENT"
+    eligibleForMinOrder && promoType === "PERCENT"
       ? round2(Math.max(0, basePrice - basePrice * (promoValue / 100)))
-      : promoType === "FIXED"
+      : eligibleForMinOrder && promoType === "FIXED"
         ? round2(Math.max(0, basePrice - promoValue))
         : basePrice;
-  const hasPromo = promoType != null && discountedPrice < basePrice;
+
+  const hasPromo = eligibleForMinOrder && promoType != null && discountedPrice < basePrice;
   const minVariantPrice = variants.reduce((min, variant) => Math.min(min, Number(variant.priceJod || 0)), Number.POSITIVE_INFINITY);
   const displayFromPrice = Number.isFinite(minVariantPrice) ? minVariantPrice : basePrice;
 
@@ -103,6 +109,14 @@ export default function ProductPurchasePanel({
           <strong>{basePrice.toFixed(2)} JOD</strong>
         )}
       </p>
+
+      {promoType != null && promoMinOrderJod != null && !eligibleForMinOrder ? (
+        <p className="muted" style={{ marginTop: 0 }}>
+          {isAr
+            ? `ينطبق الخصم على الطلبات فوق ${promoMinOrderJod.toFixed(2)} JOD`
+            : `Discount applies on orders over ${promoMinOrderJod.toFixed(2)} JOD`}
+        </p>
+      ) : null}
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14, alignItems: "center" }}>
         <AddToCartButton

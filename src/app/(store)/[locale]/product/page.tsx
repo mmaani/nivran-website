@@ -33,6 +33,8 @@ type ProductRow = {
   promo_type: "PERCENT" | "FIXED" | null;
   promo_value: string | null;
   discounted_price_jod: string | null;
+  promo_min_order_jod: string | null;
+  promo_eligible: boolean | null;
   wear_times: string[];
   seasons: string[];
   audiences: string[];
@@ -144,9 +146,12 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
             ) as image_id,
             bp.discount_type as promo_type,
             bp.discount_value::text as promo_value,
+            bp.min_order_jod::text as promo_min_order_jod,
+            bp.eligible as promo_eligible,
             (
               case
                 when bp.id is null then null
+                when bp.eligible is not true then null
                 when bp.discount_type='PERCENT' then greatest(0, coalesce(vm.min_variant_price_jod, p.price_jod) - (coalesce(vm.min_variant_price_jod, p.price_jod) * (bp.discount_value / 100)))
                 when bp.discount_type='FIXED' then greatest(0, coalesce(vm.min_variant_price_jod, p.price_jod) - bp.discount_value)
                 else null
@@ -169,7 +174,12 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
          limit 1
        ) dv on true
        left join lateral (
-         select pr.id, pr.discount_type, pr.discount_value, pr.priority
+         select pr.id,
+                pr.discount_type,
+                pr.discount_value,
+                pr.priority,
+                pr.min_order_jod,
+                (pr.min_order_jod is null or pr.min_order_jod <= coalesce(vm.min_variant_price_jod, p.price_jod)) as eligible
          from promotions pr
          where pr.promo_kind in ('AUTO','SEASONAL')
            and pr.is_active=true
@@ -180,8 +190,9 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
              or (pr.category_keys is not null and array_length(pr.category_keys, 1) is not null and p.category_key = any(pr.category_keys))
              or (pr.product_slugs is not null and array_length(pr.product_slugs, 1) is not null and p.slug = any(pr.product_slugs))
            )
-           and (pr.min_order_jod is null or pr.min_order_jod <= coalesce(vm.min_variant_price_jod, p.price_jod))
-         order by pr.priority desc,
+         order by
+                  case when pr.min_order_jod is null or pr.min_order_jod <= coalesce(vm.min_variant_price_jod, p.price_jod) then 1 else 0 end desc,
+                  pr.priority desc,
                   case
                     when pr.discount_type='PERCENT' then (coalesce(vm.min_variant_price_jod, p.price_jod) * (pr.discount_value / 100))
                     when pr.discount_type='FIXED' then pr.discount_value
@@ -264,7 +275,9 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
     const defaultVariantPrice = Number(p.default_variant_price_jod || p.price_jod || 0);
     const discounted = p.discounted_price_jod != null ? Number(p.discounted_price_jod) : null;
     const promoValue = toSafeNumber(p.promo_value);
-    const hasPromo = discounted != null && discounted < baseFromPrice;
+    const promoMinOrderJod = p.promo_min_order_jod != null ? Number(p.promo_min_order_jod) : null;
+    const promoEligible = p.promo_eligible === true;
+    const hasPromo = p.promo_type != null && promoValue > 0;
 
     const apiSrc = p.image_id ? `/api/catalog/product-image/${p.image_id}` : "";
     const fallbackSrc = fallbackFromSlug(p.slug);
@@ -288,6 +301,8 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
       promoType: p.promo_type,
       promoValue,
       discountedPrice: discounted,
+      promoMinOrderJod,
+      promoEligible,
       imageSrc: apiSrc || fallbackSrc,
       fallbackSrc,
       tags,
