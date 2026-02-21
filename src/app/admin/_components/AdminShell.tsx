@@ -51,6 +51,7 @@ export default function AdminShell({
       { href: "/admin/inbox", en: "Inbox", ar: "الوارد", icon: "✦" },
       { href: "/admin/customers", en: "Customers", ar: "العملاء", icon: "◉" },
       { href: "/admin/staff", en: "Staff", ar: "الموظفون", icon: "◌" },
+      { href: "/admin/inventory", en: "Inventory", ar: "المخزون", icon: "▣" },
     ],
     []
   );
