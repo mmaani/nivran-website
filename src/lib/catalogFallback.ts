@@ -22,6 +22,8 @@ export type CatalogFallbackRow = {
   wear_times: string[];
   seasons: string[];
   audiences: string[];
+  promo_min_order_jod: number | null;
+  promo_eligible: boolean;
 };
 
 export function syntheticVariantId(slug: string, index = 0): number {
@@ -70,6 +72,8 @@ export function fallbackCatalogRows(): CatalogFallbackRow[] {
       wear_times: [],
       seasons: [],
       audiences: [p.audience],
+      promo_min_order_jod: null,
+      promo_eligible: false,
     };
   });
 }
