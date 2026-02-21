@@ -32,9 +32,9 @@ type SortKey = "recommended" | "price-asc" | "price-desc" | "name";
 
 function promoBadgeText(locale: Locale, promoType: string | null, promoValue: number): string {
   if (promoType === "PERCENT") {
-    return locale === "ar" ? `موسمي • وفر ${promoValue}%` : `Seasonal • Save ${promoValue}%`;
+    return locale === "ar" ? `AUTO • وفر ${promoValue}%` : `AUTO • Save ${promoValue}%`;
   }
-  return locale === "ar" ? `موسمي • وفر ${promoValue.toFixed(2)} د.أ` : `Seasonal • Save ${promoValue.toFixed(2)} JOD`;
+  return locale === "ar" ? `AUTO • وفر ${promoValue.toFixed(2)} د.أ` : `AUTO • Save ${promoValue.toFixed(2)} JOD`;
 }
 
 function normalizeText(value: string): string {
@@ -171,6 +171,16 @@ export default function ProductGridClient({
       <div className="grid-3">
         {visible.map((p) => {
           const outOfStock = Number(p.inventoryQty || 0) <= 0;
+          const promoValueNum = Number(p.promoValue || 0);
+          const promoType = p.promoType;
+          const hasPromo = !!promoType && Number.isFinite(promoValueNum) && promoValueNum > 0;
+          const defaultPrice = Number(p.defaultVariantPrice || 0);
+          const defaultDiscounted = hasPromo
+            ? promoType === 'PERCENT'
+              ? Math.max(0, defaultPrice - defaultPrice * (promoValueNum / 100))
+              : Math.max(0, defaultPrice - promoValueNum)
+            : defaultPrice;
+          const showPromoPrice = hasPromo && defaultDiscounted < defaultPrice;
           return (
             <article key={p.slug} className="panel">
               <p className="muted" style={{ marginTop: 0 }}>
@@ -198,7 +208,7 @@ export default function ProductGridClient({
                   loading="lazy"
                   sizes="(max-width: 900px) 100vw, (max-width: 1400px) 50vw, 33vw"
                 />
-                {p.hasPromo ? (
+                {hasPromo ? (
                   <div
                     style={{
                       position: "absolute",
@@ -224,13 +234,13 @@ export default function ProductGridClient({
                 <strong>{isAr ? `ابتداءً من ${p.fromPrice.toFixed(2)} JOD` : `From ${p.fromPrice.toFixed(2)} JOD`}</strong>
               </p>
               <p className="muted" style={{ marginTop: 0 }}>
-                {p.hasPromo && p.discountedPrice != null
-                  ? isAr
-                    ? `السعر الحالي (${p.defaultVariantLabel || "Default"}): ${p.discountedPrice.toFixed(2)} JOD`
-                    : `Current price (${p.defaultVariantLabel || "Default"}): ${p.discountedPrice.toFixed(2)} JOD`
-                  : isAr
-                    ? `السعر الحالي (${p.defaultVariantLabel || "Default"}): ${p.defaultVariantPrice.toFixed(2)} JOD`
-                    : `Current price (${p.defaultVariantLabel || "Default"}): ${p.defaultVariantPrice.toFixed(2)} JOD`}
+                {showPromoPrice ? (
+                  isAr
+                    ? `السعر الحالي (${p.defaultVariantLabel || "Default"}): ${defaultDiscounted.toFixed(2)} JOD`
+                    : `Current price (${p.defaultVariantLabel || "Default"}): ${defaultDiscounted.toFixed(2)} JOD`
+                ) : isAr
+                  ? `السعر الحالي (${p.defaultVariantLabel || "Default"}): ${defaultPrice.toFixed(2)} JOD`
+                  : `Current price (${p.defaultVariantLabel || "Default"}): ${defaultPrice.toFixed(2)} JOD`}
               </p>
 
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>

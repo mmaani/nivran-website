@@ -10,38 +10,46 @@ export type PricedOrderLine = {
 
 type PromotionRow = {
   id: number;
-  promo_kind: string;
+  // Current kinds: AUTO, CODE. Back-compat: SEASONAL/PROMO/REFERRAL.
+  promo_kind: "AUTO" | "CODE" | "SEASONAL" | "PROMO" | "REFERRAL" | string;
   code: string | null;
   title_en: string | null;
   title_ar: string | null;
-  discount_type: string;
+  discount_type: "PERCENT" | "FIXED" | string;
   discount_value: string | number;
   starts_at: string | null;
   ends_at: string | null;
   usage_limit: number | null;
   used_count: number | null;
   is_active: boolean;
-  category_keys: unknown;
-  product_slugs: unknown;
+  category_keys: string[] | null;
+  product_slugs: string[] | null;
   min_order_jod: string | number | null;
   priority: number | null;
+  created_at: string | null;
 };
+
+export type PromotionKindNormalized = "AUTO" | "CODE";
 
 export type PromotionEvaluation =
   | {
       ok: true;
       promotionId: number;
       promoCode: string | null;
-      promoKind: "AUTO" | "CODE";
+      promoKind: PromotionKindNormalized;
       discountJod: number;
       eligibleSubtotalJod: number;
       subtotalAfterDiscountJod: number;
       meta: {
-        discountType: string;
+        discountType: "PERCENT" | "FIXED";
         discountValue: number;
         titleEn: string | null;
         titleAr: string | null;
+      };
+      sort: {
         priority: number;
+        discountJod: number;
+        createdAtMs: number;
       };
     }
   | {
@@ -67,33 +75,17 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function normalizeTextArray(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value
-      .map((x) => String(x ?? "").trim())
-      .map((x) => x.replace(/^"|"$/g, ""))
-      .filter((x) => x.length > 0);
-  }
-
-  if (typeof value === "string") {
-    const raw = value.trim();
-    // Handles Postgres array text format: {a,b} or {"a","b"}
-    const inner = raw.startsWith("{") && raw.endsWith("}") ? raw.slice(1, -1) : raw;
-    if (!inner) return [];
-    return inner
-      .split(",")
-      .map((x) => x.trim())
-      .map((x) => x.replace(/^"|"$/g, ""))
-      .filter((x) => x.length > 0);
-  }
-
-  return [];
-}
-
-function parsePromoKind(value: unknown): "AUTO" | "CODE" {
-  const kind = String(value ?? "").trim().toUpperCase();
+function parsePromoKind(value: unknown): PromotionKindNormalized {
+  const kind = String(value || "").toUpperCase();
   if (kind === "AUTO" || kind === "SEASONAL") return "AUTO";
   return "CODE";
+}
+
+function createdAtMs(value: unknown): number {
+  if (typeof value !== "string" || !value) return 0;
+  const d = new Date(value);
+  const t = d.getTime();
+  return Number.isFinite(t) ? t : 0;
 }
 
 function evaluatePromotionRow(
@@ -108,12 +100,13 @@ function evaluatePromotionRow(
   const endsAt = promo.ends_at ? new Date(promo.ends_at) : null;
 
   if (startsAt && startsAt.getTime() > now.getTime()) {
-    return { ok: false, code: "PROMO_NOT_STARTED", error: "Promotion has not started yet" };
+    return { ok: false, code: "PROMO_NOT_STARTED", error: "Promotion is not active yet" };
   }
   if (endsAt && endsAt.getTime() < now.getTime()) {
     return { ok: false, code: "PROMO_EXPIRED", error: "Promotion has expired" };
   }
 
+  // Usage limits: relevant for CODE promos; kept for AUTO for safety if configured.
   const usageLimit = promo.usage_limit ?? null;
   const usedCount = promo.used_count ?? 0;
   if (usageLimit != null && usedCount >= usageLimit) {
@@ -122,29 +115,27 @@ function evaluatePromotionRow(
 
   const minOrder = toNum(promo.min_order_jod);
   if (minOrder > 0 && subtotalJod < minOrder) {
-    return { ok: false, code: "PROMO_MIN_ORDER", error: "Minimum order not met" };
+    return { ok: false, code: "PROMO_MIN_ORDER", error: `Minimum order is ${minOrder.toFixed(2)} JOD` };
   }
 
-  const categoryKeys = normalizeTextArray(promo.category_keys);
-  const productSlugs = normalizeTextArray(promo.product_slugs);
+  const keys = Array.isArray(promo.category_keys)
+    ? promo.category_keys.map((k) => String(k || "").trim()).filter(Boolean)
+    : [];
+  const slugs = Array.isArray(promo.product_slugs)
+    ? promo.product_slugs.map((s) => String(s || "").trim()).filter(Boolean)
+    : [];
 
-  const hasCategoryScope = categoryKeys.length > 0;
-  const hasSlugScope = productSlugs.length > 0;
+  const hasCategoryScope = keys.length > 0;
+  const hasSlugScope = slugs.length > 0;
 
-  // Scope rules (more forgiving):
-  // - If only categories provided => category match.
-  // - If only slugs provided => slug match.
-  // - If BOTH provided => category OR slug match.
-  // - If none provided => all lines eligible.
   const eligibleLines = lines.filter((line) => {
     if (!hasCategoryScope && !hasSlugScope) return true;
 
-    const categoryOk = !hasCategoryScope || (line.category_key ? categoryKeys.includes(line.category_key) : false);
-    const slugOk = !hasSlugScope || productSlugs.includes(line.slug);
+    const categoryHit = hasCategoryScope && !!line.category_key && keys.includes(line.category_key);
+    const slugHit = hasSlugScope && slugs.includes(line.slug);
 
-    if (hasCategoryScope && hasSlugScope) return categoryOk || slugOk;
-    if (hasCategoryScope) return categoryOk;
-    return slugOk;
+    // OR semantics when both are present.
+    return categoryHit || slugHit;
   });
 
   const eligibleSubtotal = round2(eligibleLines.reduce((sum, line) => sum + toNum(line.line_total_jod), 0));
@@ -152,31 +143,39 @@ function evaluatePromotionRow(
     return { ok: false, code: "PROMO_CATEGORY_MISMATCH", error: "Promotion does not apply to these items" };
   }
 
-  const type = String(promo.discount_type ?? "").trim().toUpperCase();
+  const type = String(promo.discount_type || "").toUpperCase();
   const value = toNum(promo.discount_value);
+  const isPercent = type === "PERCENT";
+  const isFixed = type === "FIXED";
 
-  if (!Number.isFinite(value) || value <= 0 || (type !== "PERCENT" && type !== "FIXED")) {
+  if (!Number.isFinite(value) || value <= 0 || (!isPercent && !isFixed)) {
     return { ok: false, code: "PROMO_INVALID", error: "Promotion configuration is invalid" };
   }
 
-  const rawDiscount = type === "PERCENT" ? eligibleSubtotal * (value / 100) : value;
+  const rawDiscount = isPercent ? eligibleSubtotal * (value / 100) : value;
   const discountJod = round2(Math.max(0, Math.min(eligibleSubtotal, rawDiscount)));
   const subtotalAfterDiscountJod = round2(Math.max(0, subtotalJod - discountJod));
+
+  const kind = parsePromoKind(promo.promo_kind);
 
   return {
     ok: true,
     promotionId: promo.id,
     promoCode: promo.code,
-    promoKind: parsePromoKind(promo.promo_kind),
+    promoKind: kind,
     discountJod,
     eligibleSubtotalJod: eligibleSubtotal,
     subtotalAfterDiscountJod,
     meta: {
-      discountType: type,
+      discountType: (isPercent ? "PERCENT" : "FIXED"),
       discountValue: value,
       titleEn: promo.title_en,
       titleAr: promo.title_ar,
+    },
+    sort: {
       priority: typeof promo.priority === "number" && Number.isFinite(promo.priority) ? promo.priority : 0,
+      discountJod,
+      createdAtMs: createdAtMs(promo.created_at),
     },
   };
 }
@@ -188,26 +187,15 @@ export async function evaluatePromoCodeForLines(
   subtotalJod: number,
   now = new Date()
 ): Promise<PromotionEvaluation> {
-  const promoCode = String(promoCodeRaw ?? "").trim().toUpperCase();
+  const promoCode = String(promoCodeRaw || "").trim().toUpperCase();
   if (!promoCode) return { ok: false, code: "PROMO_INVALID", error: "Promo code is required" };
 
   const promoRes = await dbx.query<PromotionRow>(
-    `select id,
-            promo_kind,
-            code,
-            title_en,
-            title_ar,
-            discount_type,
-            discount_value,
-            starts_at::text,
-            ends_at::text,
-            usage_limit,
-            used_count,
-            is_active,
-            category_keys,
-            product_slugs,
-            min_order_jod,
-            priority
+    `select id, promo_kind, code, title_en, title_ar, discount_type, discount_value,
+            starts_at::text, ends_at::text,
+            usage_limit, used_count, is_active,
+            category_keys, product_slugs, min_order_jod, priority,
+            created_at::text as created_at
        from promotions
       where code = $1
         and promo_kind in ('CODE','PROMO','REFERRAL')
@@ -217,6 +205,7 @@ export async function evaluatePromoCodeForLines(
 
   const promo = promoRes.rows[0];
   if (!promo) return { ok: false, code: "PROMO_NOT_FOUND", error: "Promo code not found" };
+
   return evaluatePromotionRow(promo, lines, subtotalJod, now);
 }
 
@@ -226,70 +215,79 @@ export async function evaluateAutoPromotionForLines(
   subtotalJod: number,
   now = new Date()
 ): Promise<PromotionEvaluation> {
+  // Short-circuit: empty cart
+  if (!lines.length || !(subtotalJod > 0)) {
+    return { ok: false, code: "PROMO_NOT_FOUND", error: "No eligible items" };
+  }
+
+  const cats = Array.from(
+    new Set(lines.map((l) => String(l.category_key || "").trim()).filter(Boolean))
+  );
+  const slugs = Array.from(new Set(lines.map((l) => String(l.slug || "").trim()).filter(Boolean)));
+
+  // Pull candidate AUTO promos (back-compat includes SEASONAL).
+  // Filter by overlap to reduce rows, but keep null scopes (apply-to-all).
   const promoRes = await dbx.query<PromotionRow>(
-    `select id,
-            promo_kind,
-            code,
-            title_en,
-            title_ar,
-            discount_type,
-            discount_value,
-            starts_at::text,
-            ends_at::text,
-            usage_limit,
-            used_count,
-            is_active,
-            category_keys,
-            product_slugs,
-            min_order_jod,
-            priority
+    `select id, promo_kind, code, title_en, title_ar, discount_type, discount_value,
+            starts_at::text, ends_at::text,
+            usage_limit, used_count, is_active,
+            category_keys, product_slugs, min_order_jod, priority,
+            created_at::text as created_at
        from promotions
       where promo_kind in ('AUTO','SEASONAL')
         and is_active = true
-      order by priority desc, created_at desc, id desc
-      limit 30`,
-    []
+        and (starts_at is null or starts_at <= now())
+        and (ends_at is null or ends_at >= now())
+        and (
+          category_keys is null
+          or product_slugs is null
+          or array_length(category_keys, 1) is null
+          or array_length(product_slugs, 1) is null
+          or category_keys && $1::text[]
+          or product_slugs && $2::text[]
+        )
+      order by priority desc, created_at desc
+      limit 80`,
+    [cats, slugs]
   );
 
-  const promos = promoRes.rows || [];
-  if (!promos.length) {
-    return { ok: false, code: "PROMO_NOT_FOUND", error: "No active seasonal promotion" };
+  const candidates = promoRes.rows || [];
+  if (!candidates.length) {
+    return { ok: false, code: "PROMO_NOT_FOUND", error: "No active AUTO promotions" };
   }
 
-  let bestOk: Extract<PromotionEvaluation, { ok: true }> | null = null;
+  let best: PromotionEvaluation | null = null;
 
-  for (const p of promos) {
-    const evaluated = evaluatePromotionRow(p, lines, subtotalJod, now);
+  for (const promo of candidates) {
+    const evaluated = evaluatePromotionRow(promo, lines, subtotalJod, now);
     if (!evaluated.ok) continue;
+    if (evaluated.discountJod <= 0) continue;
 
-    if (!bestOk) {
-      bestOk = evaluated;
+    if (!best || !best.ok) {
+      best = evaluated;
       continue;
     }
 
-    const a = evaluated.meta.priority;
-    const b = bestOk.meta.priority;
+    const a = evaluated.sort;
+    const b = best.sort;
 
-    if (a > b) {
-      bestOk = evaluated;
+    if (a.priority !== b.priority) {
+      if (a.priority > b.priority) best = evaluated;
       continue;
     }
-    if (a < b) continue;
 
-    if (evaluated.discountJod > bestOk.discountJod) {
-      bestOk = evaluated;
+    if (a.discountJod !== b.discountJod) {
+      if (a.discountJod > b.discountJod) best = evaluated;
       continue;
     }
-    if (evaluated.discountJod < bestOk.discountJod) continue;
 
-    if (evaluated.promotionId > bestOk.promotionId) {
-      bestOk = evaluated;
+    if (a.createdAtMs !== b.createdAtMs) {
+      if (a.createdAtMs > b.createdAtMs) best = evaluated;
+      continue;
     }
   }
 
-  return bestOk
-    ? bestOk
-    : { ok: false, code: "PROMO_CATEGORY_MISMATCH", error: "No eligible seasonal promotion" };
+  return best || { ok: false, code: "PROMO_NOT_FOUND", error: "No eligible AUTO promotion" };
 }
 
 export async function consumePromotionUsage(dbx: DbExecutor, promotionId: number): Promise<boolean> {

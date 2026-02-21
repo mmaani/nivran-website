@@ -248,23 +248,14 @@ export default async function ProductDetailPage({
        left join lateral (
          select pr.id, pr.discount_type, pr.discount_value, pr.priority, pr.ends_at, pr.starts_at
          from promotions pr
-         where pr.promo_kind='AUTO'
+         where pr.promo_kind in ('AUTO','SEASONAL')
            and pr.is_active=true
            and (pr.starts_at is null or pr.starts_at <= now())
            and (pr.ends_at is null or pr.ends_at >= now())
            and (
-             (
-               coalesce(array_length(pr.category_keys, 1), 0) = 0
-               and coalesce(array_length(pr.product_slugs, 1), 0) = 0
-             )
-             or (
-               coalesce(array_length(pr.category_keys, 1), 0) > 0
-               and p.category_key = any(pr.category_keys)
-             )
-             or (
-               coalesce(array_length(pr.product_slugs, 1), 0) > 0
-               and p.slug = any(pr.product_slugs)
-             )
+             ((pr.category_keys is null or array_length(pr.category_keys, 1) is null) and (pr.product_slugs is null or array_length(pr.product_slugs, 1) is null))
+             or (pr.category_keys is not null and array_length(pr.category_keys, 1) is not null and p.category_key = any(pr.category_keys))
+             or (pr.product_slugs is not null and array_length(pr.product_slugs, 1) is not null and p.slug = any(pr.product_slugs))
            )
            and (pr.min_order_jod is null or pr.min_order_jod <= p.price_jod)
          order by pr.priority desc,

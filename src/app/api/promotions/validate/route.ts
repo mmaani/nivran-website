@@ -21,9 +21,9 @@ type ProductRow = {
 
 type VariantRow = { id: number; product_id: number; price_jod: string | number };
 
-type JsonObject = Record<string, unknown>;
+type JsonRecord = Record<string, unknown>;
 
-function isObject(v: unknown): v is JsonObject {
+function isRecord(v: unknown): v is JsonRecord {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
@@ -53,21 +53,16 @@ function normalizeItems(items: unknown): { slug: string; qty: number; variantId:
 
 function pickMode(value: unknown): PromoMode {
   const normalized = String(value || "").trim().toUpperCase();
-  return normalized === "AUTO" || normalized === "SEASONAL" ? "AUTO" : "CODE";
+  return normalized === "AUTO" ? "AUTO" : "CODE";
+}
+
+function toNum(v: unknown): number {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : 0;
 }
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-async function readJsonSafe(res: Response): Promise<unknown> {
-  const raw = await res.text();
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    return null;
-  }
-}
 
 export async function GET() {
   return NextResponse.json(
@@ -101,8 +96,8 @@ export async function POST(req: Request) {
   }
 
   try {
-    const body = (await req.json().catch(() => null)) as unknown;
-    if (!isObject(body)) return NextResponse.json({ ok: false, error: "Invalid request" }, { status: 400 });
+    const raw = (await req.json().catch(() => null)) as unknown;
+    const body: JsonRecord = isRecord(raw) ? raw : {};
 
     const locale = body.locale === "ar" ? "ar" : "en";
     const mode = pickMode(body.mode);
@@ -112,7 +107,7 @@ export async function POST(req: Request) {
     if (!normalized.length) {
       return NextResponse.json(
         { ok: false, error: locale === "ar" ? "السلة فارغة" : "Cart items are required" },
-        { status: 400 }
+        { status: 400, headers: { "cache-control": "no-store" } }
       );
     }
 
@@ -120,22 +115,22 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           ok: false,
-          error: locale === "ar" ? "لا يمكن استخدام كود مع الخصم الموسمي" : "Promo code is not allowed in seasonal mode",
+          error: locale === "ar" ? "لا يمكن استخدام الكود مع وضع AUTO" : "Promo code is not allowed in AUTO mode",
           reason: "DISCOUNT_MODE_UNSUPPORTED",
         },
-        { status: 400 }
+        { status: 400, headers: { "cache-control": "no-store" } }
       );
     }
 
     if (mode === "CODE" && !promoCode) {
       return NextResponse.json(
         { ok: false, error: locale === "ar" ? "أدخل كود الخصم" : "Promo code is required" },
-        { status: 400 }
+        { status: 400, headers: { "cache-control": "no-store" } }
       );
     }
 
+    // Price lines using DB pricing (variants-safe).
     const slugs = Array.from(new Set(normalized.map((i) => i.slug)));
-
     const productRes = await db.query<ProductRow>(
       `select p.id,
               p.slug,
@@ -154,7 +149,6 @@ export async function POST(req: Request) {
         where p.slug = any($1::text[])`,
       [slugs]
     );
-
     const productMap = new Map(productRes.rows.map((p) => [p.slug, p]));
 
     const variantIds = Array.from(
@@ -174,26 +168,25 @@ export async function POST(req: Request) {
     }
 
     const lines: PricedOrderLine[] = [];
-
     for (const item of normalized) {
       const product = productMap.get(item.slug);
       if (!product || !product.is_active) {
         return NextResponse.json(
           { ok: false, error: locale === "ar" ? "يوجد منتج غير صالح في السلة" : "Cart contains invalid product" },
-          { status: 400 }
+          { status: 400, headers: { "cache-control": "no-store" } }
         );
       }
 
-      let unitPrice = Number(product.unit_price_jod || 0);
+      let unitPrice = toNum(product.unit_price_jod);
       if (item.variantId) {
         const variant = variantMap.get(item.variantId);
         if (!variant || Number(variant.product_id) !== Number(product.id)) {
           return NextResponse.json(
             { ok: false, error: locale === "ar" ? "النسخة المختارة غير صالحة" : "Selected variant is invalid" },
-            { status: 400 }
+            { status: 400, headers: { "cache-control": "no-store" } }
           );
         }
-        unitPrice = Number(variant.price_jod || 0);
+        unitPrice = toNum(variant.price_jod);
       }
 
       lines.push({
@@ -204,60 +197,50 @@ export async function POST(req: Request) {
       });
     }
 
-    const subtotal = Number(lines.reduce((sum, line) => sum + line.line_total_jod, 0).toFixed(2));
+    const subtotal = Number(lines.reduce((sum, line) => sum + toNum(line.line_total_jod), 0).toFixed(2));
 
-    if (mode === "CODE") {
-      const result = await evaluatePromoCodeForLines(db, promoCode, lines, subtotal);
+    const result =
+      mode === "CODE"
+        ? await evaluatePromoCodeForLines(db, promoCode, lines, subtotal)
+        : await evaluateAutoPromotionForLines(db, lines, subtotal);
 
-      if (!result.ok) {
-        return NextResponse.json(
-          {
-            ok: false,
-            error: locale === "ar" ? "الخصم غير صالح أو غير متاح" : "Discount is invalid or not eligible",
-            reason: result.code,
-          },
-          { status: 200 }
-        );
-      }
+    // AUTO mode: no promo is not an error.
+    if (mode === "AUTO" && !result.ok) {
+      return NextResponse.json(
+        { ok: true, promo: null, reason: "NO_PROMO" },
+        { status: 200, headers: { "cache-control": "no-store" } }
+      );
+    }
 
-      return NextResponse.json({
+    if (!result.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: locale === "ar" ? "الخصم غير صالح أو غير متاح" : "Discount is invalid or not eligible",
+          reason: result.code,
+        },
+        { status: 200, headers: { "cache-control": "no-store" } }
+      );
+    }
+
+    return NextResponse.json(
+      {
         ok: true,
         promo: {
-          mode: "CODE",
+          mode: result.promoKind,
           promotionId: result.promotionId,
           code: result.promoCode,
           discountJod: result.discountJod,
           subtotalAfterDiscountJod: result.subtotalAfterDiscountJod,
           eligibleSubtotalJod: result.eligibleSubtotalJod,
-          discountType: result.meta.discountType,
-          discountValue: result.meta.discountValue,
           titleEn: result.meta.titleEn,
           titleAr: result.meta.titleAr,
+          discountType: result.meta.discountType,
+          discountValue: result.meta.discountValue,
         },
-      });
-    }
-
-    // AUTO / SEASONAL
-    const auto = await evaluateAutoPromotionForLines(db, lines, subtotal);
-    if (!auto.ok) {
-      return NextResponse.json({ ok: true, promo: null, reason: auto.code }, { status: 200 });
-    }
-
-    return NextResponse.json({
-      ok: true,
-      promo: {
-        mode: "AUTO",
-        promotionId: auto.promotionId,
-        code: null,
-        discountJod: auto.discountJod,
-        subtotalAfterDiscountJod: auto.subtotalAfterDiscountJod,
-        eligibleSubtotalJod: auto.eligibleSubtotalJod,
-        discountType: auto.meta.discountType,
-        discountValue: auto.meta.discountValue,
-        titleEn: auto.meta.titleEn,
-        titleAr: auto.meta.titleAr,
       },
-    });
+      { status: 200, headers: { "cache-control": "no-store" } }
+    );
   } catch (error: unknown) {
     if (isDbConnectivityError(error)) {
       return NextResponse.json(
@@ -265,9 +248,6 @@ export async function POST(req: Request) {
         { status: 503, headers: { "retry-after": "30", "cache-control": "no-store" } }
       );
     }
-    return NextResponse.json(
-      { ok: false, error: "Promotion validation failed" },
-      { status: 500, headers: { "cache-control": "no-store" } }
-    );
+    throw error;
   }
 }
