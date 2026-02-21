@@ -15,19 +15,47 @@ function normalizeKey(v: unknown): string {
   return String(v || "")
     .trim()
     .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9-]/g, "")
+    .replace(/[_\s]+/g, "-")
+    .replace(/[^a-z0-9-]/g, "-")
     .replace(/-+/g, "-")
     .replace(/(^-+|-+$)/g, "");
 }
 
 function keyCandidates(v: unknown): string[] {
   const raw = String(v || "").trim();
-  const norm = normalizeKey(raw);
-  const out: string[] = [];
-  if (raw) out.push(raw);
-  if (norm && norm !== raw) out.push(norm);
-  return out;
+  if (!raw) return [];
+
+  const base = raw.toLowerCase();
+  const hyphen = base.replace(/_/g, "-");
+  const underscore = base.replace(/-/g, "_");
+  const norm = normalizeKey(base);
+
+  const out = new Set<string>();
+  for (const k of [base, hyphen, underscore, norm]) {
+    const kk = String(k || "").trim();
+    if (!kk) continue;
+    out.add(kk);
+    const nk = normalizeKey(kk);
+    if (nk) out.add(nk);
+  }
+
+  return Array.from(out);
+}
+
+function mergeCategoryKeySql(oldKey: string, newKey: string) {
+  return {
+    updateProducts: [
+      `update products set category_key=$2 where category_key=$1`,
+      [oldKey, newKey],
+    ] as const,
+    updatePromotions: [
+      `update promotions
+          set category_keys = array_replace(category_keys, $1::text, $2::text)
+        where category_keys is not null
+          and category_keys @> array[$1::text]::text[]`,
+      [oldKey, newKey],
+    ] as const,
+  };
 }
 
 export async function POST(req: Request) {
@@ -45,7 +73,53 @@ export async function POST(req: Request) {
     const action = String(form.get("action") || "create");
 
     if (action === "create") {
-      const key = normalizeKey(form.get("key"));
+      const rawKey = String(form.get("key") || "");
+      const key = normalizeKey(rawKey);
+      const candidates = keyCandidates(rawKey);
+
+      // If legacy keys exist (e.g. hand_gel / air_freshener), unify them to the normalized key (hand-gel / air-freshener).
+      // We merge *all* found variants, not just the first match.
+      if (key && candidates.length) {
+        const existing = await db.query<{ key: string }>(
+          `select key from categories where key = any($1::text[])`,
+          [candidates]
+        );
+
+        const existingKeys = (existing.rows || [])
+          .map((r) => String(r.key || "").trim())
+          .filter((k) => !!k && k !== key);
+
+        if (existingKeys.length) {
+          await db.query("begin");
+          try {
+            // Ensure the normalized key exists: if not, rename the first legacy key to the normalized key.
+            const target = await db.query("select 1 from categories where key=$1 limit 1", [key]);
+            const hasTarget = (target as { rowCount?: unknown }).rowCount === 1;
+
+            let remaining = existingKeys.slice();
+            if (!hasTarget) {
+              const first = remaining.shift();
+              if (first) {
+                await db.query(`update categories set key=$2 where key=$1`, [first, key]);
+              }
+            }
+
+            // Now merge all remaining legacy keys into the normalized key.
+            for (const oldKey of remaining) {
+              const merge = mergeCategoryKeySql(oldKey, key);
+              await db.query(merge.updateProducts[0], merge.updateProducts[1]);
+              await db.query(merge.updatePromotions[0], merge.updatePromotions[1]);
+              await db.query(`delete from categories where key=$1`, [oldKey]);
+            }
+
+            await db.query("commit");
+          } catch (e: unknown) {
+            await db.query("rollback");
+            throw e;
+          }
+        }
+      }
+
       const nameEn = String(form.get("name_en") || "").trim();
       const nameAr = String(form.get("name_ar") || "").trim();
       const sortOrderRaw = Number(form.get("sort_order") || 0);
@@ -116,6 +190,7 @@ export async function POST(req: Request) {
         await db.query("begin");
         try {
           await db.query(`update products set category_key='perfume' where category_key=$1`, [key]);
+          await db.query(`update promotions set category_keys = array_remove(category_keys, $1::text) where category_keys is not null and category_keys @> array[$1::text]::text[]`, [key]);
           const r = await db.query(`delete from categories where key=$1`, [key]);
           await db.query("commit");
           if ((r as { rowCount?: unknown }).rowCount === 1) {

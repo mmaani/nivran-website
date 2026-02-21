@@ -29,6 +29,18 @@ function normalizeSlug(v: unknown) {
     .replace(/(^-+|-+$)/g, "");
 }
 
+function normalizeCategoryKey(v: unknown): string {
+  const raw = String(v ?? "").trim();
+  const normalized = String(raw || "perfume")
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, "-")
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/(^-+|-+$)/g, "");
+  return normalized || "perfume";
+}
+
 function normalizeNumericString(raw: unknown): string {
   let s = String(raw ?? "").trim();
   if (!s) return "";
@@ -106,7 +118,7 @@ export async function POST(req: Request) {
       const price = parseMoney(form.get("price_jod"));
       const compareAt = parseMoney(form.get("compare_at_price_jod"));
       const inventory = parseNonNegativeInt(form.get("inventory_qty"));
-      const categoryKey = String(form.get("category_key") || "perfume").trim() || "perfume";
+      const categoryKey = normalizeCategoryKey(form.get("category_key") || "perfume");
       const isActive = String(form.get("is_active") || "") === "on";
       const wearTimes = pickMulti(form, "wear_times");
       const seasons = pickMulti(form, "seasons");
@@ -175,7 +187,8 @@ export async function POST(req: Request) {
       const priceSafe = price != null && price > 0 ? price : null;
 
       const inventory = parseNonNegativeInt(form.get("inventory_qty"));
-      const categoryKey = String(form.get("category_key") || "").trim();
+      const categoryKeyRaw = String(form.get("category_key") || "").trim();
+      const categoryKey = categoryKeyRaw ? normalizeCategoryKey(categoryKeyRaw) : "";
       const isActive = String(form.get("is_active") || "") === "on";
       const wearTimes = pickMulti(form, "wear_times");
       const seasons = pickMulti(form, "seasons");

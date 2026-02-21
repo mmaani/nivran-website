@@ -172,6 +172,8 @@ export default function CheckoutClient() {
       freeShippingThreshold: isAr ? "الحد الحالي للشحن المجاني: {{amount}} JOD" : "Current free-shipping threshold: {{amount}} JOD",
       systemFallback: isAr ? "خدمة العروض غير متاحة مؤقتاً. يمكنك المتابعة بدون خصم حالياً." : "Promotions are temporarily unavailable. You can still checkout without a discount.",
       seasonalApplied: isAr ? "خصم موسمي مطبق تلقائياً" : "Seasonal discount applied automatically",
+      oneDiscountOnly: isAr ? "يمكن تطبيق خصم واحد فقط لكل طلب." : "Only one discount can be applied per order.",
+      codePausesSeasonal: isAr ? "عند تطبيق كود، يتم إيقاف الخصم الموسمي تلقائياً." : "When a code is applied, the seasonal discount is paused.",
     }),
     [isAr]
   );
@@ -679,6 +681,13 @@ export default function CheckoutClient() {
             {promoServiceUnavailable ? (
               <p className="muted" style={{ marginTop: 0 }}>{COPY.systemFallback}</p>
             ) : null}
+            {discountMode === "CODE" && selectedCodePromo?.code ? (
+              <div className="panel" style={{ padding: 12, marginBottom: 12, background: "rgba(255,255,255,.7)", border: "1px solid #eee" }}>
+                <strong>{COPY.oneDiscountOnly}</strong>
+                <p className="muted" style={{ margin: "6px 0 0" }}>{COPY.codePausesSeasonal}</p>
+              </div>
+            ) : null}
+
 
             {seasonalLabel && discountMode !== "CODE" ? (
               <div className="panel" style={{ padding: 12, marginBottom: 12, background: "linear-gradient(130deg,#fff,#fff8ee)", border: "1px solid #f0e1c4" }}>

@@ -9,10 +9,10 @@ export type CatalogFallbackRow = {
   description_en: string;
   description_ar: string;
   price_jod: string;
-  min_variant_price_jod: string;
+  min_variant_price_jod: string | null;
   default_variant_id: number | null;
   default_variant_label: string | null;
-  default_variant_price_jod: string;
+  default_variant_price_jod: string | null;
   category_key: string;
   inventory_qty: number;
   image_id: null;
@@ -22,8 +22,8 @@ export type CatalogFallbackRow = {
   wear_times: string[];
   seasons: string[];
   audiences: string[];
-  promo_min_order_jod: number | null;
-  promo_eligible: boolean;
+  promo_min_order_jod: string | null;
+  promo_eligible: boolean | null;
 };
 
 export function syntheticVariantId(slug: string, index = 0): number {

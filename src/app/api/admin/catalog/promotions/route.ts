@@ -18,6 +18,17 @@ function normalizePromoKind(value: unknown): "AUTO" | "CODE" {
   return "CODE"; // CODE / PROMO / REFERRAL
 }
 
+function normalizeCategoryKey(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  return String(raw)
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, "-")
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/(^-+|-+$)/g, "");
+}
+
 function normalizeNumericString(raw: unknown): string {
   let s = String(raw ?? "").trim();
   if (!s) return "";
@@ -72,7 +83,14 @@ function readCategoryKeys(form: FormData): string[] | null {
     .map((v) => String(v || "").trim())
     .filter(Boolean);
   if (!raw.length || raw.includes("__ALL__")) return null;
-  return Array.from(new Set(raw));
+
+  const normalized = raw
+    .map((k) => normalizeCategoryKey(k))
+    .map((k) => k.trim())
+    .filter(Boolean);
+
+  if (!normalized.length) return null;
+  return Array.from(new Set(normalized));
 }
 
 function readProductSlugs(raw: string): string[] | null {
