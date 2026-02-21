@@ -127,6 +127,7 @@ export async function ensureOrdersTables(): Promise<void> {
   await db.query(`create index if not exists idx_orders_promo_code on orders(promo_code)`);
   await db.query(`create index if not exists idx_orders_discount_source on orders(discount_source)`);
   await db.query(`create index if not exists idx_orders_inventory_committed_at on orders(inventory_committed_at)`);
+
   await db.query(`create index if not exists idx_orders_promo_consumed on orders(promo_consumed)`);
   await db.query(`create index if not exists idx_orders_promo_consume_failed on orders(promo_consume_failed)`);
 
