@@ -111,7 +111,11 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
     const bootstrap = await ensureCatalogTablesSafe();
     if (!bootstrap.ok) {
       categoriesRows = fallbackCategories();
-      productRows = fallbackCatalogRows();
+      productRows = fallbackCatalogRows().map((p) => ({
+        ...p,
+        promo_min_order_jod: null,
+        promo_eligible: false,
+      }));
       campaignRows = [];
       console.warn(`[catalog] Using fallback product catalog: ${bootstrap.reason}`);
     } else {
@@ -220,14 +224,19 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
       );
       campaignRows = campaignsRes.rows;
     }
-  } catch (error: unknown) {
-    if (!isDbConnectivityError(error) && !isRecoverableCatalogSetupError(error)) throw error;
+ 
+} catch (error: unknown) {
+  if (!isDbConnectivityError(error) && !isRecoverableCatalogSetupError(error)) throw error;
 
-    categoriesRows = fallbackCategories();
-    productRows = fallbackCatalogRows();
-    campaignRows = [];
-    console.warn("[catalog] Falling back to static product catalog due to recoverable DB issue.");
-  }
+  categoriesRows = fallbackCategories();
+  productRows = fallbackCatalogRows().map((p) => ({
+    ...p,
+    promo_min_order_jod: null,
+    promo_eligible: false,
+  }));
+  campaignRows = [];
+  console.warn("[catalog] Falling back to static product catalog due to recoverable DB issue.");
+}
 
   const catsMap = new Map<string, { key: string; label: string }>();
   const catSource = categoriesRows.length
