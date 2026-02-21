@@ -137,7 +137,15 @@ export async function ensureOrdersTables(): Promise<void> {
   await db.query(`create index if not exists idx_paytabs_callbacks_received_at on paytabs_callbacks(received_at desc)`);
 }
 
-type InventoryDelta = { slug: string; qty: number };
+type InventoryDelta = {
+  // Raw value from the order payload (may contain underscores, uppercase, etc.)
+  slugRaw: string | null;
+  // Normalized slug (lowercase, hyphenated). Used for matching.
+  slug: string | null;
+  // Optional variant id from the order payload (when slug is missing/incorrect)
+  variantId: number | null;
+  qty: number;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -146,6 +154,32 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function toNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const s = value.trim();
+  return s ? s : null;
+}
+
+function toPosInt(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return Math.trunc(value);
+  if (typeof value === "string") {
+    const n = Number(value.trim());
+    if (Number.isFinite(n) && n > 0) return Math.trunc(n);
+  }
+  return null;
+}
+
+export function normalizeSkuForInventory(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  let s = value.trim().toLowerCase();
+  if (!s) return null;
+
+  // Common normalizations
+  s = s.replace(/_/g, "-");
+  s = s.replace(/\s+/g, "-");
+
+  // Keep only URL-safe slug characters
+  s = s.replace(/[^a-z0-9-]/g, "-");
+  s = s.replace(/-+/g, "-");
+  s = s.replace(/^-+/, "").replace(/-+$/, "");
+
   return s ? s : null;
 }
 
@@ -180,17 +214,129 @@ function extractInventoryDeltas(itemsValue: unknown): InventoryDelta[] {
 
   if (!Array.isArray(list)) return [];
 
-  const map = new Map<string, number>();
+  const map = new Map<string, InventoryDelta>();
 
   for (const entry of list) {
     if (!isRecord(entry)) continue;
-    const slug = toNonEmptyString(entry["slug"]);
-    if (!slug) continue;
+
+    const slugRaw =
+      toNonEmptyString(entry["slug"]) ||
+      toNonEmptyString(entry["productSlug"]) ||
+      toNonEmptyString(entry["product_slug"]) ||
+      toNonEmptyString(entry["sku"]);
+
+    const slug = normalizeSkuForInventory(slugRaw);
+    const variantId = toPosInt(entry["variantId"] ?? entry["variant_id"]);
+
     const qty = toQty(entry["qty"]);
-    map.set(slug, (map.get(slug) || 0) + qty);
+
+    const key = slug ? `slug:${slug}` : variantId ? `variant:${variantId}` : null;
+    if (!key) continue;
+
+    const prev = map.get(key);
+    if (!prev) {
+      map.set(key, { slugRaw, slug, variantId, qty });
+    } else {
+      map.set(key, {
+        slugRaw: prev.slugRaw || slugRaw,
+        slug: prev.slug || slug,
+        variantId: prev.variantId || variantId,
+        qty: Math.max(1, Math.min(999, prev.qty + qty)),
+      });
+    }
   }
 
-  return Array.from(map.entries()).map(([slug, qty]) => ({ slug, qty }));
+  return Array.from(map.values());
+}
+
+function buildSlugCandidates(delta: InventoryDelta): string[] {
+  const out: string[] = [];
+  const push = (v: string | null) => {
+    if (!v) return;
+    const s = v.trim();
+    if (!s) return;
+    if (!out.includes(s)) out.push(s);
+  };
+
+  push(delta.slug);
+
+  if (delta.slugRaw) {
+    const rawLower = delta.slugRaw.trim().toLowerCase();
+    push(rawLower);
+    push(rawLower.replace(/_/g, "-"));
+    push(rawLower.replace(/\s+/g, "-"));
+    push(normalizeSkuForInventory(rawLower));
+  }
+
+  return out;
+}
+
+async function resolveProductSlugByVariantId(trx: DbExecutor, variantId: number): Promise<string | null> {
+  // Best-effort resolution. If variants table is absent or schema differs, just return null.
+  try {
+    const r = await trx.query<{ slug: string }>(
+      `select product_slug::text as slug
+         from variants
+        where id = $1
+        limit 1`,
+      [variantId]
+    );
+    const slug = r.rows[0]?.slug;
+    return typeof slug === "string" && slug.trim() ? slug.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveInventoryDeltasToSlugs(
+  trx: DbExecutor,
+  deltas: InventoryDelta[]
+): Promise<{ resolved: Array<{ slug: string; qty: number }>; missing: InventoryDelta[] }> {
+  const perDeltaCandidates = deltas.map((d) => buildSlugCandidates(d));
+
+  // Variant-based enrichment (only when no candidates)
+  for (let i = 0; i < deltas.length; i++) {
+    const d = deltas[i];
+    if (perDeltaCandidates[i].length > 0) continue;
+    if (!d.variantId) continue;
+    const byVariant = await resolveProductSlugByVariantId(trx, d.variantId);
+    if (byVariant) {
+      perDeltaCandidates[i].push(byVariant);
+      const normalized = normalizeSkuForInventory(byVariant);
+      if (normalized && normalized !== byVariant) perDeltaCandidates[i].push(normalized);
+    }
+  }
+
+  const allCandidates = Array.from(new Set(perDeltaCandidates.flat())).filter((s) => typeof s === "string" && s.length > 0);
+  const exists = new Set<string>();
+
+  if (allCandidates.length > 0) {
+    const r = await trx.query<{ slug: string }>(
+      `select slug::text as slug
+         from products
+        where slug = any($1::text[])`,
+      [allCandidates]
+    );
+    for (const row of r.rows) {
+      if (typeof row.slug === "string" && row.slug) exists.add(row.slug);
+    }
+  }
+
+  const resolved: Array<{ slug: string; qty: number }> = [];
+  const missing: InventoryDelta[] = [];
+
+  for (let i = 0; i < deltas.length; i++) {
+    const d = deltas[i];
+    const candidates = perDeltaCandidates[i];
+    const found = candidates.find((c) => exists.has(c)) || null;
+    if (!found) {
+      missing.push(d);
+      continue;
+    }
+    resolved.push({ slug: found, qty: d.qty });
+  }
+
+  return { resolved, missing };
 }
 
 type OrderInventoryRow = {
@@ -223,8 +369,26 @@ export async function commitInventoryForPaidCart(trx: DbExecutor, cartId: string
   if (order.inventory_committed_at) return false;
 
   const deltas = extractInventoryDeltas(order.items);
+  if (deltas.length === 0) {
+    // Nothing to decrement, but mark committed to stop repeated callbacks.
+    await trx.query(
+      `update orders
+          set inventory_committed_at = now(),
+              updated_at = now()
+        where cart_id = $1
+          and inventory_committed_at is null`,
+      [cartId]
+    );
+    return true;
+  }
 
-  for (const d of deltas) {
+  const resolved = await resolveInventoryDeltasToSlugs(trx, deltas);
+  if (resolved.missing.length > 0) {
+    // Do not partially commit. Keep order pending for reconciliation.
+    return false;
+  }
+
+  for (const d of resolved.resolved) {
     await trx.query(
       `update products
           set inventory_qty = greatest(0, coalesce(inventory_qty, 0) - $2::int),
@@ -265,8 +429,24 @@ export async function commitInventoryForPaidOrderId(trx: DbExecutor, orderId: nu
   if (order.inventory_committed_at) return false;
 
   const deltas = extractInventoryDeltas(order.items);
+  if (deltas.length === 0) {
+    await trx.query(
+      `update orders
+          set inventory_committed_at = now(),
+              updated_at = now()
+        where id = $1
+          and inventory_committed_at is null`,
+      [orderId]
+    );
+    return true;
+  }
 
-  for (const d of deltas) {
+  const resolved = await resolveInventoryDeltasToSlugs(trx, deltas);
+  if (resolved.missing.length > 0) {
+    return false;
+  }
+
+  for (const d of resolved.resolved) {
     await trx.query(
       `update products
           set inventory_qty = greatest(0, coalesce(inventory_qty, 0) - $2::int),

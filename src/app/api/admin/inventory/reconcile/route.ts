@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { ensureOrdersTables, commitInventoryForPaidOrderId } from "@/lib/orders";
+import { ensureOrdersTables, commitInventoryForPaidOrderId, normalizeSkuForInventory } from "@/lib/orders";
 import { requireAdmin } from "@/lib/guards";
 
 export const runtime = "nodejs";
@@ -67,7 +67,13 @@ function extractInventoryDeltas(itemsValue: unknown): InventoryDelta[] {
 
   for (const entry of list) {
     if (!isRecord(entry)) continue;
-    const slug = toNonEmptyString(entry["slug"]);
+    const raw =
+      toNonEmptyString(entry["slug"]) ||
+      toNonEmptyString(entry["productSlug"]) ||
+      toNonEmptyString(entry["product_slug"]) ||
+      toNonEmptyString(entry["sku"]);
+
+    const slug = normalizeSkuForInventory(raw);
     if (!slug) continue;
     const qty = toQty(entry["qty"]);
     map.set(slug, (map.get(slug) || 0) + qty);
