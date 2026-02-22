@@ -50,7 +50,7 @@ export async function POST(req: Request): Promise<Response> {
 
   const res = isForm
     ? NextResponse.redirect(new URL(`/${locale}?login=1`, req.url))
-    : NextResponse.json({ ok: true });
+    : NextResponse.json({ ok: true, needsVerification: !c.email_verified_at });
 
   res.cookies.set(CUSTOMER_SESSION_COOKIE, token, cookieOpts(rememberMe));
   return res;

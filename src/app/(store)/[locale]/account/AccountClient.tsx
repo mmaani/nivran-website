@@ -10,6 +10,7 @@ type Profile = {
   address_line1: string | null;
   city: string | null;
   country: string | null;
+  email_verified_at: string | null;
   created_at: string;
 };
 
@@ -18,6 +19,7 @@ type OrderRow = {
   cart_id: string;
   status: string;
   amount_jod: string;
+  email_verified_at: string | null;
   created_at: string;
 };
 
@@ -126,38 +128,56 @@ export default function AccountClient({ locale }: { locale: string }) {
         </button>
       </div>
 
-      <div className="panel" style={{ marginTop: 14 }}>
-        <h3 style={{ marginTop: 0 }}>{isAr ? "البيانات الشخصية" : "Profile"}</h3>
+            {!profile.email_verified_at ? (
+        <div className="panel" style={{ marginTop: 14, border: "1px solid rgba(201,164,106,.45)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <div>
+              <div style={{ fontWeight: 700 }}>{isAr ? "بريدك غير مُؤكَّد" : "Email not verified"}</div>
+              <div className="muted" style={{ marginTop: 4, lineHeight: 1.5 }}>
+                {isAr
+                  ? "أكد بريدك لتأمين حسابك واستلام تحديثات الطلبات."
+                  : "Verify your email to secure your account and receive order updates."}
+              </div>
+            </div>
+            <a className="btn" href={`/${locale}/account/verify?email=${encodeURIComponent(profile.email)}`}>
+              {isAr ? "تأكيد الآن" : "Verify now"}
+            </a>
+          </div>
+        </div>
+      ) : null}
+
+<div className="panel" style={{ marginTop: 14 }}>
+        <h3 style={{ marginTop: 0 }}>{isAr ? "ملفك الشخصي" : "Your profile"}</h3>
 
         <div className="grid-2" style={{ gap: 10 }}>
           <label>
             <span className="muted">{isAr ? "الاسم الكامل *" : "Full name *"}</span>
-            <input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder={isAr ? "مثال: محمد المعاني" : "e.g. Mohammad Maani"} />
           </label>
 
           <label>
-            <span className="muted">{isAr ? "البريد الإلكتروني" : "Email"}</span>
-            <input value={profile.email} readOnly />
+            <span className="muted">{isAr ? "البريد الإلكتروني" : "Email"} {profile.email_verified_at ? <span style={{ marginInlineStart: 8, fontSize: 12, padding: "2px 8px", borderRadius: 999, border: "1px solid rgba(0,0,0,.12)" }}>{isAr ? "مؤكد" : "Verified"}</span> : <span style={{ marginInlineStart: 8, fontSize: 12, padding: "2px 8px", borderRadius: 999, border: "1px solid rgba(201,164,106,.45)" }}>{isAr ? "غير مؤكد" : "Unverified"}</span>}</span>
+            <input className="input" value={profile.email} readOnly />
           </label>
 
           <label>
             <span className="muted">{isAr ? "الهاتف *" : "Phone *"}</span>
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} />
+            <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={isAr ? "رقم الهاتف" : "Phone number"} />
           </label>
 
           <label>
             <span className="muted">{isAr ? "الدولة" : "Country"}</span>
-            <input value={country} onChange={(e) => setCountry(e.target.value)} />
+            <input className="input" value={country} onChange={(e) => setCountry(e.target.value)} placeholder={isAr ? "الدولة" : "Country"} />
           </label>
 
           <label style={{ gridColumn: "1 / -1" }}>
             <span className="muted">{isAr ? "العنوان *" : "Address *"}</span>
-            <input value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} />
+            <input className="input" value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} placeholder={isAr ? "العنوان" : "Address line"} />
           </label>
 
           <label style={{ gridColumn: "1 / -1" }}>
             <span className="muted">{isAr ? "المدينة" : "City"}</span>
-            <input value={city} onChange={(e) => setCity(e.target.value)} />
+            <input className="input" value={city} onChange={(e) => setCity(e.target.value)} placeholder={isAr ? "المدينة" : "City"} />
           </label>
         </div>
 
@@ -170,7 +190,25 @@ export default function AccountClient({ locale }: { locale: string }) {
         </div>
       </div>
 
-      <div className="panel" style={{ marginTop: 14 }}>
+            {!profile.email_verified_at ? (
+        <div className="panel" style={{ marginTop: 14, border: "1px solid rgba(201,164,106,.45)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <div>
+              <div style={{ fontWeight: 700 }}>{isAr ? "بريدك غير مُؤكَّد" : "Email not verified"}</div>
+              <div className="muted" style={{ marginTop: 4, lineHeight: 1.5 }}>
+                {isAr
+                  ? "أكد بريدك لتأمين حسابك واستلام تحديثات الطلبات."
+                  : "Verify your email to secure your account and receive order updates."}
+              </div>
+            </div>
+            <a className="btn" href={`/${locale}/account/verify?email=${encodeURIComponent(profile.email)}`}>
+              {isAr ? "تأكيد الآن" : "Verify now"}
+            </a>
+          </div>
+        </div>
+      ) : null}
+
+<div className="panel" style={{ marginTop: 14 }}>
         <h3 style={{ marginTop: 0 }}>{isAr ? "الطلبات" : "Orders"}</h3>
 
         {orders.length ? (

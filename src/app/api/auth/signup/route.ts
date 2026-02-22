@@ -1,29 +1,56 @@
 import { NextResponse } from "next/server";
-import { createCustomer, createCustomerSession, createSessionToken, getCustomerByEmail } from "@/lib/identity";
+import {
+  createCustomer,
+  createCustomerSession,
+  createSessionToken,
+  getCustomerByEmail,
+  issueEmailVerificationCode,
+} from "@/lib/identity";
+import { sendVerificationCodeEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request) {
-  const body = await req.json().catch(() => ({}));
+type Locale = "en" | "ar";
 
-  const fullName = String(body?.fullName || "").trim();
-  const email = String(body?.email || "").trim().toLowerCase();
-  const phone = String(body?.phone || "").trim();
-  const addressLine1 = String(body?.addressLine1 || "").trim();
-  const city = String(body?.city || "").trim();
-  const country = String(body?.country || "").trim() || "Jordan";
-  const password = String(body?.password || "").trim();
+type SignupBody = {
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  addressLine1?: string;
+  city?: string;
+  country?: string;
+  password?: string;
+  locale?: string;
+};
+
+function parseLocale(v: string | undefined): Locale {
+  return v === "ar" ? "ar" : "en";
+}
+
+export async function POST(req: Request) {
+  const body: SignupBody = await req.json().catch((): SignupBody => ({}));
+
+  const fullName = String(body.fullName ?? "").trim();
+  const email = String(body.email ?? "").trim().toLowerCase();
+  const phone = String(body.phone ?? "").trim();
+  const addressLine1 = String(body.addressLine1 ?? "").trim();
+  const city = String(body.city ?? "").trim();
+  const country = String(body.country ?? "").trim() || "Jordan";
+  const password = String(body.password ?? "").trim();
+  const locale: Locale = parseLocale(body.locale);
 
   if (!fullName || !email || !phone || !addressLine1 || !password) {
     return NextResponse.json(
       { ok: false, error: "Missing required fields (name, email, phone, address, password)." },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
   const exists = await getCustomerByEmail(email);
-  if (exists) return NextResponse.json({ ok: false, error: "Email already registered." }, { status: 409 });
+  if (exists) {
+    return NextResponse.json({ ok: false, error: "Email already registered." }, { status: 409 });
+  }
 
   const created = await createCustomer({
     email,
@@ -35,10 +62,19 @@ export async function POST(req: Request) {
     country,
   });
 
+  // ✅ FIX: generate session token correctly
   const token = createSessionToken();
   await createCustomerSession(created.id, token);
 
-  const res = NextResponse.json({ ok: true });
+  // Issue verification code (email sending is build-safe; function logs if env missing)
+  try {
+    const v = await issueEmailVerificationCode(created.id);
+    await sendVerificationCodeEmail(email, v.code, locale);
+  } catch (e: unknown) {
+    console.warn("[verify] could not issue verification code:", e);
+  }
+
+  const res = NextResponse.json({ ok: true, needsVerification: true });
 
   res.cookies.set("nivran_customer_session", token, {
     httpOnly: true,

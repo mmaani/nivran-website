@@ -1,0 +1,145 @@
+"use client";
+
+import React, { useMemo, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
+import { isRecord, readErrorMessage } from "@/lib/http-client";
+
+type Locale = "en" | "ar";
+type RouteParams = { locale?: string };
+
+type VerifyStartResp = { ok?: boolean; error?: string };
+type VerifyConfirmResp = { ok?: boolean; error?: string };
+
+function getLocaleFromParams(p: RouteParams | null): Locale {
+  return p?.locale === "ar" ? "ar" : "en";
+}
+
+export default function VerifyEmailPage() {
+  const params = useParams() as unknown as RouteParams | null;
+  const sp = useSearchParams();
+
+  const locale = getLocaleFromParams(params);
+  const isAr = locale === "ar";
+
+  const email = sp.get("email") || "";
+  const [code, setCode] = useState<string>("");
+  const [busy, setBusy] = useState<boolean>(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const canSubmit = useMemo(() => /^[0-9]{6}$/.test(code.trim()), [code]);
+
+  async function resend() {
+    setErr(null);
+    setMsg(null);
+    setBusy(true);
+    try {
+      const res = await fetch("/api/auth/verify/start", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ locale }),
+      });
+
+      const raw: unknown = await res.json().catch(() => ({}));
+      const d: VerifyStartResp = isRecord(raw) ? (raw as VerifyStartResp) : {};
+
+      if (!res.ok || !d.ok) {
+        setErr(d.error || (isAr ? "تعذر إرسال الرمز." : "Could not send code."));
+      } else {
+        setMsg(isAr ? "تم إرسال رمز التحقق." : "Verification code sent.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canSubmit || busy) return;
+
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+
+    try {
+      const res = await fetch("/api/auth/verify/confirm", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: code.trim(), locale }),
+      });
+
+      const raw: unknown = await res.json().catch(() => ({}));
+      const d: VerifyConfirmResp = isRecord(raw) ? (raw as VerifyConfirmResp) : {};
+
+      if (!res.ok || !d.ok) {
+        const fallback = isAr ? "رمز غير صحيح أو منتهي." : "Invalid or expired code.";
+        setErr(d.error || (await readErrorMessage(res, fallback)));
+        return;
+      }
+
+      setMsg(isAr ? "تم تأكيد البريد الإلكتروني." : "Email verified.");
+      window.location.href = `/${locale}/account`;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: 520, padding: "1.2rem 0" }}>
+      <h1 className="title" style={{ marginTop: 0 }}>
+        {isAr ? "تأكيد البريد الإلكتروني" : "Verify Email"}
+      </h1>
+
+      <div className="panel" style={{ display: "grid", gap: 12 }}>
+        {email ? (
+          <p className="muted" style={{ margin: 0 }}>
+            {isAr ? "تم إرسال الرمز إلى:" : "We sent a code to:"} <b>{email}</b>
+          </p>
+        ) : (
+          <p className="muted" style={{ margin: 0 }}>
+            {isAr ? "أدخل الرمز الذي وصلك عبر البريد." : "Enter the code we emailed you."}
+          </p>
+        )}
+
+        <p className="muted" style={{ margin: 0, lineHeight: 1.6 }}>
+          {isAr
+            ? 'إذا وصل البريد إلى الرسائل غير الهامة/Spam، اختر "ليس بريدًا غير هام" أو انقله إلى صندوق الوارد لضمان وصول تحديثات الطلبات.'
+            : 'If the email is in Junk/Spam, mark it as "Not junk/Not spam" and move it to Inbox so you don’t miss order updates.'}
+        </p>
+
+        <form onSubmit={submit} style={{ display: "grid", gap: 10 }}>
+          <label>
+            <span className="muted">{isAr ? "رمز التحقق (6 أرقام)" : "Verification code (6 digits)"}</span>
+            <input
+              className="input"
+              inputMode="numeric"
+              pattern="[0-9]{6}"
+              maxLength={6}
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder={isAr ? "مثال: 012345" : "e.g. 012345"}
+              required
+            />
+          </label>
+
+          {err ? <p style={{ color: "crimson", margin: 0 }}>{err}</p> : null}
+          {msg ? <p style={{ color: "green", margin: 0 }}>{msg}</p> : null}
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button className="btn" disabled={!canSubmit || busy}>
+              {busy ? (isAr ? "جارٍ التحقق..." : "Verifying...") : isAr ? "تأكيد" : "Verify"}
+            </button>
+
+            <button type="button" className="btn btn-outline" onClick={resend} disabled={busy}>
+              {isAr ? "إعادة إرسال الرمز" : "Resend code"}
+            </button>
+
+            <a className="btn btn-outline" href={`/${locale}/account/login`}>
+              {isAr ? "العودة لتسجيل الدخول" : "Back to login"}
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

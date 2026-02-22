@@ -89,7 +89,10 @@ export default function LoginPage() {
         }
       }
 
-      window.location.href = `/${locale}/account`;
+const needsVerification = Boolean((data as { needsVerification?: boolean } | null)?.needsVerification);
+window.location.href = needsVerification
+  ? `/${locale}/account/verify?email=${encodeURIComponent(email)}`
+  : `/${locale}/account`;
     } catch (e: unknown) {
       setErr((e as Error)?.message || t.error);
     } finally {

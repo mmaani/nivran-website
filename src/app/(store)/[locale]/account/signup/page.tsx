@@ -71,7 +71,7 @@ export default function SignupPage() {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ fullName, email, phone, addressLine1, city, country, password }),
+        body: JSON.stringify({ fullName, email, phone, addressLine1, city, country, password, locale }),
       });
 
       if (!res.ok) {
@@ -87,7 +87,7 @@ export default function SignupPage() {
       }
 
       await syncCartIfAny();
-      window.location.href = `/${locale}/account`;
+      window.location.href = `/${locale}/account/verify?email=${encodeURIComponent(email)}`;
     } finally {
       setBusy(false);
     }

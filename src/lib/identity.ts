@@ -24,9 +24,16 @@ export function createAdminSessionToken(): string {
  * - Supports bcrypt hashes if your old DB already stored them
  * - Also supports PBKDF2 fallback hashes: pbkdf2$iter$saltB64$hashB64
  */
-async function tryBcrypt() {
+type BcryptModule = {
+  hashSync: (s: string, rounds: number) => string;
+  compareSync: (s: string, hash: string) => boolean;
+};
+
+async function tryBcrypt(): Promise<BcryptModule | null> {
   try {
-    return await import("bcryptjs");
+    const m = (await import("bcryptjs")) as unknown as BcryptModule;
+    if (typeof m.hashSync !== "function" || typeof m.compareSync !== "function") return null;
+    return m;
   } catch {
     return null;
   }
@@ -88,6 +95,9 @@ export async function ensureIdentityTables() {
     );
   `);
 
+  // Email verification
+  await db.query(`alter table customers add column if not exists email_verified_at timestamptz`);
+
   await db.query(`
     create table if not exists customer_sessions (
       id bigserial primary key,
@@ -98,6 +108,7 @@ export async function ensureIdentityTables() {
       revoked_at timestamptz
     );
   `);
+
   // Bring legacy schemas forward before adding indexes.
   await db.query(`alter table customer_sessions add column if not exists token text`);
   await db.query(`alter table customer_sessions add column if not exists token_hash text`);
@@ -119,6 +130,21 @@ export async function ensureIdentityTables() {
   `);
   await db.query(`create index if not exists customer_password_reset_tokens_token_idx on customer_password_reset_tokens(token);`);
   await db.query(`create index if not exists customer_password_reset_tokens_customer_idx on customer_password_reset_tokens(customer_id);`);
+
+  await db.query(`
+    create table if not exists customer_email_verification_codes (
+      id bigserial primary key,
+      customer_id bigint not null references customers(id) on delete cascade,
+      code_hash text not null,
+      salt text not null,
+      expires_at timestamptz not null,
+      used_at timestamptz,
+      attempts int not null default 0,
+      created_at timestamptz not null default now()
+    );
+  `);
+  await db.query(`create index if not exists customer_email_verification_codes_customer_idx on customer_email_verification_codes(customer_id);`);
+  await db.query(`create index if not exists customer_email_verification_codes_expires_idx on customer_email_verification_codes(expires_at);`);
 
   // Legacy (kept to avoid breaking older deployments). New code uses customer_password_reset_tokens.
   await db.query(`
@@ -168,6 +194,7 @@ export async function ensureIdentityTables() {
   await db.query(`create index if not exists idx_customer_sessions_customer_id on customer_sessions(customer_id)`);
   await db.query(`create index if not exists idx_customer_sessions_expires_at on customer_sessions(expires_at)`);
 
+  // Orders table exists in your store schema; index is safe if orders exists.
   await db.query(`create index if not exists idx_orders_customer_id_created_at on orders(customer_id, created_at desc)`);
 }
 
@@ -181,6 +208,7 @@ export type CustomerRow = {
   address_line1: string | null;
   city: string | null;
   country: string | null;
+  email_verified_at?: string | null;
   is_active: boolean;
   created_at: string;
 };
@@ -194,6 +222,7 @@ export async function getCustomerByEmail(email: string): Promise<CustomerRow | n
   const hasAddressLine1 = await hasColumn("customers", "address_line1");
   const hasCity = await hasColumn("customers", "city");
   const hasCountry = await hasColumn("customers", "country");
+  const hasEmailVerifiedAt = await hasColumn("customers", "email_verified_at");
 
   const r = await db.query<CustomerRow>(
     `select id, email, password_hash,
@@ -202,12 +231,15 @@ export async function getCustomerByEmail(email: string): Promise<CustomerRow | n
             ${hasAddressLine1 ? "address_line1" : "null::text"} as address_line1,
             ${hasCity ? "city" : "null::text"} as city,
             ${hasCountry ? "country" : "null::text"} as country,
-            is_active, created_at::text as created_at
+            is_active,
+            ${hasEmailVerifiedAt ? "email_verified_at::text" : "null::text"} as email_verified_at,
+            created_at::text as created_at
        from customers
       where lower(email)=lower($1)
       limit 1`,
     [e]
   );
+
   return r.rows[0] || null;
 }
 
@@ -236,29 +268,41 @@ export async function createCustomer(args: {
   const hasCity = await hasColumn("customers", "city");
   const hasCountry = await hasColumn("customers", "country");
 
+  const cols: string[] = ["email", "password_hash", "phone", "is_active"];
+  const vals: Array<string | boolean | null> = [email, passwordHash, phone, true];
+
+  if (hasFullName) {
+    cols.push("full_name");
+    vals.push(fullName);
+  } else {
+    // Legacy schema path (first_name/last_name)
+    cols.push("first_name", "last_name");
+    vals.push(fullName, null);
+  }
+
+  if (hasAddressLine1) {
+    cols.push("address_line1");
+    vals.push(addressLine1);
+  }
+
+  if (hasCity) {
+    cols.push("city");
+    vals.push(city);
+  }
+
+  if (hasCountry) {
+    cols.push("country");
+    vals.push(country);
+  }
+
+  const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
   const r = await db.query<{ id: number; email: string }>(
-    `insert into customers (
-        email,
-        password_hash,
-        ${hasFullName ? "full_name" : "first_name, last_name"},
-        phone,
-        ${hasAddressLine1 ? "address_line1," : ""}
-        ${hasCity ? "city," : ""}
-        ${hasCountry ? "country," : ""}
-        is_active
-      )
-     values (
-       $1,$2,
-       ${hasFullName ? "$3" : "$3, null"},
-       $4,
-       ${hasAddressLine1 ? "$5," : ""}
-       ${hasCity ? "$6," : ""}
-       ${hasCountry ? "$7," : ""}
-       true
-     )
+    `insert into customers (${cols.join(", ")})
+     values (${placeholders})
      returning id, email`,
-    [email, passwordHash, fullName, phone, addressLine1, city, country]
+    vals
   );
+
   return r.rows[0];
 }
 
@@ -267,6 +311,7 @@ export async function createCustomerSession(customerId: number, token: string) {
   const tokenHash = sha256Hex(token);
   // 30 days
   const expiresAt = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
+
   const hasTokenHash = await hasColumn("customer_sessions", "token_hash");
   if (hasTokenHash) {
     await db.query(
@@ -321,6 +366,7 @@ export async function getCustomerIdFromRequest(req: Request): Promise<number | n
           limit 1`,
         [token]
       );
+
   return r.rows[0]?.customer_id ?? null;
 }
 
@@ -330,6 +376,7 @@ export type StaffUser = {
   username: string;
   full_name: string | null;
   role: string;
+  email_verified_at?: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -357,6 +404,7 @@ export async function upsertStaffUser(args: {
   full_name?: string | null;
   password?: string;
   role: string;
+  email_verified_at?: string | null;
   is_active: boolean;
 }) {
   await ensureIdentityTables();
@@ -413,3 +461,103 @@ export async function upsertStaffUser(args: {
 }
 
 export { listStaffUsers as listStaff, upsertStaffUser as upsertStaff };
+
+/** Email verification */
+export function createVerificationCode3(): string {
+  // 3 digits (000-999) - per request. Consider 6 digits for stronger security.
+  const n = crypto.randomInt(0, 1000);
+  return String(n).padStart(3, "0");
+}
+
+export async function issueEmailVerificationCode(customerId: number): Promise<{ code: string; expiresAt: string }> {
+  await ensureIdentityTables();
+
+  // Invalidate previous active codes
+  await db.query(
+    `update customer_email_verification_codes
+        set used_at = now()
+      where customer_id = $1
+        and used_at is null`,
+    [customerId]
+  );
+
+  const code = createVerificationCode3();
+  const salt = crypto.randomBytes(16).toString("hex");
+  const codeHash = sha256Hex(`${code}:${salt}`);
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+  await db.query(
+    `insert into customer_email_verification_codes (customer_id, code_hash, salt, expires_at)
+     values ($1, $2, $3, $4)`,
+    [customerId, codeHash, salt, expiresAt.toISOString()]
+  );
+
+  return { code, expiresAt: expiresAt.toISOString() };
+}
+
+export async function confirmEmailVerificationCode(
+  customerId: number,
+  codeRaw: string
+): Promise<{ ok: boolean; error?: string }> {
+  await ensureIdentityTables();
+
+  const code = String(codeRaw || "").trim();
+  if (!/^[0-9]{3}$/.test(code)) return { ok: false, error: "INVALID_CODE" };
+
+  const r = await db.query<{
+    id: number;
+    code_hash: string;
+    salt: string;
+    expires_at: string;
+    used_at: string | null;
+    attempts: number;
+  }>(
+    `
+    select id, code_hash, salt, expires_at::text as expires_at, used_at::text as used_at, attempts
+      from customer_email_verification_codes
+     where customer_id = $1
+       and used_at is null
+     order by id desc
+     limit 1
+    `,
+    [customerId]
+  );
+
+  if (!r.rows.length) return { ok: false, error: "NO_ACTIVE_CODE" };
+  const row = r.rows[0];
+
+  // Expired?
+  if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) {
+    await db.query(`update customer_email_verification_codes set used_at = now() where id = $1`, [row.id]);
+    return { ok: false, error: "EXPIRED" };
+  }
+
+  if (row.attempts >= 5) return { ok: false, error: "TOO_MANY_ATTEMPTS" };
+
+  const want = sha256Hex(`${code}:${row.salt}`);
+  if (want !== row.code_hash) {
+    await db.query(`update customer_email_verification_codes set attempts = attempts + 1 where id = $1`, [row.id]);
+    return { ok: false, error: "WRONG_CODE" };
+  }
+
+  // Mark used + mark customer verified
+  await db.query(`update customer_email_verification_codes set used_at = now() where id = $1`, [row.id]);
+  await db.query(
+    `update customers set email_verified_at = coalesce(email_verified_at, now()), updated_at = now() where id = $1`,
+    [customerId]
+  );
+
+  return { ok: true };
+}
+
+export async function isCustomerEmailVerified(customerId: number): Promise<boolean> {
+  await ensureIdentityTables();
+  const has = await hasColumn("customers", "email_verified_at");
+  if (!has) return false;
+
+  const r = await db.query<{ email_verified_at: string | null }>(
+    `select email_verified_at::text as email_verified_at from customers where id = $1`,
+    [customerId]
+  );
+  return !!(r.rows[0] && r.rows[0].email_verified_at);
+}
