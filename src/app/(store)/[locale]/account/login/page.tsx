@@ -6,22 +6,47 @@ import { useParams } from "next/navigation";
 type Locale = "en" | "ar";
 type CartItem = { slug: string; name: string; priceJod: number; qty: number };
 
+type LoginOk = { ok: true; needsVerification?: boolean };
+type LoginErr = { ok: false; error: string };
+type LoginResponse = LoginOk | LoginErr;
+
 const CART_KEY = "nivran_cart_v1";
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
+function asLoginResponse(v: unknown): LoginResponse | null {
+  if (!isRecord(v)) return null;
+  const ok = v["ok"];
+  if (ok === true) {
+    const needsVerification = v["needsVerification"];
+    return { ok: true, needsVerification: typeof needsVerification === "boolean" ? needsVerification : undefined };
+  }
+  if (ok === false) {
+    const error = v["error"];
+    return { ok: false, error: typeof error === "string" ? error : "Login failed." };
+  }
+  return null;
+}
 
 function readCart(): CartItem[] {
   try {
     const raw = localStorage.getItem(CART_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .map((x: Record<string, unknown>) => ({
-        slug: String(x?.slug || "").trim(),
-        name: String(x?.name || "").trim(),
-        priceJod: Number(x?.priceJod || 0),
-        qty: Math.max(1, Number(x?.qty || 1)),
-      }))
-      .filter((x: CartItem) => !!x.slug);
+      .map((x: unknown) => {
+        const r = isRecord(x) ? x : {};
+        return {
+          slug: String(r["slug"] || "").trim(),
+          name: String(r["name"] || "").trim(),
+          priceJod: Number(r["priceJod"] || 0),
+          qty: Math.max(1, Number(r["qty"] || 1)),
+        };
+      })
+      .filter((x) => !!x.slug);
   } catch {
     return [];
   }
@@ -73,9 +98,13 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password, locale, rememberMe }),
       });
 
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.ok) throw new Error(data?.error || t.error);
+      const raw: unknown = await res.json().catch(() => null);
+      const data = asLoginResponse(raw);
 
+      if (!res.ok || !data) throw new Error(t.error);
+      if (data.ok === false) throw new Error(data.error || t.error);
+
+      // cart sync
       const localItems = readCart();
       if (localItems.length) {
         const syncRes = await fetch("/api/cart/sync", {
@@ -83,18 +112,19 @@ export default function LoginPage() {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ mode: "merge", items: localItems }),
         });
-        const syncData = await syncRes.json().catch(() => null);
-        if (syncData?.ok && syncData?.isAuthenticated && Array.isArray(syncData.items)) {
-          writeCart(syncData.items);
+        const syncRaw: unknown = await syncRes.json().catch(() => null);
+        if (isRecord(syncRaw) && syncRaw["ok"] === true && syncRaw["isAuthenticated"] === true && Array.isArray(syncRaw["items"])) {
+          writeCart(syncRaw["items"] as CartItem[]);
         }
       }
 
-const needsVerification = Boolean((data as { needsVerification?: boolean } | null)?.needsVerification);
-window.location.href = needsVerification
-  ? `/${locale}/account/verify?email=${encodeURIComponent(email)}`
-  : `/${locale}/account`;
-    } catch (e: unknown) {
-      setErr((e as Error)?.message || t.error);
+      const needsVerification = data.needsVerification === true;
+      window.location.href = needsVerification
+        ? `/${locale}/account/verify?email=${encodeURIComponent(email)}`
+        : `/${locale}/account`;
+    } catch (e2: unknown) {
+      const msg = e2 instanceof Error ? e2.message : t.error;
+      setErr(msg || t.error);
     } finally {
       setLoading(false);
     }
