@@ -89,7 +89,7 @@ export async function ensureIdentityTables(): Promise<void> {
     );
   `);
 
-  // Email verification
+  // Email verification flag
   await db.query(`alter table customers add column if not exists email_verified_at timestamptz`);
 
   await db.query(`
@@ -127,9 +127,9 @@ export async function ensureIdentityTables(): Promise<void> {
 
   /**
    * Email verification codes
-   * We support BOTH:
-   * - older schema that had `code` NOT NULL
-   * - new schema that uses `code_hash` + `salt`
+   * Support BOTH schemas:
+   * - legacy: code NOT NULL (plain)
+   * - new: code_hash + salt (preferred)
    */
   await db.query(`
     create table if not exists customer_email_verification_codes (
@@ -145,7 +145,15 @@ export async function ensureIdentityTables(): Promise<void> {
     );
   `);
 
-  // Make sure the legacy `code` column is nullable (fixes your Vercel error)
+  // Ensure columns exist (older DBs)
+  await db.query(`alter table customer_email_verification_codes add column if not exists code text`);
+  await db.query(`alter table customer_email_verification_codes add column if not exists code_hash text`);
+  await db.query(`alter table customer_email_verification_codes add column if not exists salt text`);
+  await db.query(`alter table customer_email_verification_codes add column if not exists used_at timestamptz`);
+  await db.query(`alter table customer_email_verification_codes add column if not exists attempts int`);
+  await db.query(`update customer_email_verification_codes set attempts = 0 where attempts is null`);
+
+  // Fix: some legacy schemas had `code` NOT NULL (your Vercel error). Make it nullable.
   await db.query(`
     do $$
     begin
@@ -164,13 +172,6 @@ export async function ensureIdentityTables(): Promise<void> {
       end if;
     end $$;
   `);
-
-  // Ensure new columns exist in older DBs
-  await db.query(`alter table customer_email_verification_codes add column if not exists code_hash text`);
-  await db.query(`alter table customer_email_verification_codes add column if not exists salt text`);
-  await db.query(`alter table customer_email_verification_codes add column if not exists used_at timestamptz`);
-  await db.query(`alter table customer_email_verification_codes add column if not exists attempts int`);
-  await db.query(`update customer_email_verification_codes set attempts = 0 where attempts is null`);
 
   await db.query(`create index if not exists customer_email_verification_codes_customer_idx on customer_email_verification_codes(customer_id);`);
   await db.query(`create index if not exists customer_email_verification_codes_expires_idx on customer_email_verification_codes(expires_at);`);
@@ -325,10 +326,9 @@ export async function createCustomer(args: {
 export async function createCustomerSession(customerId: number, token: string): Promise<void> {
   await ensureIdentityTables();
   const tokenHash = sha256Hex(token);
-  // 30 days
-  const expiresAt = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
-  const hasTokenHash = await hasColumn("customer_sessions", "token_hash");
+  const expiresAt = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(); // 30 days
 
+  const hasTokenHash = await hasColumn("customer_sessions", "token_hash");
   if (hasTokenHash) {
     await db.query(
       `insert into customer_sessions (customer_id, token, token_hash, expires_at)
@@ -475,7 +475,7 @@ export async function upsertStaffUser(args: {
 // Backwards-compat named exports used by existing routes
 export { listStaffUsers as listStaff, upsertStaffUser as upsertStaff };
 
-/** Email verification */
+/** Email verification (4 digits) */
 export function createVerificationCode4(): string {
   const n = crypto.randomInt(0, 10000);
   return String(n).padStart(4, "0");
@@ -498,7 +498,6 @@ export async function issueEmailVerificationCode(customerId: number): Promise<{ 
   const codeHash = sha256Hex(`${code}:${salt}`);
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-  // Insert works for both schemas (legacy had code; new uses code_hash/salt)
   const hasCodeCol = await hasColumn("customer_email_verification_codes", "code");
   const hasCodeHashCol = await hasColumn("customer_email_verification_codes", "code_hash");
   const hasSaltCol = await hasColumn("customer_email_verification_codes", "salt");
@@ -522,7 +521,7 @@ export async function issueEmailVerificationCode(customerId: number): Promise<{ 
       [customerId, code, expiresAt.toISOString()]
     );
   } else {
-    // last resort: create the columns (shouldn't happen because ensureIdentityTables adds them)
+    // last resort: create missing columns (shouldn't happen because ensureIdentityTables adds them)
     await db.query(`alter table customer_email_verification_codes add column if not exists code text`);
     await db.query(`alter table customer_email_verification_codes add column if not exists code_hash text`);
     await db.query(`alter table customer_email_verification_codes add column if not exists salt text`);
@@ -543,7 +542,7 @@ export async function confirmEmailVerificationCode(
   await ensureIdentityTables();
 
   const code = String(codeRaw || "").trim();
-  if (!/^[0-9]{3}$/.test(code)) return { ok: false, error: "INVALID_CODE" };
+  if (!/^[0-9]{4}$/.test(code)) return { ok: false, error: "INVALID_CODE" };
 
   const hasCodeHashCol = await hasColumn("customer_email_verification_codes", "code_hash");
   const hasSaltCol = await hasColumn("customer_email_verification_codes", "salt");

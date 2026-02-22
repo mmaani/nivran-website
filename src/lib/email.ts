@@ -3,6 +3,8 @@ import { logEmailSendAttempt } from "@/lib/emailLog";
 
 export type Locale = "en" | "ar";
 
+type SendKind = "verify_code" | "password_reset";
+
 function getResendClient(): Resend | null {
   const key = process.env.RESEND_API_KEY;
   if (!key || key.trim().length === 0) return null;
@@ -15,10 +17,10 @@ function getEmailFrom(): string | null {
   return from.trim();
 }
 
-function getEmailReplyTo(): string | null {
+function getReplyTo(): string | undefined {
   const rt = process.env.EMAIL_REPLY_TO;
-  if (!rt || rt.trim().length === 0) return null;
-  return rt.trim();
+  const v = rt ? rt.trim() : "";
+  return v.length ? v : undefined;
 }
 
 function escapeHtml(s: string): string {
@@ -51,9 +53,11 @@ function wrapEmailHtml(locale: Locale, inner: string): string {
           ${inner}
         </div>
         <div style="padding:16px 20px;border-top:1px solid rgba(0,0,0,.06);color:#666;font-size:12px;line-height:1.6;">
-          ${locale === "ar"
-            ? "إذا وصل البريد إلى الرسائل غير الهامة/Spam، اختر «ليس بريدًا غير هام» أو انقله إلى صندوق الوارد لضمان وصول تحديثات الطلبات."
-            : "If this email lands in Junk/Spam, mark it as “Not junk/Not spam” and move it to your Inbox so you don’t miss order updates."}
+          ${
+            locale === "ar"
+              ? "إذا وصل البريد إلى الرسائل غير الهامة/Spam، اختر «ليس بريدًا غير هام» أو انقله إلى صندوق الوارد لضمان وصول تحديثات الطلبات."
+              : "If this email lands in Junk/Spam, mark it as “Not junk/Not spam” and move it to your Inbox so you don’t miss order updates."
+          }
         </div>
       </div>
       <div style="padding:14px 6px;color:#888;font-size:12px;line-height:1.6;text-align:center;">
@@ -65,80 +69,98 @@ function wrapEmailHtml(locale: Locale, inner: string): string {
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((r) => setTimeout(r, ms));
 }
 
-type SendMeta = {
-  template: "password_reset" | "verification_code";
-  locale: Locale;
-};
+function errToString(e: unknown): string {
+  if (e instanceof Error) return `${e.name}: ${e.message}`;
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return String(e);
+  }
+}
 
-async function sendHtml(to: string, subject: string, htmlInner: string, locale: Locale, meta: SendMeta): Promise<void> {
+async function sendWithRetry(args: {
+  kind: SendKind;
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<void> {
   const resend = getResendClient();
   const from = getEmailFrom();
-  const replyTo = getEmailReplyTo();
+  const replyTo = getReplyTo();
 
   if (!resend || !from) {
-    console.warn("[email] missing RESEND_API_KEY or EMAIL_FROM; skipping send to", to, "subject:", subject);
+    console.warn("[email] missing RESEND_API_KEY or EMAIL_FROM; skipping send to", args.to, "subject:", args.subject);
     await logEmailSendAttempt({
-      to,
-      subject,
-      template: meta.template,
-      locale: meta.locale,
-      status: "SKIPPED",
+      provider: "resend",
+      kind: args.kind,
+      to: args.to,
+      subject: args.subject,
+      ok: false,
+      attempt: 0,
       error: "MISSING_RESEND_OR_FROM",
     });
     return;
   }
 
   const maxAttempts = 3;
-  let lastErr: string | null = null;
+  let lastErr: unknown = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      await resend.emails.send({
+      const resp = await resend.emails.send({
         from,
-        to,
-        subject,
-        html: wrapEmailHtml(locale, htmlInner),
-        replyTo: replyTo ?? undefined, // ✅ correct key is replyTo
+        to: args.to,
+        subject: args.subject,
+        html: args.html,
+        replyTo, // ✅ correct property name per Resend SDK typings
       });
 
+      const providerId = typeof resp?.data?.id === "string" ? resp.data.id : null;
+
       await logEmailSendAttempt({
-        to,
-        subject,
-        template: meta.template,
-        locale: meta.locale,
-        status: "SENT",
+        provider: "resend",
+        kind: args.kind,
+        to: args.to,
+        subject: args.subject,
+        ok: true,
         attempt,
+        provider_id: providerId,
       });
 
       return;
     } catch (e: unknown) {
-      lastErr = e instanceof Error ? e.message : "UNKNOWN_ERROR";
-      console.warn("[email] send failed attempt", attempt, "to", to, "subject:", subject, "err:", lastErr);
+      lastErr = e;
 
       await logEmailSendAttempt({
-        to,
-        subject,
-        template: meta.template,
-        locale: meta.locale,
-        status: "FAILED",
+        provider: "resend",
+        kind: args.kind,
+        to: args.to,
+        subject: args.subject,
+        ok: false,
         attempt,
-        error: lastErr,
+        error: errToString(e),
       });
 
-      // Backoff: 300ms, 900ms, 1800ms
-      const backoff = attempt === 1 ? 300 : attempt === 2 ? 900 : 1800;
-      if (attempt < maxAttempts) await sleep(backoff);
+      // simple exponential backoff: 300ms, 900ms, 2700ms
+      if (attempt < maxAttempts) {
+        const backoff = 300 * Math.pow(3, attempt - 1);
+        await sleep(backoff);
+      }
     }
   }
 
-  // After retries: fail silently for UX, but we logged it.
-  console.warn("[email] failed after retries:", lastErr);
+  // After retries: don't crash signup/login flow; just warn.
+  console.warn("[email] failed after retries:", args.to, args.subject, errToString(lastErr));
 }
 
-export async function sendPasswordResetEmail(to: string, resetUrl: string, locale: Locale = "en"): Promise<void> {
+export async function sendPasswordResetEmail(
+  to: string,
+  resetUrl: string,
+  locale: Locale = "en"
+): Promise<void> {
   const subject = locale === "ar" ? "إعادة تعيين كلمة المرور — NIVRAN" : "Reset your password — NIVRAN";
   const btnText = locale === "ar" ? "إعادة تعيين كلمة المرور" : "Reset password";
   const intro =
@@ -164,7 +186,12 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string, local
     </p>
   `;
 
-  await sendHtml(to, subject, inner, locale, { template: "password_reset", locale });
+  await sendWithRetry({
+    kind: "password_reset",
+    to,
+    subject,
+    html: wrapEmailHtml(locale, inner),
+  });
 }
 
 export async function sendVerificationCodeEmail(to: string, code: string, locale: Locale): Promise<void> {
@@ -174,6 +201,10 @@ export async function sendVerificationCodeEmail(to: string, code: string, locale
       ? "أكمل إنشاء حسابك باستخدام رمز التحقق التالي:"
       : "Finish setting up your account with this verification code:";
   const expires = locale === "ar" ? "ينتهي خلال 10 دقائق." : "Expires in 10 minutes.";
+  const spamTip =
+    locale === "ar"
+      ? "إذا وصل البريد إلى الرسائل غير الهامة/Spam، اختر \"ليس بريدًا غير هام\" أو انقله إلى صندوق الوارد لضمان وصول تحديثات الطلبات."
+      : "If the email is in Junk/Spam, mark it as \"Not junk/Not spam\" and move it to Inbox so you don’t miss order updates.";
 
   const inner = `
     <p style="margin:0 0 14px;color:#1B1B1B;line-height:1.7;">${escapeHtml(intro)}</p>
@@ -181,12 +212,16 @@ export async function sendVerificationCodeEmail(to: string, code: string, locale
       ${escapeHtml(code)}
     </div>
     <p style="margin:14px 0 0;color:#555;line-height:1.7;">${escapeHtml(expires)}</p>
+    <p style="margin:10px 0 0;color:#555;line-height:1.7;">${escapeHtml(spamTip)}</p>
     <p style="margin:12px 0 0;color:#777;font-size:12px;line-height:1.6;">
-      ${locale === "ar"
-        ? "إذا لم تحاول إنشاء حساب، تجاهل هذه الرسالة."
-        : "If you didn’t try to create an account, ignore this email."}
+      ${locale === "ar" ? "إذا لم تحاول إنشاء حساب، تجاهل هذه الرسالة." : "If you didn’t try to create an account, ignore this email."}
     </p>
   `;
 
-  await sendHtml(to, subject, inner, locale, { template: "verification_code", locale });
+  await sendWithRetry({
+    kind: "verify_code",
+    to,
+    subject,
+    html: wrapEmailHtml(locale, inner),
+  });
 }
