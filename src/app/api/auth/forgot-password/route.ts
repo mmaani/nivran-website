@@ -79,7 +79,8 @@ export async function POST(req: Request) {
     if (process.env.NODE_ENV === "production") {
       // If email isn't configured, silently succeed (still no enumeration).
       if (process.env.RESEND_API_KEY && process.env.EMAIL_FROM) {
-      await sendPasswordResetEmail(customer.email, resetUrl);      }
+        await sendPasswordResetEmail(customer.email, resetUrl, locale);
+      }
     } else {
       // Dev: help you test quickly
       return NextResponse.json({ ok: true, resetUrl, dev: { token, expiresAt } }, { status: 200 });

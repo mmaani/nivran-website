@@ -143,6 +143,16 @@ export async function ensureIdentityTables() {
       created_at timestamptz not null default now()
     );
   `);
+
+  // If the table existed previously with a different schema, ensure required columns exist.
+  await db.query(`alter table customer_email_verification_codes add column if not exists code_hash text;`);
+  await db.query(`alter table customer_email_verification_codes add column if not exists salt text;`);
+  await db.query(`alter table customer_email_verification_codes add column if not exists expires_at timestamptz;`);
+  await db.query(`alter table customer_email_verification_codes add column if not exists used_at timestamptz;`);
+  await db.query(`alter table customer_email_verification_codes add column if not exists attempts int;`);
+  await db.query(`alter table customer_email_verification_codes add column if not exists created_at timestamptz;`);
+  await db.query(`update customer_email_verification_codes set attempts = 0 where attempts is null;`);
+  await db.query(`update customer_email_verification_codes set created_at = coalesce(created_at, now()) where created_at is null;`);
   await db.query(`create index if not exists customer_email_verification_codes_customer_idx on customer_email_verification_codes(customer_id);`);
   await db.query(`create index if not exists customer_email_verification_codes_expires_idx on customer_email_verification_codes(expires_at);`);
 

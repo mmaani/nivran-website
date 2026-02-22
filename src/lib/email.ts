@@ -74,7 +74,7 @@ async function sendHtml(to: string, subject: string, htmlInner: string, locale: 
   });
 }
 
-export async function sendPasswordResetEmail(to: string, resetUrl: string, locale: Locale): Promise<void> {
+export async function sendPasswordResetEmail(to: string, resetUrl: string, locale: Locale = "en"): Promise<void> {
   const subject = locale === "ar" ? "إعادة تعيين كلمة المرور — NIVRAN" : "Reset your password — NIVRAN";
   const btnText = locale === "ar" ? "إعادة تعيين كلمة المرور" : "Reset password";
   const intro = locale === "ar"
@@ -107,6 +107,10 @@ export async function sendVerificationCodeEmail(to: string, code: string, locale
     ? "أكمل إنشاء حسابك باستخدام رمز التحقق التالي:"
     : "Finish setting up your account with this verification code:";
   const expires = locale === "ar" ? "ينتهي خلال 10 دقائق." : "Expires in 10 minutes.";
+  const spamTip =
+    locale === "ar"
+      ? "إذا وصل البريد إلى الرسائل غير الهامة/Spam، اختر \"ليس بريدًا غير هام\" أو انقله إلى صندوق الوارد لضمان وصول تحديثات الطلبات."
+      : "If the email is in Junk/Spam, mark it as \"Not junk/Not spam\" and move it to Inbox so you don’t miss order updates.";
 
   const inner = `
     <p style="margin:0 0 14px;color:#1B1B1B;line-height:1.7;">${escapeHtml(intro)}</p>
@@ -114,6 +118,7 @@ export async function sendVerificationCodeEmail(to: string, code: string, locale
       ${escapeHtml(code)}
     </div>
     <p style="margin:14px 0 0;color:#555;line-height:1.7;">${escapeHtml(expires)}</p>
+    <p style="margin:10px 0 0;color:#555;line-height:1.7;">${escapeHtml(spamTip)}</p>
     <p style="margin:12px 0 0;color:#777;font-size:12px;line-height:1.6;">
       ${locale === "ar"
         ? "إذا لم تحاول إنشاء حساب، تجاهل هذه الرسالة."
