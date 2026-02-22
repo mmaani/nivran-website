@@ -476,10 +476,9 @@ export async function upsertStaffUser(args: {
 export { listStaffUsers as listStaff, upsertStaffUser as upsertStaff };
 
 /** Email verification */
-export function createVerificationCode3(): string {
-  // 3 digits (000-999) - per request. Consider 6 digits for stronger security.
-  const n = crypto.randomInt(0, 1000);
-  return String(n).padStart(3, "0");
+export function createVerificationCode4(): string {
+  const n = crypto.randomInt(0, 10000);
+  return String(n).padStart(4, "0");
 }
 
 export async function issueEmailVerificationCode(customerId: number): Promise<{ code: string; expiresAt: string }> {
@@ -494,7 +493,7 @@ export async function issueEmailVerificationCode(customerId: number): Promise<{ 
     [customerId]
   );
 
-  const code = createVerificationCode3();
+  const code = createVerificationCode4();
   const salt = crypto.randomBytes(16).toString("hex");
   const codeHash = sha256Hex(`${code}:${salt}`);
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes

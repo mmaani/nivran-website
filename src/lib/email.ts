@@ -14,6 +14,12 @@ function getEmailFrom(): string | null {
   return from.trim();
 }
 
+function getReplyTo(): string | undefined {
+  const rt = process.env.EMAIL_REPLY_TO;
+  if (!rt || rt.trim().length === 0) return undefined;
+  return rt.trim();
+}
+
 function escapeHtml(s: string): string {
   return s
     .replaceAll("&", "&amp;")
@@ -26,6 +32,11 @@ function escapeHtml(s: string): string {
 function wrapEmailHtml(locale: Locale, inner: string): string {
   const dir = locale === "ar" ? "rtl" : "ltr";
   const font = "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial";
+  const spamFooter =
+    locale === "ar"
+      ? "إذا وصل البريد إلى الرسائل غير الهامة/Spam، اختر «ليس بريدًا غير هام» أو انقله إلى صندوق الوارد لضمان وصول التحديثات."
+      : "If this email lands in Junk/Spam, mark it as “Not junk/Not spam” and move it to your Inbox so you don’t miss updates.";
+
   return `<!doctype html>
 <html lang="${locale}" dir="${dir}">
   <head>
@@ -40,15 +51,16 @@ function wrapEmailHtml(locale: Locale, inner: string): string {
           <div style="letter-spacing:.28em;font-weight:700;color:#1B1B1B;">NIVRAN</div>
           <div style="margin-top:6px;color:#666;font-size:13px;">Wear the calm.</div>
         </div>
+
         <div style="padding:20px;">
           ${inner}
         </div>
+
         <div style="padding:16px 20px;border-top:1px solid rgba(0,0,0,.06);color:#666;font-size:12px;line-height:1.6;">
-          ${locale === "ar"
-            ? "إذا وصل البريد إلى الرسائل غير الهامة/Spam، اختر «ليس بريدًا غير هام» أو انقله إلى صندوق الوارد لضمان وصول تحديثات الطلبات."
-            : "If this email lands in Junk/Spam, mark it as “Not junk/Not spam” and move it to your Inbox so you don’t miss order updates."}
+          ${spamFooter}
         </div>
       </div>
+
       <div style="padding:14px 6px;color:#888;font-size:12px;line-height:1.6;text-align:center;">
         ${locale === "ar" ? "— فريق NIVRAN" : "— NIVRAN Team"}
       </div>
@@ -60,9 +72,11 @@ function wrapEmailHtml(locale: Locale, inner: string): string {
 async function sendHtml(to: string, subject: string, htmlInner: string, locale: Locale): Promise<void> {
   const resend = getResendClient();
   const from = getEmailFrom();
+  const replyTo = getReplyTo();
+
   if (!resend || !from) {
-    // Don't throw — allow the app to work without email in dev.
-    console.warn("[email] missing RESEND_API_KEY or EMAIL_FROM; skipping send to", to, "subject:", subject);
+    // Dev-friendly: do not crash auth flows if env isn't set locally.
+    console.warn("[email] missing RESEND_API_KEY or EMAIL_FROM; skipping send:", { to, subject });
     return;
   }
 
@@ -71,18 +85,21 @@ async function sendHtml(to: string, subject: string, htmlInner: string, locale: 
     to,
     subject,
     html: wrapEmailHtml(locale, htmlInner),
+    ...(replyTo ? { replyTo } : {}),
   });
 }
 
 export async function sendPasswordResetEmail(to: string, resetUrl: string, locale: Locale = "en"): Promise<void> {
   const subject = locale === "ar" ? "إعادة تعيين كلمة المرور — NIVRAN" : "Reset your password — NIVRAN";
   const btnText = locale === "ar" ? "إعادة تعيين كلمة المرور" : "Reset password";
-  const intro = locale === "ar"
-    ? "تلقّينا طلبًا لإعادة تعيين كلمة المرور الخاصة بحسابك."
-    : "We received a request to reset your account password.";
-  const note = locale === "ar"
-    ? "إذا لم تطلب ذلك، يمكنك تجاهل هذه الرسالة بأمان."
-    : "If you didn’t request this, you can safely ignore this email.";
+  const intro =
+    locale === "ar"
+      ? "تلقّينا طلبًا لإعادة تعيين كلمة المرور الخاصة بحسابك."
+      : "We received a request to reset your account password.";
+  const note =
+    locale === "ar"
+      ? "إذا لم تطلب ذلك، يمكنك تجاهل هذه الرسالة بأمان."
+      : "If you didn’t request this, you can safely ignore this email.";
 
   const inner = `
     <p style="margin:0 0 12px;color:#1B1B1B;line-height:1.7;">${escapeHtml(intro)}</p>
@@ -103,27 +120,27 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string, local
 
 export async function sendVerificationCodeEmail(to: string, code: string, locale: Locale): Promise<void> {
   const subject = locale === "ar" ? "رمز التحقق — NIVRAN" : "Your verification code — NIVRAN";
-  const intro = locale === "ar"
-    ? "أكمل إنشاء حسابك باستخدام رمز التحقق التالي:"
-    : "Finish setting up your account with this verification code:";
-  const expires = locale === "ar" ? "ينتهي خلال 10 دقائق." : "Expires in 10 minutes.";
-  const spamTip =
+  const intro =
     locale === "ar"
-      ? "إذا وصل البريد إلى الرسائل غير الهامة/Spam، اختر \"ليس بريدًا غير هام\" أو انقله إلى صندوق الوارد لضمان وصول تحديثات الطلبات."
-      : "If the email is in Junk/Spam, mark it as \"Not junk/Not spam\" and move it to Inbox so you don’t miss order updates.";
+      ? "أكمل إنشاء حسابك باستخدام رمز التحقق التالي:"
+      : "Finish setting up your account with this verification code:";
+  const expires = locale === "ar" ? "ينتهي خلال 10 دقائق." : "Expires in 10 minutes.";
+  const codeLabel = locale === "ar" ? "رمز التحقق (4 أرقام)" : "Verification code (4 digits)";
+  const ignore =
+    locale === "ar"
+      ? "إذا لم تحاول إنشاء حساب، تجاهل هذه الرسالة."
+      : "If you didn’t try to create an account, ignore this email.";
 
   const inner = `
-    <p style="margin:0 0 14px;color:#1B1B1B;line-height:1.7;">${escapeHtml(intro)}</p>
+    <p style="margin:0 0 10px;color:#1B1B1B;line-height:1.7;">${escapeHtml(intro)}</p>
+    <p style="margin:0 0 14px;color:#666;font-size:13px;">${escapeHtml(codeLabel)}</p>
+
     <div style="font-size:34px;font-weight:800;letter-spacing:.20em;color:#1B1B1B;background:#F7F6F2;border:1px solid rgba(0,0,0,.08);border-radius:14px;padding:14px 16px;display:inline-block;">
       ${escapeHtml(code)}
     </div>
+
     <p style="margin:14px 0 0;color:#555;line-height:1.7;">${escapeHtml(expires)}</p>
-    <p style="margin:10px 0 0;color:#555;line-height:1.7;">${escapeHtml(spamTip)}</p>
-    <p style="margin:12px 0 0;color:#777;font-size:12px;line-height:1.6;">
-      ${locale === "ar"
-        ? "إذا لم تحاول إنشاء حساب، تجاهل هذه الرسالة."
-        : "If you didn’t try to create an account, ignore this email."}
-    </p>
+    <p style="margin:12px 0 0;color:#777;font-size:12px;line-height:1.6;">${escapeHtml(ignore)}</p>
   `;
 
   await sendHtml(to, subject, inner, locale);
