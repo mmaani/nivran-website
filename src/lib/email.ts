@@ -1,52 +1,44 @@
+// src/lib/email.ts
 import { Resend } from "resend";
 
-/**
- * Transactional email sender for customer auth flows (reset password, verification).
- * Requires:
- * - RESEND_API_KEY
- * - EMAIL_FROM (e.g. 'NIVRAN <hello@send.nivran.com>' or 'NIVRAN <hello@nivran.com>')
- */
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-function safeFrom(): string {
-  // Allow either a raw address or "Brand <address>"
-  const v = String(process.env.EMAIL_FROM || "").trim();
-  return v || "NIVRAN <hello@send.nivran.com>";
+function getResend(): Resend | null {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return null;
+  return new Resend(key);
 }
 
-export async function sendPasswordResetEmail(to: string, resetUrl: string, locale: "en" | "ar" = "en") {
-  const isAr = locale === "ar";
-  const subject = isAr ? "إعادة تعيين كلمة مرور NIVRAN" : "Reset your NIVRAN password";
+export async function sendPasswordResetEmail(to: string, resetUrl: string) {
+  const resend = getResend();
 
-  const btn = isAr ? "إعادة تعيين كلمة المرور" : "Reset password";
-  const intro = isAr
-    ? "لقد تلقّينا طلبًا لإعادة تعيين كلمة المرور لحسابك لدى NIVRAN."
-    : "We received a request to reset your password for your NIVRAN account.";
-  const ignore = isAr
-    ? "إذا لم تطلب ذلك، يمكنك تجاهل هذه الرسالة."
-    : "If you didn’t request this, you can safely ignore this email.";
+  // In dev/build environments where env vars are missing, don't crash builds.
+  if (!resend) {
+    // Keep this as a warning (not an error) so Next build won't fail.
+    console.warn("[email] RESEND_API_KEY missing; skipping email send to:", to);
+    return;
+  }
 
-  const html = `
-  <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;padding:18px;line-height:1.6;color:#1B1B1B">
-    <div style="letter-spacing:0.22em;font-weight:700;font-size:18px;margin-bottom:8px">NIVRAN</div>
-    <p style="margin:0 0 14px 0">${intro}</p>
-    <p style="margin:0 0 16px 0">
-      <a href="${resetUrl}" style="display:inline-block;background:#1B1B1B;color:#fff;text-decoration:none;padding:12px 16px;border-radius:10px">
-        ${btn}
-      </a>
-    </p>
-    <p style="margin:0 0 8px 0;font-size:13px;color:#444">${ignore}</p>
-    <p style="margin:0;font-size:12px;color:#666">
-      ${isAr ? "إذا لم يعمل الزر، انسخ الرابط التالي:" : "If the button doesn’t work, copy this link:"}<br/>
-      <span style="word-break:break-all">${resetUrl}</span>
-    </p>
-  </div>`.trim();
+  const from = process.env.EMAIL_FROM;
+  if (!from) {
+    console.warn("[email] EMAIL_FROM missing; skipping email send to:", to);
+    return;
+  }
 
-  // If credentials are missing, fail silently upstream (routes check envs in prod).
   await resend.emails.send({
-    from: safeFrom(),
+    from,
     to,
-    subject,
-    html,
+    subject: "Reset your NIVRAN password",
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
+        <h2 style="letter-spacing:2px;margin:0 0 12px">NIVRAN</h2>
+        <p>You requested to reset your password.</p>
+        <p style="margin:18px 0">
+          <a href="${resetUrl}"
+             style="background:#1B1B1B;color:#fff;padding:12px 18px;text-decoration:none;border-radius:8px;display:inline-block">
+             Reset Password
+          </a>
+        </p>
+        <p style="color:#555">This link expires soon. If you didn’t request this, ignore this email.</p>
+      </div>
+    `,
   });
 }
