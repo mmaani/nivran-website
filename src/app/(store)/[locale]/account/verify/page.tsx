@@ -27,7 +27,7 @@ export default function VerifyEmailPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const canSubmit = useMemo(() => /^[0-9]{6}$/.test(code.trim()), [code]);
+  const canSubmit = useMemo(() => /^[0-9]{4}$/.test(code.trim()), [code]);
 
   async function resend() {
     setErr(null);
@@ -109,15 +109,15 @@ export default function VerifyEmailPage() {
 
         <form onSubmit={submit} style={{ display: "grid", gap: 10 }}>
           <label>
-            <span className="muted">{isAr ? "رمز التحقق (6 أرقام)" : "Verification code (6 digits)"}</span>
+            <span className="muted">{isAr ? "رمز التحقق (4 أرقام)" : "Verification code (4 digits)"}</span>
             <input
               className="input"
               inputMode="numeric"
-              pattern="[0-9]{6}"
-              maxLength={6}
+              pattern="[0-9]{4}"
+              maxLength={4}
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              placeholder={isAr ? "مثال: 012345" : "e.g. 012345"}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              placeholder={isAr ? "مثال: 0123" : "e.g. 0123"}
               required
             />
           </label>
