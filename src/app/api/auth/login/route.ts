@@ -13,7 +13,8 @@ export const runtime = "nodejs";
 function cookieOpts(rememberMe: boolean) {
   return {
     httpOnly: true,
-    secure: true,
+    // Secure cookies only in production (localhost over http would drop them).
+    secure: process.env.NODE_ENV === "production",
     sameSite: "lax" as const,
     path: "/",
     ...(rememberMe ? { maxAge: 60 * 60 * 24 * 30 } : {}),

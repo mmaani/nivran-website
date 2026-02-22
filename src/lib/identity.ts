@@ -332,8 +332,8 @@ export async function createCustomerSession(customerId: number, token: string): 
   if (hasTokenHash) {
     await db.query(
       `insert into customer_sessions (customer_id, token, token_hash, expires_at)
-       values ($1,$2,$3,$4)`,
-      [customerId, token, tokenHash, expiresAt]
+       values ($1, null, $2, $3)`,
+      [customerId, tokenHash, expiresAt]
     );
     return;
   }
@@ -343,6 +343,30 @@ export async function createCustomerSession(customerId: number, token: string): 
      values ($1,$2,$3)`,
     [customerId, token, expiresAt]
   );
+}
+
+export async function revokeCustomerSessionByToken(token: string): Promise<void> {
+  await ensureIdentityTables();
+  const tokenHash = sha256Hex(token);
+  const hasTokenHash = await hasColumn("customer_sessions", "token_hash");
+  if (hasTokenHash) {
+    await db.query(
+      `update customer_sessions
+          set revoked_at = now()
+        where revoked_at is null
+          and (token_hash = $1 or token = $2)`,
+      [tokenHash, token]
+    );
+    return;
+  }
+  await db.query(`update customer_sessions set revoked_at = now() where revoked_at is null and token = $1`, [token]);
+}
+
+export async function rotateCustomerSession(customerId: number, oldToken: string): Promise<string> {
+  await revokeCustomerSessionByToken(oldToken);
+  const next = createSessionToken();
+  await createCustomerSession(customerId, next);
+  return next;
 }
 
 function readCookie(cookieHeader: string, name: string): string {
@@ -481,8 +505,58 @@ export function createVerificationCode4(): string {
   return String(n).padStart(4, "0");
 }
 
-export async function issueEmailVerificationCode(customerId: number): Promise<{ code: string; expiresAt: string }> {
+const VERIFY_COOLDOWN_SECONDS = 60;
+const VERIFY_WINDOW_SECONDS = 10 * 60;
+const VERIFY_MAX_SENDS_PER_WINDOW = 3;
+
+export type IssueVerificationResult =
+  | { ok: true; code: string; expiresAt: string }
+  | { ok: false; error: "COOLDOWN" | "RATE_LIMIT"; retryAfterSec: number };
+
+export async function issueEmailVerificationCode(customerId: number): Promise<IssueVerificationResult> {
   await ensureIdentityTables();
+
+  // Cooldown: 1 send per minute.
+  const last = await db.query<{ created_at: string }>(
+    `select created_at::text as created_at
+       from customer_email_verification_codes
+      where customer_id = $1
+      order by id desc
+      limit 1`,
+    [customerId]
+  );
+  const lastAt = last.rows[0]?.created_at ? new Date(last.rows[0].created_at).getTime() : 0;
+  if (lastAt) {
+    const ageSec = Math.floor((Date.now() - lastAt) / 1000);
+    if (ageSec < VERIFY_COOLDOWN_SECONDS) {
+      return { ok: false, error: "COOLDOWN", retryAfterSec: VERIFY_COOLDOWN_SECONDS - ageSec };
+    }
+  }
+
+  // Window limit: max 3 sends per 10 minutes.
+  const cnt = await db.query<{ n: number }>(
+    `select count(*)::int as n
+       from customer_email_verification_codes
+      where customer_id = $1
+        and created_at > now() - interval '${VERIFY_WINDOW_SECONDS} seconds'`,
+    [customerId]
+  );
+  const n = Number(cnt.rows[0]?.n || 0);
+  if (n >= VERIFY_MAX_SENDS_PER_WINDOW) {
+    const oldest = await db.query<{ created_at: string }>(
+      `select created_at::text as created_at
+         from customer_email_verification_codes
+        where customer_id = $1
+          and created_at > now() - interval '${VERIFY_WINDOW_SECONDS} seconds'
+        order by created_at asc
+        limit 1`,
+      [customerId]
+    );
+    const oldestAt = oldest.rows[0]?.created_at ? new Date(oldest.rows[0].created_at).getTime() : Date.now();
+    const ageSec = Math.floor((Date.now() - oldestAt) / 1000);
+    const retryAfterSec = Math.max(5, VERIFY_WINDOW_SECONDS - ageSec);
+    return { ok: false, error: "RATE_LIMIT", retryAfterSec };
+  }
 
   // Invalidate previous active codes
   await db.query(
@@ -532,7 +606,7 @@ export async function issueEmailVerificationCode(customerId: number): Promise<{ 
     );
   }
 
-  return { code, expiresAt: expiresAt.toISOString() };
+  return { ok: true, code, expiresAt: expiresAt.toISOString() };
 }
 
 export async function confirmEmailVerificationCode(

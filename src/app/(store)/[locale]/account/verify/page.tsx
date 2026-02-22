@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { isRecord, readErrorMessage } from "@/lib/http-client";
 
 type Locale = "en" | "ar";
 type RouteParams = { locale?: string };
 
-type VerifyStartResp = { ok?: boolean; error?: string };
+type VerifyStartResp = { ok?: boolean; error?: string; retryAfterSec?: number; cooldownSec?: number };
 type VerifyConfirmResp = { ok?: boolean; error?: string };
 
 function getLocaleFromParams(p: RouteParams | null): Locale {
@@ -26,6 +26,14 @@ export default function VerifyEmailPage() {
   const [busy, setBusy] = useState<boolean>(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [cooldownSec, setCooldownSec] = useState<number>(0);
+
+  // Countdown tick for resend cooldown
+  useEffect(() => {
+    if (cooldownSec <= 0) return;
+    const t = window.setInterval(() => setCooldownSec((s) => (s > 0 ? s - 1 : 0)), 1000);
+    return () => window.clearInterval(t);
+  }, [cooldownSec]);
 
   const canSubmit = useMemo(() => /^[0-9]{4}$/.test(code.trim()), [code]);
 
@@ -44,8 +52,14 @@ export default function VerifyEmailPage() {
       const d: VerifyStartResp = isRecord(raw) ? (raw as VerifyStartResp) : {};
 
       if (!res.ok || !d.ok) {
+        if (res.status === 429 && typeof d.retryAfterSec === "number") {
+          setCooldownSec(Math.max(1, Math.floor(d.retryAfterSec)));
+          setErr(isAr ? "يرجى الانتظار قبل إعادة الإرسال." : "Please wait before resending.");
+          return;
+        }
         setErr(d.error || (isAr ? "تعذر إرسال الرمز." : "Could not send code."));
       } else {
+        if (typeof d.cooldownSec === "number") setCooldownSec(Math.max(0, Math.floor(d.cooldownSec)));
         setMsg(isAr ? "تم إرسال رمز التحقق." : "Verification code sent.");
       }
     } finally {
@@ -130,8 +144,14 @@ export default function VerifyEmailPage() {
               {busy ? (isAr ? "جارٍ التحقق..." : "Verifying...") : isAr ? "تأكيد" : "Verify"}
             </button>
 
-            <button type="button" className="btn btn-outline" onClick={resend} disabled={busy}>
-              {isAr ? "إعادة إرسال الرمز" : "Resend code"}
+            <button type="button" className="btn btn-outline" onClick={resend} disabled={busy || cooldownSec > 0}>
+              {cooldownSec > 0
+                ? isAr
+                  ? `إعادة إرسال الرمز (${cooldownSec}s)`
+                  : `Resend code (${cooldownSec}s)`
+                : isAr
+                  ? "إعادة إرسال الرمز"
+                  : "Resend code"}
             </button>
 
             <a className="btn btn-outline" href={`/${locale}/account/login`}>

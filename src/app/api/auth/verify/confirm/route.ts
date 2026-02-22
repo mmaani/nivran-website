@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { confirmEmailVerificationCode, ensureIdentityTables, getCustomerIdFromRequest } from "@/lib/identity";
+import {
+  confirmEmailVerificationCode,
+  CUSTOMER_SESSION_COOKIE,
+  ensureIdentityTables,
+  getCustomerIdFromRequest,
+  rotateCustomerSession,
+} from "@/lib/identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,5 +25,21 @@ export async function POST(req: Request) {
   const r = await confirmEmailVerificationCode(customerId, code);
   if (!r.ok) return NextResponse.json({ ok: false, error: r.error || "INVALID" }, { status: 400 });
 
-  return NextResponse.json({ ok: true });
+  // OWASP-style session rotation after privilege change (email verification)
+  const cookie = req.headers.get("cookie") || "";
+  const m = cookie.match(new RegExp(`${CUSTOMER_SESSION_COOKIE}=([^;]+)`));
+  const current = m ? decodeURIComponent(m[1]) : "";
+
+  const res = NextResponse.json({ ok: true });
+  if (current) {
+    const next = await rotateCustomerSession(customerId, current);
+    res.cookies.set(CUSTOMER_SESSION_COOKIE, next, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    });
+  }
+  return res;
 }

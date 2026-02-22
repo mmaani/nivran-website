@@ -69,7 +69,7 @@ export async function POST(req: Request) {
   // Issue verification code (email sending is build-safe; function logs if env missing)
   try {
     const v = await issueEmailVerificationCode(created.id);
-    await sendVerificationCodeEmail(email, v.code, locale);
+    if (v.ok) await sendVerificationCodeEmail(email, v.code, locale);
   } catch (e: unknown) {
     console.warn("[verify] could not issue verification code:", e);
   }
@@ -79,7 +79,7 @@ export async function POST(req: Request) {
   res.cookies.set("nivran_customer_session", token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: true,
+    secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 60 * 60 * 24 * 30,
   });

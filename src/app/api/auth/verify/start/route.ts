@@ -22,10 +22,16 @@ export async function POST(req: Request) {
   const email = r.rows[0]?.email;
   if (!email) return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 });
 
-  const v = await issueEmailVerificationCode(customerId);
+  const issued = await issueEmailVerificationCode(customerId);
+  if (!issued.ok) {
+    return NextResponse.json(
+      { ok: false, error: issued.error, retryAfterSec: issued.retryAfterSec },
+      { status: 429, headers: { "retry-after": String(issued.retryAfterSec) } }
+    );
+  }
 
   // Will no-op (not throw) if env missing
-  await sendVerificationCodeEmail(email, v.code, locale);
+  await sendVerificationCodeEmail(email, issued.code, locale);
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, expiresAt: issued.expiresAt, cooldownSec: 60 });
 }

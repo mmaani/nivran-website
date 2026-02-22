@@ -1,67 +1,60 @@
 import { db } from "@/lib/db";
 
-export type EmailLogRow = {
-  id: number;
-  provider: string;
-  kind: string;
-  to_email: string;
-  subject: string;
-  ok: boolean;
-  attempt: number;
-  provider_id: string | null;
-  error: string | null;
-  created_at: string;
+export type EmailLogAttemptInput = {
+  provider?: string;
+  template?: string;
+  to: string;
+  from?: string | null;
+  replyTo?: string | null;
+  subject?: string | null;
+  html?: string | null;
+  text?: string | null;
+  error?: string | null;
+  meta?: Record<string, unknown> | null;
 };
 
-export async function ensureEmailLogTable(): Promise<void> {
+export async function ensureEmailLogTables(): Promise<void> {
   await db.query(`
     create table if not exists email_send_log (
       id bigserial primary key,
-      provider text not null,
-      kind text not null,
-      to_email text not null,
-      subject text not null,
-      ok boolean not null,
-      attempt int not null default 1,
-      provider_id text,
+      provider text,
+      template text,
+      "to" text not null,
+      "from" text,
+      reply_to text,
+      subject text,
+      html text,
+      text text,
       error text,
+      meta jsonb,
       created_at timestamptz not null default now()
     );
   `);
-
-  await db.query(`create index if not exists email_send_log_created_at_idx on email_send_log(created_at desc);`);
-  await db.query(`create index if not exists email_send_log_to_email_idx on email_send_log(to_email);`);
-  await db.query(`create index if not exists email_send_log_kind_idx on email_send_log(kind);`);
 }
 
-export async function logEmailSendAttempt(args: {
-  provider: string;
-  kind: string;
-  to: string;
-  subject: string;
-  ok: boolean;
-  attempt: number;
-  provider_id?: string | null;
-  error?: string | null;
-}): Promise<void> {
+export async function logEmailSendAttempt(input: EmailLogAttemptInput): Promise<void> {
   try {
-    await ensureEmailLogTable();
+    await ensureEmailLogTables();
     await db.query(
-      `insert into email_send_log (provider, kind, to_email, subject, ok, attempt, provider_id, error)
-       values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      `
+      insert into email_send_log (provider, template, "to", "from", reply_to, subject, html, text, error, meta)
+      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      `,
       [
-        args.provider,
-        args.kind,
-        args.to,
-        args.subject,
-        args.ok,
-        args.attempt,
-        args.provider_id ?? null,
-        args.error ?? null,
+        input.provider ?? null,
+        input.template ?? null,
+        input.to,
+        input.from ?? null,
+        input.replyTo ?? null,
+        input.subject ?? null,
+        input.html ?? null,
+        input.text ?? null,
+        input.error ?? null,
+        input.meta ?? null,
       ]
     );
-  } catch (e: unknown) {
-    // Never break auth flows because logging failed.
+  } catch (e) {
+    // never break auth flows if logging fails
     console.warn("[emailLog] failed:", e);
   }
 }

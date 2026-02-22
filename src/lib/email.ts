@@ -17,10 +17,10 @@ function getEmailFrom(): string | null {
   return from.trim();
 }
 
-function getReplyTo(): string | undefined {
+function getReplyTo(): string | null {
   const rt = process.env.EMAIL_REPLY_TO;
   const v = rt ? rt.trim() : "";
-  return v.length ? v : undefined;
+  return v.length ? v : null;
 }
 
 function escapeHtml(s: string): string {
@@ -81,12 +81,7 @@ function errToString(e: unknown): string {
   }
 }
 
-async function sendWithRetry(args: {
-  kind: SendKind;
-  to: string;
-  subject: string;
-  html: string;
-}): Promise<void> {
+async function sendWithRetry(args: { kind: SendKind; to: string; subject: string; html: string }): Promise<void> {
   const resend = getResendClient();
   const from = getEmailFrom();
   const replyTo = getReplyTo();
@@ -95,39 +90,43 @@ async function sendWithRetry(args: {
     console.warn("[email] missing RESEND_API_KEY or EMAIL_FROM; skipping send to", args.to, "subject:", args.subject);
     await logEmailSendAttempt({
       provider: "resend",
-      kind: args.kind,
+      template: args.kind,
       to: args.to,
+      from,
+      replyTo,
       subject: args.subject,
-      ok: false,
-      attempt: 0,
+      html: args.html,
       error: "MISSING_RESEND_OR_FROM",
+      meta: { ok: false, attempt: 0 },
     });
     return;
   }
 
-  const maxAttempts = 3;
   let lastErr: unknown = null;
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const resp = await resend.emails.send({
         from,
         to: args.to,
         subject: args.subject,
         html: args.html,
-        replyTo, // ✅ correct property name per Resend SDK typings
+        replyTo: replyTo || undefined,
       });
-
-      const providerId = typeof resp?.data?.id === "string" ? resp.data.id : null;
 
       await logEmailSendAttempt({
         provider: "resend",
-        kind: args.kind,
+        template: args.kind,
         to: args.to,
+        from,
+        replyTo,
         subject: args.subject,
-        ok: true,
-        attempt,
-        provider_id: providerId,
+        html: args.html,
+        meta: {
+          ok: true,
+          attempt,
+          provider_id: typeof resp?.data?.id === "string" ? resp.data.id : null,
+        },
       });
 
       return;
@@ -136,31 +135,26 @@ async function sendWithRetry(args: {
 
       await logEmailSendAttempt({
         provider: "resend",
-        kind: args.kind,
+        template: args.kind,
         to: args.to,
+        from,
+        replyTo,
         subject: args.subject,
-        ok: false,
-        attempt,
+        html: args.html,
         error: errToString(e),
+        meta: { ok: false, attempt },
       });
 
-      // simple exponential backoff: 300ms, 900ms, 2700ms
-      if (attempt < maxAttempts) {
-        const backoff = 300 * Math.pow(3, attempt - 1);
-        await sleep(backoff);
+      if (attempt < 3) {
+        await sleep(300 * Math.pow(3, attempt - 1)); // 300ms, 900ms
       }
     }
   }
 
-  // After retries: don't crash signup/login flow; just warn.
   console.warn("[email] failed after retries:", args.to, args.subject, errToString(lastErr));
 }
 
-export async function sendPasswordResetEmail(
-  to: string,
-  resetUrl: string,
-  locale: Locale = "en"
-): Promise<void> {
+export async function sendPasswordResetEmail(to: string, resetUrl: string, locale: Locale = "en"): Promise<void> {
   const subject = locale === "ar" ? "إعادة تعيين كلمة المرور — NIVRAN" : "Reset your password — NIVRAN";
   const btnText = locale === "ar" ? "إعادة تعيين كلمة المرور" : "Reset password";
   const intro =
@@ -186,12 +180,7 @@ export async function sendPasswordResetEmail(
     </p>
   `;
 
-  await sendWithRetry({
-    kind: "password_reset",
-    to,
-    subject,
-    html: wrapEmailHtml(locale, inner),
-  });
+  await sendWithRetry({ kind: "password_reset", to, subject, html: wrapEmailHtml(locale, inner) });
 }
 
 export async function sendVerificationCodeEmail(to: string, code: string, locale: Locale): Promise<void> {
@@ -218,10 +207,5 @@ export async function sendVerificationCodeEmail(to: string, code: string, locale
     </p>
   `;
 
-  await sendWithRetry({
-    kind: "verify_code",
-    to,
-    subject,
-    html: wrapEmailHtml(locale, inner),
-  });
+  await sendWithRetry({ kind: "verify_code", to, subject, html: wrapEmailHtml(locale, inner) });
 }
