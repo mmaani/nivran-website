@@ -7,28 +7,10 @@ type Locale = "en" | "ar";
 type CartItem = { slug: string; name: string; priceJod: number; qty: number };
 
 type LoginOk = { ok: true; needsVerification?: boolean };
-type LoginErr = { ok: false; error: string };
-type LoginResponse = LoginOk | LoginErr;
+type LoginFail = { ok: false; error: string };
+type LoginResponse = LoginOk | LoginFail;
 
 const CART_KEY = "nivran_cart_v1";
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null;
-}
-
-function asLoginResponse(v: unknown): LoginResponse | null {
-  if (!isRecord(v)) return null;
-  const ok = v["ok"];
-  if (ok === true) {
-    const needsVerification = v["needsVerification"];
-    return { ok: true, needsVerification: typeof needsVerification === "boolean" ? needsVerification : undefined };
-  }
-  if (ok === false) {
-    const error = v["error"];
-    return { ok: false, error: typeof error === "string" ? error : "Login failed." };
-  }
-  return null;
-}
 
 function readCart(): CartItem[] {
   try {
@@ -38,13 +20,13 @@ function readCart(): CartItem[] {
     if (!Array.isArray(parsed)) return [];
     return parsed
       .map((x: unknown) => {
-        const r = isRecord(x) ? x : {};
+        const r = (x ?? {}) as Record<string, unknown>;
         return {
-          slug: String(r["slug"] || "").trim(),
-          name: String(r["name"] || "").trim(),
-          priceJod: Number(r["priceJod"] || 0),
-          qty: Math.max(1, Number(r["qty"] || 1)),
-        };
+          slug: String(r.slug || "").trim(),
+          name: String(r.name || "").trim(),
+          priceJod: Number(r.priceJod || 0),
+          qty: Math.max(1, Number(r.qty || 1)),
+        } satisfies CartItem;
       })
       .filter((x) => !!x.slug);
   } catch {
@@ -55,6 +37,14 @@ function readCart(): CartItem[] {
 function writeCart(items: CartItem[]) {
   localStorage.setItem(CART_KEY, JSON.stringify(items));
   window.dispatchEvent(new Event("nivran_cart_updated"));
+}
+
+function isLoginResponse(x: unknown): x is LoginResponse {
+  if (!x || typeof x !== "object") return false;
+  const r = x as Record<string, unknown>;
+  if (r.ok === true) return true;
+  if (r.ok === false && typeof r.error === "string") return true;
+  return false;
 }
 
 export default function LoginPage() {
@@ -99,12 +89,15 @@ export default function LoginPage() {
       });
 
       const raw: unknown = await res.json().catch(() => null);
-      const data = asLoginResponse(raw);
 
-      if (!res.ok || !data) throw new Error(t.error);
-      if (data.ok === false) throw new Error(data.error || t.error);
+      if (!isLoginResponse(raw) || raw.ok !== true) {
+        const msg =
+          isLoginResponse(raw) && raw.ok === false
+            ? raw.error
+            : t.error;
+        throw new Error(msg);
+      }
 
-      // cart sync
       const localItems = readCart();
       if (localItems.length) {
         const syncRes = await fetch("/api/cart/sync", {
@@ -112,19 +105,25 @@ export default function LoginPage() {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ mode: "merge", items: localItems }),
         });
+
         const syncRaw: unknown = await syncRes.json().catch(() => null);
-        if (isRecord(syncRaw) && syncRaw["ok"] === true && syncRaw["isAuthenticated"] === true && Array.isArray(syncRaw["items"])) {
-          writeCart(syncRaw["items"] as CartItem[]);
+        const syncObj = (syncRaw ?? {}) as Record<string, unknown>;
+
+        if (
+          syncObj.ok === true &&
+          syncObj.isAuthenticated === true &&
+          Array.isArray(syncObj.items)
+        ) {
+          writeCart(syncObj.items as CartItem[]);
         }
       }
 
-      const needsVerification = data.needsVerification === true;
-      window.location.href = needsVerification
-        ? `/${locale}/account/verify?email=${encodeURIComponent(email)}`
-        : `/${locale}/account`;
-    } catch (e2: unknown) {
-      const msg = e2 instanceof Error ? e2.message : t.error;
-      setErr(msg || t.error);
+      window.location.href =
+        raw.needsVerification === true
+          ? `/${locale}/account/verify?email=${encodeURIComponent(email)}`
+          : `/${locale}/account`;
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : t.error);
     } finally {
       setLoading(false);
     }
