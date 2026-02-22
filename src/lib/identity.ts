@@ -108,6 +108,20 @@ export async function ensureIdentityTables() {
   await db.query(`create index if not exists customer_sessions_token_hash_idx on customer_sessions(token_hash);`);
 
   await db.query(`
+    create table if not exists customer_password_reset_tokens (
+      id bigserial primary key,
+      customer_id bigint not null references customers(id) on delete cascade,
+      token text not null,
+      expires_at timestamptz not null,
+      used_at timestamptz,
+      created_at timestamptz not null default now()
+    );
+  `);
+  await db.query(`create index if not exists customer_password_reset_tokens_token_idx on customer_password_reset_tokens(token);`);
+  await db.query(`create index if not exists customer_password_reset_tokens_customer_idx on customer_password_reset_tokens(customer_id);`);
+
+  // Legacy (kept to avoid breaking older deployments). New code uses customer_password_reset_tokens.
+  await db.query(`
     create table if not exists password_reset_tokens (
       id bigserial primary key,
       email text not null,

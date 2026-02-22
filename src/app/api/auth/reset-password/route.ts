@@ -27,7 +27,7 @@ export async function POST(req: Request) {
   const row = rows[0];
   if (!row) return NextResponse.json({ ok: false, error: "Invalid or expired token" }, { status: 400 });
 
-  await db.query(`update customers set password_hash=$2, updated_at=now() where id=$1`, [row.customer_id, hashPassword(password)]);
+  await db.query(`update customers set password_hash=$2, updated_at=now() where id=$1`, [row.customer_id, await hashPassword(password)]);
   await db.query(`update customer_password_reset_tokens set used_at=now() where id=$1`, [row.id]);
   await db.query(`update customer_sessions set revoked_at=now() where customer_id=$1`, [row.customer_id]);
 
