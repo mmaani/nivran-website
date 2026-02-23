@@ -45,7 +45,7 @@ function statusLabel(s: string) {
   return v || "—";
 }
 
-function pillStyleForStatus(status: string): React.CSSProperties {
+function pillStyleForStatus(): React.CSSProperties {
   // Neutral design: subtle background + border, no loud colors.
   // (You can later map statuses to brand colors if you want.)
   return {
@@ -379,7 +379,7 @@ export default function AccountClient({ locale }: { locale: string }) {
                       </td>
 
                       <td>
-                        <span style={pillStyleForStatus(o.status)}>{statusLabel(o.status)}</span>
+                        <span style={pillStyleForStatus()}>{statusLabel(o.status)}</span>
                       </td>
 
                       <td style={{ fontWeight: 700 }}>{formatJod(o.total_jod ?? o.amount_jod)}</td>
