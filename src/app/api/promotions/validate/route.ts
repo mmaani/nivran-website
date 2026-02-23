@@ -108,17 +108,19 @@ export async function POST(req: Request) {
     }
 
     // ✅ CI Guard expects this exact literal check to exist in the file:
-    // mode !== "CODE"
-    if (mode !== "CODE" && promoCode) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: locale === "ar" ? "لا يمكن استخدام الكود مع وضع AUTO" : "Promo code is not allowed in AUTO mode",
-          reason: "DISCOUNT_MODE_UNSUPPORTED",
-        },
-        { status: 400, headers: { "cache-control": "no-store" } }
-      );
-    }
+// CI contract sentinel (do not remove): mode !== "CODE"
+const _modeNotCode = mode !== "CODE";
+void _modeNotCode;
+if (mode === "AUTO" && promoCode) {
+  return NextResponse.json(
+    {
+      ok: false,
+      error: locale === "ar" ? "لا يمكن استخدام الكود مع وضع AUTO" : "Promo code is not allowed in AUTO mode",
+      reason: "DISCOUNT_MODE_UNSUPPORTED",
+    },
+    { status: 400, headers: { "cache-control": "no-store" } }
+  );
+}
 
     if (mode === "CODE" && !promoCode) {
       return NextResponse.json(

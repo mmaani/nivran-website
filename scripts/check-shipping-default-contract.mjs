@@ -5,21 +5,21 @@ const REQUIRED = [
   {
     file: "src/lib/shipping.ts",
     checks: [
-      "DEFAULT_FREE_SHIPPING_THRESHOLD_JOD = 69",
+      "DEFAULT_FREE_SHIPPING_THRESHOLD_JOD = 75",
       "DEFAULT_BASE_SHIPPING_JOD = 3.5",
     ],
   },
   {
     file: "src/lib/catalog.ts",
     checks: [
-      "values ('free_shipping_threshold_jod', 69)",
+      "values ('free_shipping_threshold_jod', 75)",
     ],
   },
   {
-    file: "db/migrations/patches/012_free_shipping_default_69.sql",
+    file: "db/migrations/patches/012_free_shipping_default_75.sql",
     checks: [
-      "values ('free_shipping_threshold_jod', 69, now())",
-      "or store_settings.value_number = 35",
+      "values ('free_shipping_threshold_jod', 75, now())",
+      "or store_settings.value_number = 75",
     ],
   },
   {
@@ -45,7 +45,7 @@ const REQUIRED = [
   {
     file: "src/app/(store)/[locale]/checkout/CheckoutClient.tsx",
     checks: [
-      "useState(69)",
+      "useState(75)",
     ],
   },
 ];

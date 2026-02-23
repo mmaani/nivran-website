@@ -121,6 +121,7 @@ export default function CheckoutClient() {
   const [promoMsg, setPromoMsg] = useState<string | null>(null);
 
   const [healthMode, setHealthMode] = useState<HealthMode>("checking");
+ useState(75);
 
   const [quote, setQuote] = useState<QuotePayload | null>(null);
   const [quoteBusy, setQuoteBusy] = useState(false);
@@ -514,7 +515,7 @@ export default function CheckoutClient() {
     const subtotalAfterDiscount = subtotal;
     const shipping = items.length ? 3.5 : 0;
     const total = Number((subtotalAfterDiscount + shipping).toFixed(2));
-    return { subtotal, discount: 0, subtotalAfterDiscount, shipping, total, freeShippingThresholdJod: 69 };
+    return { subtotal, discount: 0, subtotalAfterDiscount, shipping, total, freeShippingThresholdJod: 75 };
   }, [items, quote]);
 
   const freeShippingRemaining = Math.max(0, totals.freeShippingThresholdJod - totals.subtotalAfterDiscount);

@@ -220,7 +220,7 @@ export async function ensureCatalogTables() {
 
   await db.query(`
     insert into store_settings (key, value_number)
-    values ('free_shipping_threshold_jod', 69)
+    values ('free_shipping_threshold_jod', 75)
     on conflict (key) do nothing;
   `);
 
@@ -328,7 +328,7 @@ export async function ensureCatalogTablesSafe(): Promise<{ ok: true } | { ok: fa
         console.warn("[catalog] ensureCatalogTables skipped (DDL blocked), but catalog tables exist; proceeding read-only.");
         return { ok: true };
       } catch (probeError: unknown) {
-        const reason = errorMessageOf(error).slice(0, 180);
+        const reason = errorMessageOf(probeError).slice(0, 180);
         console.warn(`[catalog] ensureCatalogTables skipped: ${reason}`);
         return { ok: false, reason };
       }
