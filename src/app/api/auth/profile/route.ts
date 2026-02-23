@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { ensureCatalogTables } from "@/lib/catalog";
+import { ensureOrdersTables } from "@/lib/ordersSchema";
 import { ensureIdentityTables, getCustomerIdFromRequest } from "@/lib/identity";
 import { hasColumn } from "@/lib/dbSchema";
 
@@ -9,6 +10,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   await ensureCatalogTables();
   await ensureIdentityTables();
+  await ensureOrdersTables();
 
   const customerId = await getCustomerIdFromRequest(req);
   if (!customerId) return Response.json({ ok: false }, { status: 401 });
@@ -42,6 +44,8 @@ export async function GET(req: Request) {
   const hasShippingJod = await hasColumn("orders", "shipping_jod");
   const hasDiscountJod = await hasColumn("orders", "discount_jod");
   const hasPromoCode = await hasColumn("orders", "promo_code");
+  const hasPromotionId = await hasColumn("orders", "promotion_id");
+  const hasDiscountSource = await hasColumn("orders", "discount_source");
   const hasPromoRuleTitle = await hasColumn("orders", "promo_rule_title");
 
   const or = await db.query(
@@ -52,6 +56,8 @@ export async function GET(req: Request) {
             ${hasTotalJod ? "coalesce(total_jod, amount)" : "amount"}::text as total_jod,
             ${hasTotalJod ? "coalesce(total_jod, amount)" : "amount"}::text as amount_jod,
             ${hasPromoCode ? "promo_code" : "null::text"} as promo_code,
+            ${hasPromotionId ? "promotion_id::text" : "null::text"} as promotion_id,
+            ${hasDiscountSource ? "discount_source" : "null::text"} as discount_source,
             ${hasPromoRuleTitle ? "promo_rule_title" : "null::text"} as promo_rule_title,
             created_at::text as created_at
        from orders

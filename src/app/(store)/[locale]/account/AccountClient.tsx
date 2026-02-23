@@ -24,6 +24,8 @@ type OrderRow = {
   discount_jod?: string | null;
   total_jod?: string | null;
   promo_code?: string | null;
+  promotion_id?: string | null;
+  discount_source?: string | null;
   promo_rule_title?: string | null;
   created_at: string;
 };
@@ -113,7 +115,7 @@ export default function AccountClient({ locale }: { locale: string }) {
       status: isAr ? "الحالة" : "Status",
       total: isAr ? "الإجمالي" : "Total",
       discount: isAr ? "الخصم" : "Discount",
-      promo: isAr ? "العروض" : "Promotions",
+      promo: isAr ? "الخصومات المطبقة" : "Discounts applied",
       date: isAr ? "التاريخ" : "Date",
       actions: isAr ? "إجراءات" : "Actions",
       details: isAr ? "التفاصيل" : "Details",
@@ -163,9 +165,20 @@ export default function AccountClient({ locale }: { locale: string }) {
       }
 
       setProfile(data.profile);
-      setOrders(Array.isArray(data.orders) ? data.orders : []);
 
-      setFullName(String(data.profile?.full_name || ""));
+      // Prefer the hardened Orders API (customer-scoped) for discount/promo visibility.
+      try {
+        const rOrders = await fetch("/api/orders", { cache: "no-store" });
+        const dOrders = await rOrders.json().catch(() => ({}));
+        if (rOrders.ok && dOrders?.ok && Array.isArray(dOrders.orders)) {
+          setOrders(dOrders.orders);
+        } else {
+          setOrders(Array.isArray(data.orders) ? data.orders : []);
+        }
+      } catch {
+        setOrders(Array.isArray(data.orders) ? data.orders : []);
+      }
+setFullName(String(data.profile?.full_name || ""));
       setPhone(String(data.profile?.phone || ""));
       setAddressLine1(String(data.profile?.address_line1 || ""));
       setCity(String(data.profile?.city || ""));
@@ -223,6 +236,23 @@ export default function AccountClient({ locale }: { locale: string }) {
   }
 
   const dir = isAr ? "rtl" : "ltr";
+
+  const thStyle: React.CSSProperties = {
+    textAlign: isAr ? "right" : "left",
+    padding: "10px 12px",
+    fontSize: 12,
+    letterSpacing: ".08em",
+    textTransform: "uppercase",
+    color: "rgba(0,0,0,.55)",
+    borderBottom: "1px solid rgba(0,0,0,.08)",
+    whiteSpace: "nowrap",
+  };
+
+  const tdStyle: React.CSSProperties = {
+    padding: "12px 12px",
+    borderBottom: "1px solid rgba(0,0,0,.06)",
+    verticalAlign: "middle",
+  };
 
   return (
     <div dir={dir} style={{ padding: "1.2rem 0", maxWidth: 980, margin: "0 auto" }}>
@@ -356,40 +386,40 @@ export default function AccountClient({ locale }: { locale: string }) {
 
           {orders.length ? (
             <div style={{ overflowX: "auto", marginTop: 12 }}>
-              <table className="table" style={{ minWidth: 720 }}>
+              <table className="table" style={{ minWidth: 820, borderCollapse: "separate", borderSpacing: 0 }}>
                 <thead>
                   <tr>
-                    <th style={{ width: 70 }}>{t.id}</th>
-                    <th style={{ width: 260 }}>{t.cart}</th>
-                    <th style={{ width: 170 }}>{t.status}</th>
-                    <th style={{ width: 150 }}>{t.total}</th>
-                    <th style={{ width: 140 }}>{t.discount}</th>
-                    <th style={{ width: 220 }}>{t.promo}</th>
-                    <th style={{ width: 220 }}>{t.date}</th>
-                    <th style={{ width: 120 }}>{t.actions}</th>
+                    <th style={{ ...thStyle, width: 70 }}>{t.id}</th>
+                    <th style={{ ...thStyle, width: 260 }}>{t.cart}</th>
+                    <th style={{ ...thStyle, width: 170 }}>{t.status}</th>
+                    <th style={{ ...thStyle, width: 150 }}>{t.total}</th>
+                    <th style={{ ...thStyle, width: 140 }}>{t.discount}</th>
+                    <th style={{ ...thStyle, width: 220 }}>{t.promo}</th>
+                    <th style={{ ...thStyle, width: 220 }}>{t.date}</th>
+                    <th style={{ ...thStyle, width: 120 }}>{t.actions}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {orders.map((o) => (
                     <tr key={o.id}>
-                      <td style={{ fontWeight: 800 }}>{o.id}</td>
+                      <td style={{ ...tdStyle, fontWeight: 800 }}>{o.id}</td>
 
-                      <td style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: 12 }}>
+                      <td style={{ ...tdStyle, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: 12 }}>
                         {o.cart_id}
                       </td>
 
-                      <td>
+                      <td style={tdStyle}>
                         <span style={pillStyleForStatus()}>{statusLabel(o.status)}</span>
                       </td>
 
-                      <td style={{ fontWeight: 700 }}>{formatJod(o.total_jod ?? o.amount_jod)}</td>
+                      <td style={{ ...tdStyle, fontWeight: 700 }}>{formatJod(o.total_jod ?? o.amount_jod)}</td>
 
-                      <td style={{ fontWeight: 650 }}>
+                      <td style={{ ...tdStyle, fontWeight: 650 }}>
                         {Number(o.discount_jod || 0) > 0 ? `-${formatJod(o.discount_jod)}` : <span className="muted">—</span>}
                       </td>
 
-                      <td>
-                        {o.promo_code || o.promo_rule_title ? (
+                      <td style={tdStyle}>
+                        {o.promo_code || o.promo_rule_title || Number(o.discount_jod || 0) > 0 || o.promotion_id || o.discount_source ? (
                           <div style={{ display: "grid", gap: 3 }}>
                             {o.promo_code ? (
                               <span
@@ -411,35 +441,43 @@ export default function AccountClient({ locale }: { locale: string }) {
                                 {o.promo_rule_title}
                               </span>
                             ) : null}
+
+                            {o.discount_source ? (
+                              <span className="muted" style={{ fontSize: 12 }}>
+                                {isAr ? "المصدر:" : "Source:"} {o.discount_source}
+                              </span>
+                            ) : null}
+
+                            {o.promotion_id ? (
+                              <span className="muted" style={{ fontSize: 12 }}>
+                                {isAr ? "معرّف العرض:" : "Promotion ID:"} {o.promotion_id}
+                              </span>
+                            ) : null}
                           </div>
                         ) : (
                           <span className="muted">—</span>
                         )}
                       </td>
 
-                      <td className="muted" style={{ fontSize: 13 }}>
+                      <td className="muted" style={{ ...tdStyle, fontSize: 13 }}>
                         {formatDate(o.created_at)}
                       </td>
 
                       {/* Order details: coming soon */}
-                      <td>
-                        <button
+                      <td style={tdStyle}>
+                        <a
                           className="btn btn-outline"
-                          disabled
-                          title={t.comingSoon}
+                          href={`/${locale}/account/orders/${o.id}`}
                           style={{ padding: ".35rem .65rem", borderRadius: 10 }}
                         >
                           {t.details}
-                        </button>
+                        </a>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
 
-              <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>
-                {isAr ? "صفحة تفاصيل الطلب قيد الإضافة (قريباً)." : "Order details page is coming soon."}
-              </div>
             </div>
           ) : (
             <p className="muted" style={{ marginTop: 10 }}>
