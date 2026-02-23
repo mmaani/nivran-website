@@ -153,7 +153,10 @@ export async function GET(req: Request) {
 
   // Optionally attach items (N+1 but capped; only on explicit request)
   if (includeItems && (hasOrderItemsJsonb || hasOrderItemsNormalized)) {
-    const enriched: any[] = [];
+    type OrderListRowWithItems =
+  | (OrderListRow & { line_items: OrderItemRow[] })
+  | (OrderListRow & { items: unknown[] });
+const enriched: OrderListRowWithItems[] = [];
     for (const o of r.rows) {
       if (hasOrderItemsNormalized) {
         const ir = await db.query<OrderItemRow>(

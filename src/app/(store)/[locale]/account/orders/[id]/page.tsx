@@ -1,11 +1,13 @@
 export const dynamic = "force-dynamic";
 
-export default function OrderDetailsPage({
+export default async function OrderDetailsPage({
   params,
 }: {
-  params: { locale: string; id: string };
+  params: Promise<{ locale: string; id: string }>;
 }) {
-  const isAr = params.locale === "ar";
+  const { locale, id } = await params;
+
+  const isAr = locale === "ar";
   const dir = isAr ? "rtl" : "ltr";
 
   return (
@@ -16,17 +18,15 @@ export default function OrderDetailsPage({
         </h1>
 
         <p className="muted" style={{ marginTop: 8, lineHeight: 1.6 }}>
-          {isAr
-            ? `صفحة تفاصيل الطلب قيد الإضافة. رقم الطلب: ${params.id}`
-            : `Order details page is coming soon. Order ID: ${params.id}`}
+          {isAr ? `صفحة تفاصيل الطلب قيد الإضافة. رقم الطلب: ${id}` : `Order details page is coming soon. Order ID: ${id}`}
         </p>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
-          <a className="btn btn-outline" href={`/${params.locale}/account`}>
+          <a className="btn btn-outline" href={`/${locale}/account`}>
             {isAr ? "العودة إلى الحساب" : "Back to account"}
           </a>
 
-          <a className="btn" href={`/${params.locale}/`}>
+          <a className="btn" href={`/${locale}/`}>
             {isAr ? "الصفحة الرئيسية" : "Home"}
           </a>
         </div>
