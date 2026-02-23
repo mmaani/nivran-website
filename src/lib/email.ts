@@ -3,8 +3,6 @@ import { logEmailSendAttempt } from "@/lib/emailLog";
 
 export type Locale = "en" | "ar";
 
-type SendKind = "verify_code" | "password_reset";
-
 function getResendClient(): Resend | null {
   const key = process.env.RESEND_API_KEY;
   if (!key || key.trim().length === 0) return null;
@@ -17,10 +15,10 @@ function getEmailFrom(): string | null {
   return from.trim();
 }
 
-function getReplyTo(): string | null {
+function getReplyTo(): string | undefined {
   const rt = process.env.EMAIL_REPLY_TO;
   const v = rt ? rt.trim() : "";
-  return v.length ? v : null;
+  return v.length ? v : undefined;
 }
 
 function escapeHtml(s: string): string {
@@ -81,7 +79,12 @@ function errToString(e: unknown): string {
   }
 }
 
-async function sendWithRetry(args: { kind: SendKind; to: string; subject: string; html: string }): Promise<void> {
+async function sendWithRetry(args: {
+  kind: "verify_code" | "password_reset";
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<void> {
   const resend = getResendClient();
   const from = getEmailFrom();
   const replyTo = getReplyTo();
@@ -90,43 +93,39 @@ async function sendWithRetry(args: { kind: SendKind; to: string; subject: string
     console.warn("[email] missing RESEND_API_KEY or EMAIL_FROM; skipping send to", args.to, "subject:", args.subject);
     await logEmailSendAttempt({
       provider: "resend",
-      template: args.kind,
+      kind: args.kind,
       to: args.to,
-      from,
-      replyTo,
       subject: args.subject,
-      html: args.html,
+      ok: false,
+      attempt: 0,
       error: "MISSING_RESEND_OR_FROM",
-      meta: { ok: false, attempt: 0 },
     });
     return;
   }
 
+  const maxAttempts = 3;
   let lastErr: unknown = null;
 
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const resp = await resend.emails.send({
         from,
         to: args.to,
         subject: args.subject,
         html: args.html,
-        replyTo: replyTo || undefined,
+        replyTo, // ✅ correct Resend SDK property
       });
+
+      const providerId = typeof resp?.data?.id === "string" ? resp.data.id : null;
 
       await logEmailSendAttempt({
         provider: "resend",
-        template: args.kind,
+        kind: args.kind,
         to: args.to,
-        from,
-        replyTo,
         subject: args.subject,
-        html: args.html,
-        meta: {
-          ok: true,
-          attempt,
-          provider_id: typeof resp?.data?.id === "string" ? resp.data.id : null,
-        },
+        ok: true,
+        attempt,
+        provider_id: providerId,
       });
 
       return;
@@ -135,18 +134,16 @@ async function sendWithRetry(args: { kind: SendKind; to: string; subject: string
 
       await logEmailSendAttempt({
         provider: "resend",
-        template: args.kind,
+        kind: args.kind,
         to: args.to,
-        from,
-        replyTo,
         subject: args.subject,
-        html: args.html,
+        ok: false,
+        attempt,
         error: errToString(e),
-        meta: { ok: false, attempt },
       });
 
-      if (attempt < 3) {
-        await sleep(300 * Math.pow(3, attempt - 1)); // 300ms, 900ms
+      if (attempt < maxAttempts) {
+        await sleep(300 * Math.pow(3, attempt - 1)); // 300ms, 900ms, 2700ms
       }
     }
   }
@@ -180,7 +177,12 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string, local
     </p>
   `;
 
-  await sendWithRetry({ kind: "password_reset", to, subject, html: wrapEmailHtml(locale, inner) });
+  await sendWithRetry({
+    kind: "password_reset",
+    to,
+    subject,
+    html: wrapEmailHtml(locale, inner),
+  });
 }
 
 export async function sendVerificationCodeEmail(to: string, code: string, locale: Locale): Promise<void> {
@@ -190,10 +192,6 @@ export async function sendVerificationCodeEmail(to: string, code: string, locale
       ? "أكمل إنشاء حسابك باستخدام رمز التحقق التالي:"
       : "Finish setting up your account with this verification code:";
   const expires = locale === "ar" ? "ينتهي خلال 10 دقائق." : "Expires in 10 minutes.";
-  const spamTip =
-    locale === "ar"
-      ? "إذا وصل البريد إلى الرسائل غير الهامة/Spam، اختر \"ليس بريدًا غير هام\" أو انقله إلى صندوق الوارد لضمان وصول تحديثات الطلبات."
-      : "If the email is in Junk/Spam, mark it as \"Not junk/Not spam\" and move it to Inbox so you don’t miss order updates.";
 
   const inner = `
     <p style="margin:0 0 14px;color:#1B1B1B;line-height:1.7;">${escapeHtml(intro)}</p>
@@ -201,11 +199,15 @@ export async function sendVerificationCodeEmail(to: string, code: string, locale
       ${escapeHtml(code)}
     </div>
     <p style="margin:14px 0 0;color:#555;line-height:1.7;">${escapeHtml(expires)}</p>
-    <p style="margin:10px 0 0;color:#555;line-height:1.7;">${escapeHtml(spamTip)}</p>
     <p style="margin:12px 0 0;color:#777;font-size:12px;line-height:1.6;">
       ${locale === "ar" ? "إذا لم تحاول إنشاء حساب، تجاهل هذه الرسالة." : "If you didn’t try to create an account, ignore this email."}
     </p>
   `;
 
-  await sendWithRetry({ kind: "verify_code", to, subject, html: wrapEmailHtml(locale, inner) });
+  await sendWithRetry({
+    kind: "verify_code",
+    to,
+    subject,
+    html: wrapEmailHtml(locale, inner),
+  });
 }
