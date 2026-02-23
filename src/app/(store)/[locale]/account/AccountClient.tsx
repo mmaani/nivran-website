@@ -28,36 +28,100 @@ function formatJod(v: string) {
   return `${n.toFixed(2)} JOD`;
 }
 
-function shortCartId(id: string) {
-  const s = String(id || "");
-  if (s.length <= 18) return s;
-  return `${s.slice(0, 10)}…${s.slice(-6)}`;
+function formatDate(d: string) {
+  const t = new Date(d);
+  if (Number.isNaN(t.getTime())) return d;
+  return t.toLocaleString();
 }
 
-function statusLabel(statusRaw: string) {
-  const s = String(statusRaw || "").trim().toUpperCase();
-  return s || "—";
+function statusLabel(s: string) {
+  const v = String(s || "").trim().toUpperCase();
+  return v || "—";
 }
 
-function statusTone(statusRaw: string): { bg: string; fg: string; bd: string } {
-  const s = statusLabel(statusRaw);
-  // keep it neutral + calm. Don’t use loud colors.
-  if (s.includes("DELIVER")) return { bg: "rgba(27,27,27,.06)", fg: "#1B1B1B", bd: "rgba(27,27,27,.18)" };
-  if (s.includes("SHIP")) return { bg: "rgba(201,164,106,.12)", fg: "#5a451f", bd: "rgba(201,164,106,.45)" };
-  if (s.includes("PROCESS")) return { bg: "rgba(27,27,27,.06)", fg: "#1B1B1B", bd: "rgba(27,27,27,.18)" };
-  if (s.includes("PENDING")) return { bg: "rgba(201,164,106,.10)", fg: "#5a451f", bd: "rgba(201,164,106,.35)" };
-  if (s.includes("FAIL") || s.includes("CANCEL")) return { bg: "rgba(0,0,0,.06)", fg: "#444", bd: "rgba(0,0,0,.18)" };
-  return { bg: "rgba(0,0,0,.05)", fg: "#333", bd: "rgba(0,0,0,.14)" };
+function pillStyleForStatus(): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "3px 10px",
+    borderRadius: 999,
+    border: "1px solid rgba(0,0,0,.12)",
+    background: "rgba(0,0,0,.02)",
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: ".02em",
+    whiteSpace: "nowrap",
+  };
+}
+
+function smallPill(text: string, tone: "neutral" | "gold" = "neutral"): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "2px 10px",
+    borderRadius: 999,
+    fontSize: 12,
+    border: tone === "gold" ? "1px solid rgba(201,164,106,.55)" : "1px solid rgba(0,0,0,.12)",
+    background: tone === "gold" ? "rgba(201,164,106,.10)" : "rgba(0,0,0,.02)",
+    whiteSpace: "nowrap",
+  };
 }
 
 export default function AccountClient({ locale }: { locale: string }) {
   const isAr = locale === "ar";
 
+  const t = useMemo(
+    () => ({
+      title: isAr ? "حسابي" : "My Account",
+      loading: isAr ? "جارٍ التحميل..." : "Loading...",
+      login: isAr ? "تسجيل الدخول" : "Login",
+      logout: isAr ? "تسجيل خروج" : "Logout",
+
+      verifyTitle: isAr ? "بريدك غير مُؤكَّد" : "Email not verified",
+      verifyBody: isAr
+        ? "أكد بريدك لتأمين حسابك واستلام تحديثات الطلبات."
+        : "Verify your email to secure your account and receive order updates.",
+      verifyBtn: isAr ? "تأكيد الآن" : "Verify now",
+
+      profileTitle: isAr ? "ملفك الشخصي" : "Your profile",
+      ordersTitle: isAr ? "الطلبات" : "Orders",
+
+      fullName: isAr ? "الاسم الكامل *" : "Full name *",
+      email: isAr ? "البريد الإلكتروني" : "Email",
+      verified: isAr ? "مؤكد" : "Verified",
+      unverified: isAr ? "غير مؤكد" : "Unverified",
+      phone: isAr ? "الهاتف *" : "Phone *",
+      country: isAr ? "الدولة" : "Country",
+      address: isAr ? "العنوان *" : "Address *",
+      city: isAr ? "المدينة" : "City",
+
+      save: isAr ? "حفظ" : "Save",
+      saveErr: isAr ? "تعذر حفظ البيانات." : "Could not save profile.",
+
+      ordersEmpty: isAr ? "لا توجد طلبات بعد." : "No orders yet.",
+      id: isAr ? "الرقم" : "ID",
+      cart: isAr ? "السلة" : "Cart",
+      status: isAr ? "الحالة" : "Status",
+      amount: isAr ? "المبلغ" : "Amount",
+      date: isAr ? "التاريخ" : "Date",
+      actions: isAr ? "إجراءات" : "Actions",
+      details: isAr ? "التفاصيل" : "Details",
+      comingSoon: isAr ? "قريباً" : "Coming soon",
+
+      promoTitle: isAr ? "العروض والخصومات" : "Promotions",
+      promoBody: isAr
+        ? "أكواد الخصم تُطبَّق أثناء الدفع. تابع صفحة المتجر للعروض الحالية."
+        : "Promo codes are applied during checkout. Check the shop for current offers.",
+      shop: isAr ? "الانتقال للمتجر" : "Go to shop",
+    }),
+    [isAr]
+  );
+
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -65,9 +129,11 @@ export default function AccountClient({ locale }: { locale: string }) {
   const [city, setCity] = useState("");
   const [country, setCountry] = useState("Jordan");
 
-  const canSave = useMemo(() => {
-    return !!fullName.trim() && !!phone.trim() && !!addressLine1.trim();
-  }, [fullName, phone, addressLine1]);
+  const canSave = useMemo(() => !!fullName.trim() && !!phone.trim() && !!addressLine1.trim(), [
+    fullName,
+    phone,
+    addressLine1,
+  ]);
 
   useEffect(() => {
     let alive = true;
@@ -104,35 +170,28 @@ export default function AccountClient({ locale }: { locale: string }) {
   }, [locale]);
 
   async function saveProfile() {
-    if (!canSave || saving) return;
     setErr(null);
-    setSaving(true);
-
-    try {
-      const res = await fetch("/api/auth/profile", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          full_name: fullName,
-          phone,
-          address_line1: addressLine1,
-          city,
-          country,
-        }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.ok) {
-        setErr(data?.error || (isAr ? "تعذر حفظ البيانات." : "Could not save profile."));
-        return;
-      }
-
-      const r = await fetch("/api/auth/profile", { cache: "no-store" });
-      const d = await r.json().catch(() => ({}));
-      if (r.ok && d?.ok) setProfile(d.profile);
-    } finally {
-      setSaving(false);
+    const res = await fetch("/api/auth/profile", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        full_name: fullName,
+        phone,
+        address_line1: addressLine1,
+        city,
+        country,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.ok) {
+      setErr(data?.error || t.saveErr);
+      return;
     }
+
+    // Refresh
+    const r = await fetch("/api/auth/profile", { cache: "no-store" });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d?.ok) setProfile(d.profile);
   }
 
   async function logout() {
@@ -140,110 +199,78 @@ export default function AccountClient({ locale }: { locale: string }) {
     window.location.href = `/${locale}/`;
   }
 
-  const pageDir = isAr ? "rtl" : "ltr";
-
-  if (loading) return <p className="muted">{isAr ? "جارٍ التحميل..." : "Loading..."}</p>;
+  if (loading) return <p className="muted">{t.loading}</p>;
 
   if (!profile) {
     return (
-      <div className="panel" dir={pageDir}>
+      <div className="panel">
         <p className="muted">{err || (isAr ? "يرجى تسجيل الدخول." : "Please login.")}</p>
         <a className="btn" href={`/${locale}/account/login`}>
-          {isAr ? "تسجيل الدخول" : "Login"}
+          {t.login}
         </a>
       </div>
     );
   }
 
-  const verified = !!profile.email_verified_at;
+  const dir = isAr ? "rtl" : "ltr";
 
   return (
-    <div dir={pageDir} style={{ padding: "1.2rem 0", maxWidth: 980, margin: "0 auto" }}>
+    <div dir={dir} style={{ padding: "1.2rem 0", maxWidth: 980, margin: "0 auto" }}>
       {/* Header */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-end",
-          gap: 12,
-          flexWrap: "wrap",
-          marginBottom: 14,
-        }}
-      >
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div>
           <h1 className="title" style={{ margin: 0 }}>
-            {isAr ? "حسابي" : "My Account"}
+            {t.title}
           </h1>
-          <div className="muted" style={{ marginTop: 6, lineHeight: 1.4 }}>
-            {isAr ? "إدارة بياناتك وطلباتك." : "Manage your profile and orders."}
+          <div className="muted" style={{ marginTop: 6 }}>
+            {profile.full_name ? profile.full_name : profile.email}
           </div>
         </div>
 
         <button className="btn btn-outline" onClick={logout}>
-          {isAr ? "تسجيل خروج" : "Logout"}
+          {t.logout}
         </button>
       </div>
 
-      {/* Verify banner (single, not duplicated) */}
-      {!verified ? (
-        <div className="panel" style={{ border: "1px solid rgba(201,164,106,.45)", marginBottom: 14 }}>
+      {/* Verification banner */}
+      {!profile.email_verified_at ? (
+        <div className="panel" style={{ marginTop: 14, border: "1px solid rgba(201,164,106,.45)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
             <div>
-              <div style={{ fontWeight: 800 }}>
-                {isAr ? "بريدك غير مُؤكَّد" : "Email not verified"}
-              </div>
-              <div className="muted" style={{ marginTop: 6, lineHeight: 1.5 }}>
-                {isAr
-                  ? "أكد بريدك لتأمين حسابك واستلام تحديثات الطلبات."
-                  : "Verify your email to secure your account and receive order updates."}
+              <div style={{ fontWeight: 800 }}>{t.verifyTitle}</div>
+              <div className="muted" style={{ marginTop: 4, lineHeight: 1.5 }}>
+                {t.verifyBody}
               </div>
             </div>
-
             <a className="btn" href={`/${locale}/account/verify?email=${encodeURIComponent(profile.email)}`}>
-              {isAr ? "تأكيد الآن" : "Verify now"}
+              {t.verifyBtn}
             </a>
           </div>
         </div>
-      ) : (
-        <div className="panel" style={{ marginBottom: 14 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <div>
-              <div style={{ fontWeight: 800 }}>{isAr ? "تم تأكيد البريد الإلكتروني" : "Email verified"}</div>
-              <div className="muted" style={{ marginTop: 6 }}>
-                {isAr ? "حسابك جاهز لاستلام تحديثات الطلبات." : "Your account can receive order updates."}
-              </div>
-            </div>
-            <span
-              style={{
-                fontSize: 12,
-                padding: "6px 10px",
-                borderRadius: 999,
-                border: "1px solid rgba(0,0,0,.12)",
-                background: "rgba(27,27,27,.04)",
-              }}
-            >
-              {isAr ? "مؤكد" : "Verified"}
-            </span>
-          </div>
-        </div>
-      )}
+      ) : null}
 
-      {/* Main layout */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.05fr .95fr", gap: 14, alignItems: "start" }}>
+      {/* Main grid */}
+      <div
+        style={{
+          marginTop: 14,
+          display: "grid",
+          gridTemplateColumns: "1fr",
+          gap: 14,
+        }}
+      >
         {/* Profile card */}
         <div className="panel">
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}>
-            <h3 style={{ margin: 0 }}>{isAr ? "ملفك الشخصي" : "Your profile"}</h3>
-            <div className="muted" style={{ fontSize: 12 }}>
-              {isAr ? "الحقول المطلوبة *" : "Required fields *"}
-            </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <h3 style={{ marginTop: 0, marginBottom: 0 }}>{t.profileTitle}</h3>
+
+            <span style={profile.email_verified_at ? smallPill(t.verified, "neutral") : smallPill(t.unverified, "gold")}>
+              {profile.email_verified_at ? t.verified : t.unverified}
+            </span>
           </div>
 
-          <div style={{ height: 10 }} />
-
-          <div className="grid-2" style={{ gap: 10 }}>
+          <div className="grid-2" style={{ gap: 10, marginTop: 12 }}>
             <label>
-              <span className="muted">{isAr ? "الاسم الكامل *" : "Full name *"}</span>
+              <span className="muted">{t.fullName}</span>
               <input
                 className="input"
                 value={fullName}
@@ -253,26 +280,12 @@ export default function AccountClient({ locale }: { locale: string }) {
             </label>
 
             <label>
-              <span className="muted">
-                {isAr ? "البريد الإلكتروني" : "Email"}{" "}
-                <span
-                  style={{
-                    marginInlineStart: 8,
-                    fontSize: 12,
-                    padding: "2px 8px",
-                    borderRadius: 999,
-                    border: verified ? "1px solid rgba(0,0,0,.12)" : "1px solid rgba(201,164,106,.45)",
-                    background: verified ? "rgba(27,27,27,.04)" : "rgba(201,164,106,.10)",
-                  }}
-                >
-                  {verified ? (isAr ? "مؤكد" : "Verified") : isAr ? "غير مؤكد" : "Unverified"}
-                </span>
-              </span>
+              <span className="muted">{t.email}</span>
               <input className="input" value={profile.email} readOnly />
             </label>
 
             <label>
-              <span className="muted">{isAr ? "الهاتف *" : "Phone *"}</span>
+              <span className="muted">{t.phone}</span>
               <input
                 className="input"
                 value={phone}
@@ -282,17 +295,12 @@ export default function AccountClient({ locale }: { locale: string }) {
             </label>
 
             <label>
-              <span className="muted">{isAr ? "الدولة" : "Country"}</span>
-              <input
-                className="input"
-                value={country}
-                onChange={(e) => setCountry(e.target.value)}
-                placeholder={isAr ? "الدولة" : "Country"}
-              />
+              <span className="muted">{t.country}</span>
+              <input className="input" value={country} onChange={(e) => setCountry(e.target.value)} placeholder={t.country} />
             </label>
 
             <label style={{ gridColumn: "1 / -1" }}>
-              <span className="muted">{isAr ? "العنوان *" : "Address *"}</span>
+              <span className="muted">{t.address}</span>
               <input
                 className="input"
                 value={addressLine1}
@@ -302,131 +310,98 @@ export default function AccountClient({ locale }: { locale: string }) {
             </label>
 
             <label style={{ gridColumn: "1 / -1" }}>
-              <span className="muted">{isAr ? "المدينة" : "City"}</span>
-              <input
-                className="input"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                placeholder={isAr ? "المدينة" : "City"}
-              />
+              <span className="muted">{t.city}</span>
+              <input className="input" value={city} onChange={(e) => setCity(e.target.value)} placeholder={t.city} />
             </label>
           </div>
 
           {err ? <p style={{ color: "crimson", marginTop: 10, marginBottom: 0 }}>{err}</p> : null}
 
-          <div style={{ display: "flex", gap: 10, marginTop: 12, alignItems: "center" }}>
-            <button className={"btn" + (!canSave ? " btn-disabled" : "")} disabled={!canSave || saving} onClick={saveProfile}>
-              {saving ? (isAr ? "جارٍ الحفظ…" : "Saving…") : isAr ? "حفظ" : "Save"}
+          <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+            <button className={"btn" + (!canSave ? " btn-disabled" : "")} disabled={!canSave} onClick={saveProfile}>
+              {t.save}
             </button>
-            <span className="muted" style={{ fontSize: 12 }}>
-              {isAr ? "سيتم تحديث بياناتك فوراً." : "Your details update immediately."}
-            </span>
           </div>
+        </div>
+
+        {/* Promotions (simple info card for now) */}
+        <div className="panel">
+          <h3 style={{ marginTop: 0, marginBottom: 8 }}>{t.promoTitle}</h3>
+          <p className="muted" style={{ marginTop: 0, lineHeight: 1.6 }}>
+            {t.promoBody}
+          </p>
+          <a className="btn btn-outline" href={`/${locale}/product`}>
+            {t.shop}
+          </a>
         </div>
 
         {/* Orders card */}
         <div className="panel">
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}>
-            <h3 style={{ margin: 0 }}>{isAr ? "الطلبات" : "Orders"}</h3>
-            <div className="muted" style={{ fontSize: 12 }}>
-              {orders.length ? `${orders.length}` : isAr ? "لا يوجد" : "None"}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <h3 style={{ marginTop: 0, marginBottom: 0 }}>{t.ordersTitle}</h3>
+            <div className="muted" style={{ fontSize: 13 }}>
+              {orders.length ? `${orders.length}` : "0"}
             </div>
           </div>
 
-          <div style={{ height: 10 }} />
-
           {orders.length ? (
-            <div style={{ overflowX: "auto" }}>
-              <table
-                className="table"
-                style={{
-                  width: "100%",
-                  borderCollapse: "separate",
-                  borderSpacing: 0,
-                  fontSize: 13,
-                }}
-              >
+            <div style={{ overflowX: "auto", marginTop: 12 }}>
+              <table className="table" style={{ minWidth: 720 }}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: "start", padding: "10px 10px" }}>{isAr ? "الرقم" : "ID"}</th>
-                    <th style={{ textAlign: "start", padding: "10px 10px" }}>{isAr ? "السلة" : "Cart"}</th>
-                    <th style={{ textAlign: "start", padding: "10px 10px" }}>{isAr ? "الحالة" : "Status"}</th>
-                    <th style={{ textAlign: "start", padding: "10px 10px" }}>{isAr ? "المبلغ" : "Amount"}</th>
-                    <th style={{ textAlign: "start", padding: "10px 10px" }}>{isAr ? "التاريخ" : "Date"}</th>
+                    <th style={{ width: 70 }}>{t.id}</th>
+                    <th style={{ width: 260 }}>{t.cart}</th>
+                    <th style={{ width: 170 }}>{t.status}</th>
+                    <th style={{ width: 140 }}>{t.amount}</th>
+                    <th style={{ width: 220 }}>{t.date}</th>
+                    <th style={{ width: 120 }}>{t.actions}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {orders.map((o) => {
-                    const tone = statusTone(o.status);
-                    return (
-                      <tr key={o.id} style={{ borderTop: "1px solid rgba(0,0,0,.06)" }}>
-                        <td style={{ padding: "10px 10px", whiteSpace: "nowrap" }}>{o.id}</td>
+                  {orders.map((o) => (
+                    <tr key={o.id}>
+                      <td style={{ fontWeight: 800 }}>{o.id}</td>
 
-                        <td style={{ padding: "10px 10px", maxWidth: 220 }}>
-                          <span
-                            title={o.cart_id}
-                            style={{
-                              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-                              fontSize: 12,
-                              color: "#333",
-                            }}
-                          >
-                            {shortCartId(o.cart_id)}
-                          </span>
-                        </td>
+                      <td style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: 12 }}>
+                        {o.cart_id}
+                      </td>
 
-                        <td style={{ padding: "10px 10px", whiteSpace: "nowrap" }}>
-                          <span
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 6,
-                              padding: "4px 10px",
-                              borderRadius: 999,
-                              border: `1px solid ${tone.bd}`,
-                              background: tone.bg,
-                              color: tone.fg,
-                              fontSize: 12,
-                              fontWeight: 700,
-                            }}
-                          >
-                            {statusLabel(o.status)}
-                          </span>
-                        </td>
+                      <td>
+                    <span style={pillStyleForStatus()}>{statusLabel(o.status)}</span>                      </td>
 
-                        <td style={{ padding: "10px 10px", whiteSpace: "nowrap", fontWeight: 700 }}>
-                          {formatJod(o.amount_jod)}
-                        </td>
+                      <td style={{ fontWeight: 700 }}>{formatJod(o.amount_jod)}</td>
 
-                        <td style={{ padding: "10px 10px", whiteSpace: "nowrap" }}>
-                          <span className="muted">{new Date(o.created_at).toLocaleString()}</span>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                      <td className="muted" style={{ fontSize: 13 }}>
+                        {formatDate(o.created_at)}
+                      </td>
+
+                      {/* Order details: coming soon */}
+                      <td>
+                        <button
+                          className="btn btn-outline"
+                          disabled
+                          title={t.comingSoon}
+                          style={{ padding: ".35rem .65rem", borderRadius: 10 }}
+                        >
+                          {t.details}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
 
-              <div className="muted" style={{ fontSize: 12, marginTop: 10, lineHeight: 1.5 }}>
-                {isAr
-                  ? "لمشاهدة تفاصيل الطلب (قريباً): سنضيف صفحة تفاصيل لكل طلب."
-                  : "Order details (coming soon): we can add a details page per order."}
+              <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>
+                {isAr ? "صفحة تفاصيل الطلب قيد الإضافة (قريباً)." : "Order details page is coming soon."}
               </div>
             </div>
           ) : (
-            <div className="muted" style={{ lineHeight: 1.6 }}>
-              {isAr ? "لا توجد طلبات بعد." : "No orders yet."}
-            </div>
+            <p className="muted" style={{ marginTop: 10 }}>
+              {t.ordersEmpty}
+            </p>
           )}
         </div>
       </div>
-
-      {/* Responsive tweak without CSS file */}
-      <style>{`
-        @media (max-width: 920px) {
-          .account-grid { grid-template-columns: 1fr !important; }
-        }
-      `}</style>
     </div>
   );
 }
