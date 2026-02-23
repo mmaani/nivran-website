@@ -38,9 +38,21 @@ export async function GET(req: Request) {
   if (!profile) return Response.json({ ok: false }, { status: 401 });
 
   const hasTotalJod = await hasColumn("orders", "total_jod");
+  const hasSubtotalJod = await hasColumn("orders", "subtotal_jod");
+  const hasShippingJod = await hasColumn("orders", "shipping_jod");
+  const hasDiscountJod = await hasColumn("orders", "discount_jod");
+  const hasPromoCode = await hasColumn("orders", "promo_code");
+  const hasPromoRuleTitle = await hasColumn("orders", "promo_rule_title");
+
   const or = await db.query(
     `select id, cart_id, status,
+            ${hasSubtotalJod ? "subtotal_jod" : "null::numeric"}::text as subtotal_jod,
+            ${hasShippingJod ? "shipping_jod" : "null::numeric"}::text as shipping_jod,
+            ${hasDiscountJod ? "discount_jod" : "null::numeric"}::text as discount_jod,
+            ${hasTotalJod ? "coalesce(total_jod, amount)" : "amount"}::text as total_jod,
             ${hasTotalJod ? "coalesce(total_jod, amount)" : "amount"}::text as amount_jod,
+            ${hasPromoCode ? "promo_code" : "null::text"} as promo_code,
+            ${hasPromoRuleTitle ? "promo_rule_title" : "null::text"} as promo_rule_title,
             created_at::text as created_at
        from orders
       where customer_id=$1
