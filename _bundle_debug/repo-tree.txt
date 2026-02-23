@@ -1,0 +1,368 @@
+.
+├── .bak_20260213_053517
+│   ├── callback.route.ts.bak
+│   ├── checkout.page.tsx.bak
+│   ├── db.ts.bak
+│   ├── devcontainer.json.bak
+│   ├── initiate.route.ts.bak
+│   ├── layout.tsx.bak
+│   ├── orders.route.ts.bak
+│   ├── paytabs.ts.bak
+│   └── schema.sql.bak
+├── .bak_20260213_053538
+│   ├── callback.route.ts.bak
+│   ├── checkout.page.tsx.bak
+│   ├── db.ts.bak
+│   ├── devcontainer.json.bak
+│   ├── initiate.route.ts.bak
+│   ├── layout.tsx.bak
+│   ├── orders.route.ts.bak
+│   ├── paytabs.ts.bak
+│   └── schema.sql.bak
+├── _bundle_debug
+│   └── repo-tree.txt
+├── db
+│   └── migrations
+│       ├── core
+│       │   └── 001_schema.sql
+│       ├── patches
+│       │   ├── 002_paytabs_callbacks.sql
+│       │   ├── 003_paytabs_patch.sql
+│       │   ├── 004_paytabs_callbacks_patch.sql
+│       │   ├── 005_cart_tables.sql
+│       │   ├── 006_account_checkout_patch.sql
+│       │   ├── 007_admin_paytabs_inbox_hardening.sql
+│       │   ├── 008_promo_checkout_patch.sql
+│       │   ├── 009_discount_mode_constraints.sql
+│       │   ├── 010_promotions_targeting_and_code_nullability.sql
+│       │   ├── 011_variants_tags_promotions_orders.sql
+│       │   ├── 012_free_shipping_default_75.sql
+│       │   └── 013_neon_catalog_recovery_bundle.sql
+│       └── README.md
+├── .devcontainer
+│   └── devcontainer.json
+├── .env
+├── .env.example
+├── .env.local
+├── .env.preview.local
+├── .env.production.local
+├── .env.pulled.preview.local
+├── .eslintrc.json
+├── .github
+│   ├── pull_request_template.md
+│   └── workflows
+│       └── ci-guard.yml
+├── .gitignore
+├── middleware.ts
+├── neon_audit_report.txt
+├── neon_columns.tsv
+├── neon_dump
+│   ├── neon_schema_dump.json
+│   └── neon_schema_dump.txt
+├── neon_export_20260216_203022
+│   ├── neon_columns.tsv
+│   ├── neon_indexes.tsv
+│   ├── neon_schema_dump.sql
+│   ├── neon_tables.tsv
+│   ├── sample_contact_submissions.tsv
+│   ├── sample_orders.tsv
+│   └── sample_paytabs_callbacks.tsv
+├── neon_indexes.tsv
+├── neon-schema.sql
+├── next.config.mjs
+├── next-env.d.ts
+├── nivran_fix_cart_checkout.sh
+├── nivran_one_go_apply.sh
+├── package.json
+├── paytabs_callbacks_sample.txt
+├── pnpm-lock.yaml
+├── pnpm-workspace.yaml
+├── postcss.config.js
+├── public
+│   ├── brand
+│   │   └── logo.svg
+│   ├── .keep
+│   └── products
+│       ├── bloom-1.svg
+│       ├── bloom-2.svg
+│       ├── calm-1.svg
+│       ├── calm-2.svg
+│       ├── calm-3.svg
+│       ├── calm-4.svg
+│       ├── calm-5.svg
+│       ├── care-1.svg
+│       ├── noir-1.svg
+│       ├── noir-2.svg
+│       └── noir-3.svg
+├── README.md
+├── recover-work-branch.sh
+├── REVIEW_CHECKPOINT.md
+├── REVIEW_NEXT_STEPS.md
+├── scripts
+│   ├── check-catalog-api-resilience-contract.mjs
+│   ├── check-discount-mode-contract.mjs
+│   ├── check-duplicate-type-aliases.mjs
+│   ├── check-merge-markers.mjs
+│   ├── check-product-catalog-fallback-contract.mjs
+│   ├── check-readme-runbook-contract.mjs
+│   ├── check-shipping-default-contract.mjs
+│   ├── find-any.sh
+│   ├── load_env.sh
+│   ├── neon-dump-schema.mjs
+│   ├── neon-verify.sql
+│   ├── paytabs-uat.sh
+│   ├── recover-work-branch.sh
+│   ├── run-readme-checklist.sh
+│   ├── show-full-package-diff.sh
+│   ├── verify-preview-paytabs.sh
+│   └── verify-pr.sh
+├── src
+│   ├── app
+│   │   ├── admin
+│   │   │   ├── admin.css
+│   │   │   ├── catalog
+│   │   │   │   ├── page.module.css
+│   │   │   │   └── page.tsx
+│   │   │   ├── _components
+│   │   │   │   ├── adminClient.ts
+│   │   │   │   ├── AdminShell.tsx
+│   │   │   │   └── RequireAdmin.tsx
+│   │   │   ├── customers
+│   │   │   │   └── page.tsx
+│   │   │   ├── inbox
+│   │   │   │   ├── InboxClient.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── inventory
+│   │   │   │   ├── page.tsx
+│   │   │   │   └── ui.tsx
+│   │   │   ├── layout.tsx
+│   │   │   ├── login
+│   │   │   │   ├── LoginClient.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── orders
+│   │   │   │   ├── [id]
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   └── ui.tsx
+│   │   │   ├── page.tsx
+│   │   │   └── staff
+│   │   │       └── page.tsx
+│   │   ├── api
+│   │   │   ├── admin
+│   │   │   │   ├── catalog
+│   │   │   │   │   ├── categories
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   ├── product-images
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   ├── products
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   ├── promotions
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   ├── redirects.ts
+│   │   │   │   │   ├── settings
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── variants
+│   │   │   │   │       └── route.ts
+│   │   │   │   ├── customers
+│   │   │   │   │   ├── export
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── inbox
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── inventory
+│   │   │   │   │   └── reconcile
+│   │   │   │   │       └── route.ts
+│   │   │   │   ├── lang
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── login
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── logout
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── orders
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── order-status
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── staff
+│   │   │   │       └── route.ts
+│   │   │   ├── auth
+│   │   │   │   ├── forgot-password
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── login
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── logout
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── profile
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── reset-password
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── signup
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── verify
+│   │   │   │       ├── confirm
+│   │   │   │       │   └── route.ts
+│   │   │   │       └── start
+│   │   │   │           └── route.ts
+│   │   │   ├── cart
+│   │   │   │   ├── route.ts
+│   │   │   │   └── sync
+│   │   │   │       └── route.ts
+│   │   │   ├── catalog
+│   │   │   │   ├── product
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── product-by-slug
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── product-image
+│   │   │   │       └── [id]
+│   │   │   │           └── route.ts
+│   │   │   ├── contact
+│   │   │   │   └── route.ts
+│   │   │   ├── health
+│   │   │   │   └── route.ts
+│   │   │   ├── newsletter
+│   │   │   │   └── route.ts
+│   │   │   ├── orders
+│   │   │   │   ├── route.ts
+│   │   │   │   └── status
+│   │   │   │       └── route.ts
+│   │   │   ├── order-status
+│   │   │   │   └── route.ts
+│   │   │   ├── paytabs
+│   │   │   │   ├── callback
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── initiate
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── query
+│   │   │   │       └── route.ts
+│   │   │   ├── pricing
+│   │   │   │   └── quote
+│   │   │   │       └── route.ts
+│   │   │   ├── promotions
+│   │   │   │   └── validate
+│   │   │   │       └── route.ts
+│   │   │   └── shipping-config
+│   │   │       └── route.ts
+│   │   ├── globals.css
+│   │   ├── icon.svg
+│   │   ├── layout.tsx
+│   │   ├── page.tsx
+│   │   ├── robots.ts
+│   │   ├── sitemap.ts
+│   │   ├── (store)
+│   │   │   ├── en
+│   │   │   │   └── checkout
+│   │   │   │       └── result
+│   │   │   │           └── page.tsx
+│   │   │   └── [locale]
+│   │   │       ├── account
+│   │   │       │   ├── AccountClient.tsx
+│   │   │       │   ├── forgot-password
+│   │   │       │   │   └── page.tsx
+│   │   │       │   ├── login
+│   │   │       │   │   └── page.tsx
+│   │   │       │   ├── page.tsx
+│   │   │       │   ├── reset-password
+│   │   │       │   │   └── page.tsx
+│   │   │       │   ├── signup
+│   │   │       │   │   └── page.tsx
+│   │   │       │   └── verify
+│   │   │       │       └── page.tsx
+│   │   │       ├── cart
+│   │   │       │   ├── CartClient.tsx
+│   │   │       │   └── page.tsx
+│   │   │       ├── checkout
+│   │   │       │   ├── CheckoutClient.tsx
+│   │   │       │   ├── page.tsx
+│   │   │       │   └── result
+│   │   │       │       └── page.tsx
+│   │   │       ├── compliance
+│   │   │       │   └── page.tsx
+│   │   │       ├── contact
+│   │   │       │   ├── ContactForm.tsx
+│   │   │       │   └── page.tsx
+│   │   │       ├── faq
+│   │   │       │   ├── FAQAccordion.tsx
+│   │   │       │   └── page.tsx
+│   │   │       ├── layout.tsx
+│   │   │       ├── page.tsx
+│   │   │       ├── policies
+│   │   │       │   ├── compliance
+│   │   │       │   │   └── page.tsx
+│   │   │       │   ├── privacy
+│   │   │       │   │   └── page.tsx
+│   │   │       │   ├── returns
+│   │   │       │   │   └── page.tsx
+│   │   │       │   ├── shipping
+│   │   │       │   │   └── page.tsx
+│   │   │       │   └── terms
+│   │   │       │       └── page.tsx
+│   │   │       ├── privacy
+│   │   │       │   └── page.tsx
+│   │   │       ├── product
+│   │   │       │   ├── page.tsx
+│   │   │       │   ├── ProductCatalogClient.tsx
+│   │   │       │   ├── ProductGridClient.tsx
+│   │   │       │   └── [slug]
+│   │   │       │       ├── page.module.css
+│   │   │       │       ├── page.tsx
+│   │   │       │       ├── ProductImageGallery.tsx
+│   │   │       │       └── ProductPurchasePanel.tsx
+│   │   │       ├── returns
+│   │   │       │   └── page.tsx
+│   │   │       ├── shipping
+│   │   │       │   └── page.tsx
+│   │   │       ├── story
+│   │   │       │   └── page.tsx
+│   │   │       └── terms
+│   │   │           └── page.tsx
+│   │   ├── styleguide
+│   │   │   └── page.tsx
+│   │   └── ui
+│   │       └── fonts.ts
+│   ├── components
+│   │   ├── AddToCartButton.tsx
+│   │   ├── CartHeaderIcon.tsx
+│   │   ├── CartHydrator.tsx
+│   │   ├── SafeImg.tsx
+│   │   ├── site
+│   │   │   ├── Footer.tsx
+│   │   │   ├── Header.tsx
+│   │   │   └── LocaleSwitchLink.tsx
+│   │   └── ui
+│   │       ├── Button.tsx
+│   │       ├── Card.tsx
+│   │       └── Input.tsx
+│   ├── lib
+│   │   ├── adminCustomers.ts
+│   │   ├── admin-lang.ts
+│   │   ├── admin-page.ts
+│   │   ├── cartStore.server.ts
+│   │   ├── cartStore.ts
+│   │   ├── catalogFallback.ts
+│   │   ├── catalog.ts
+│   │   ├── customerAuth.ts
+│   │   ├── dbSchema.ts
+│   │   ├── db.ts
+│   │   ├── emailLog.ts
+│   │   ├── email.ts
+│   │   ├── guards.ts
+│   │   ├── http-client.ts
+│   │   ├── identity.ts
+│   │   ├── inbox.ts
+│   │   ├── locale.ts
+│   │   ├── ordersSchema.ts
+│   │   ├── orders.ts
+│   │   ├── paytabs.ts
+│   │   ├── pricing.ts
+│   │   ├── promotions.ts
+│   │   ├── rateLimit.ts
+│   │   ├── safe.ts
+│   │   ├── shipping.ts
+│   │   ├── siteContent.ts
+│   │   └── stock.ts
+│   └── middleware.ts
+├── tailwind.config.ts
+├── tsconfig.json
+├── verify-preview-paytabs.sh
+└── verify-pr.sh
+
+117 directories, 249 files
