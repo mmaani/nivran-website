@@ -1024,3 +1024,53 @@
     align-items: center;
   }
 }
+/* =========================================================
+   Mobile hard fix: prevent page-level horizontal overflow
+   Root cause: grid/flex children default min-width:auto → tables push layout wider than viewport
+   ========================================================= */
+
+/* Allow grid items to shrink (critical for table wrappers) */
+.admin-grid > *,
+.admin-page > *,
+.admin-dashboard-columns > *,
+.admin-kpi-grid > * {
+  min-width: 0;
+}
+
+/* Allow flex children to shrink too */
+.admin-row > * {
+  min-width: 0;
+}
+
+/* Ensure wrappers never exceed viewport width */
+.admin-card,
+.admin-table-wrap,
+.table-wrap,
+.admin-scroll {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Avoid page-wide horizontal scroll (table should scroll inside wrapper only) */
+.admin-content {
+  overflow-x: hidden;
+}
+
+/* On very small screens, reduce forced minimum width a bit */
+@media (max-width: 640px) {
+  .admin-table,
+  .table,
+  .admin-scroll table {
+    min-width: 680px; /* was 760px - still readable, less overflow pressure */
+  }
+
+  /* Make the scroll hint always visible on mobile */
+  .admin-table-wrap::before,
+  .admin-table-wrap::after,
+  .table-wrap::before,
+  .table-wrap::after,
+  .admin-scroll::before,
+  .admin-scroll::after {
+    opacity: 1;
+  }
+}
