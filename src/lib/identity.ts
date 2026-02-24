@@ -325,26 +325,31 @@ export async function createCustomer(args: {
 
 export async function createCustomerSession(customerId: number, token: string): Promise<void> {
   await ensureIdentityTables();
+
+  if (!token) throw new Error("createCustomerSession: token is required");
+
   const tokenHash = sha256Hex(token);
   const expiresAt = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(); // 30 days
 
   const hasTokenHash = await hasColumn("customer_sessions", "token_hash");
+
+  // ✅ Always store token (because your DB token is NOT NULL in production)
+  // ✅ Also store token_hash if the column exists
   if (hasTokenHash) {
     await db.query(
       `insert into customer_sessions (customer_id, token, token_hash, expires_at)
-       values ($1, null, $2, $3)`,
-      [customerId, tokenHash, expiresAt]
+       values ($1, $2, $3, $4)`,
+      [customerId, token, tokenHash, expiresAt],
     );
     return;
   }
 
   await db.query(
     `insert into customer_sessions (customer_id, token, expires_at)
-     values ($1,$2,$3)`,
-    [customerId, token, expiresAt]
+     values ($1, $2, $3)`,
+    [customerId, token, expiresAt],
   );
 }
-
 export async function revokeCustomerSessionByToken(token: string): Promise<void> {
   await ensureIdentityTables();
   const tokenHash = sha256Hex(token);
