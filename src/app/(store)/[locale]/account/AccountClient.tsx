@@ -11,8 +11,6 @@ type Profile = {
   city: string | null;
   country: string | null;
   email_verified_at: string | null;
-  promotions?: unknown[] | null;
-  orders?: unknown[] | null;
 };
 
 type OrderRow = {
@@ -37,24 +35,18 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
 
-function smallPill(label: string, tone: "neutral" | "gold") {
-  return {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 6,
-    borderRadius: 999,
-    padding: "6px 10px",
-    fontSize: 12,
-    border: "1px solid rgba(0,0,0,.08)",
-    background: tone === "gold" ? "rgba(201,164,106,.16)" : "rgba(0,0,0,.04)",
-    color: "rgba(0,0,0,.78)",
-    whiteSpace: "nowrap" as const,
-  };
-}
-
 function moneyOrDash(v: string | null | undefined) {
   if (!v) return "—";
   return `${v} JOD`;
+}
+
+function statusDot(status: string) {
+  const s = String(status || "").toUpperCase();
+  if (s.includes("PAID") || s.includes("DELIVERED")) return { background: "rgba(26, 138, 81, .55)" };
+  if (s.includes("SHIPPED")) return { background: "rgba(0, 105, 170, .55)" };
+  if (s.includes("PENDING")) return { background: "rgba(201, 164, 106, .75)" };
+  if (s.includes("FAILED") || s.includes("CANCEL")) return { background: "rgba(180, 34, 44, .55)" };
+  return { background: "rgba(20,20,20,.35)" };
 }
 
 export default function AccountClient({ locale }: { locale: string }) {
@@ -69,27 +61,36 @@ export default function AccountClient({ locale }: { locale: string }) {
       unverified: isAr ? "غير موثق" : "Unverified",
       profileTitle: isAr ? "ملفك الشخصي" : "Your profile",
       ordersTitle: isAr ? "الطلبات" : "Orders",
+
       fullName: isAr ? "الاسم الكامل *" : "Full name *",
       email: isAr ? "البريد الإلكتروني" : "Email",
       phone: isAr ? "الهاتف *" : "Phone *",
       country: isAr ? "الدولة" : "Country",
       address: isAr ? "العنوان *" : "Address *",
       city: isAr ? "المدينة" : "City",
+
       save: isAr ? "حفظ" : "Save",
+      saving: isAr ? "جارٍ الحفظ..." : "Saving...",
+      saved: isAr ? "تم الحفظ" : "Saved",
       saveErr: isAr ? "تعذر الحفظ الآن" : "Unable to save right now",
+
       ordersEmpty: isAr ? "لا توجد طلبات بعد." : "No orders yet.",
       view: isAr ? "عرض" : "View",
       status: isAr ? "الحالة" : "Status",
       created: isAr ? "التاريخ" : "Created",
       amount: isAr ? "المبلغ" : "Amount",
       total: isAr ? "الإجمالي" : "Total",
-      discountsApplied: isAr ? "الخصومات المطبقة" : "Discounts applied",
+      discountsApplied: isAr ? "الخصومات" : "Discounts",
       promoCode: isAr ? "الكود" : "Code",
       discount: isAr ? "قيمة الخصم" : "Discount",
       source: isAr ? "المصدر" : "Source",
-      none: isAr ? "—" : "—",
+      none: "—",
+
       logout: isAr ? "تسجيل الخروج" : "Logout",
       emailLocked: isAr ? "لا يمكن تغيير البريد الإلكتروني" : "Email cannot be changed",
+
+      login: isAr ? "تسجيل الدخول" : "Login",
+      cannotLoad: isAr ? "تعذر تحميل الحساب. الرجاء تسجيل الدخول من جديد." : "Unable to load account. Please log in again.",
     };
   }, [isAr]);
 
@@ -139,8 +140,6 @@ export default function AccountClient({ locale }: { locale: string }) {
       const dOrders: unknown = await rOrders.json().catch(() => null);
       if (rOrders.ok && isObject(dOrders) && dOrders.ok === true && Array.isArray(dOrders.orders)) {
         setOrders(dOrders.orders as OrderRow[]);
-      } else if (Array.isArray((data as Record<string, unknown>).orders)) {
-        setOrders((data as Record<string, unknown>).orders as OrderRow[]);
       } else {
         setOrders([]);
       }
@@ -152,13 +151,12 @@ export default function AccountClient({ locale }: { locale: string }) {
   }, []);
 
   useEffect(() => {
-    fetchAll().catch(() => {
-      setLoading(false);
-    });
+    fetchAll().catch(() => setLoading(false));
   }, [fetchAll]);
 
   async function saveProfile() {
     if (!canSave) return;
+
     setErr(null);
     setProfileSaved(false);
     setSavingProfile(true);
@@ -200,77 +198,52 @@ export default function AccountClient({ locale }: { locale: string }) {
     window.location.href = `/${locale}/`;
   }
 
-  if (loading) return <p className="muted">{t.loading}</p>;
+  if (loading) return <div className="account-shell"><p className="muted">{t.loading}</p></div>;
 
   if (!profile) {
     return (
-      <div style={{ padding: "1.2rem 0", maxWidth: 980, margin: "0 auto" }}>
+      <div className="account-shell">
         <div className="panel">
-          <h1 className="title" style={{ marginTop: 0 }}>
-            {t.title}
-          </h1>
-          <p className="muted" style={{ marginTop: 8, lineHeight: 1.6 }}>
-            {isAr ? "تعذر تحميل الحساب. الرجاء تسجيل الدخول من جديد." : "Unable to load account. Please log in again."}
-          </p>
-          <a className="btn" href={`/${locale}/account/login`}>
-            {isAr ? "تسجيل الدخول" : "Login"}
-          </a>
+          <h1 className="title account-title">{t.title}</h1>
+          <p className="muted" style={{ marginTop: 8, lineHeight: 1.6 }}>{t.cannotLoad}</p>
+          <a className="btn primary" href={`/${locale}/account/login`}>{t.login}</a>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: "1.2rem 0", maxWidth: 980, margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+    <div className="account-shell">
+      <div className="account-header">
         <div>
-          <h1 className="title" style={{ marginTop: 0, marginBottom: 6 }}>
-            {t.title}
-          </h1>
-          <p className="muted" style={{ marginTop: 0 }}>
-            {t.subtitle}
-          </p>
+          <h1 className="title account-title">{t.title}</h1>
+          <p className="account-subtitle">{t.subtitle}</p>
         </div>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button className="btn btn-outline" type="button" onClick={logout}>
-            {t.logout}
-          </button>
+        <div className="account-actions">
+          <button className="btn btn-outline" type="button" onClick={logout}>{t.logout}</button>
         </div>
       </div>
 
-      <div
-        style={{
-          marginTop: 14,
-          display: "grid",
-          gridTemplateColumns: "1fr",
-          gap: 14,
-        }}
-      >
-        {/* Profile card */}
+      <div className="account-grid">
+        {/* Profile */}
         <div className="panel">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-            <h3 style={{ marginTop: 0, marginBottom: 0 }}>{t.profileTitle}</h3>
-
-            <span style={profile.email_verified_at ? smallPill(t.verified, "neutral") : smallPill(t.unverified, "gold")}>
+          <div className="card-head">
+            <h3>{t.profileTitle}</h3>
+            <span className="chip">
+              <span className="chip-dot" style={profile.email_verified_at ? { background: "rgba(26, 138, 81, .55)" } : { background: "rgba(201, 164, 106, .75)" }} />
               {profile.email_verified_at ? t.verified : t.unverified}
             </span>
           </div>
 
-          <div className="grid-2" style={{ gap: 10, marginTop: 12 }}>
-            <label>
-              <span className="muted">{t.fullName}</span>
-              <input
-                className="input"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder={isAr ? "مثال: محمد المعاني" : "e.g. Mohammad Maani"}
-                autoComplete="name"
-              />
+          <div className="grid-2" style={{ gap: 10 }}>
+            <label className="field">
+              <span className="field-label">{t.fullName}</span>
+              <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" />
             </label>
 
-            <label>
-              <span className="muted">{t.email}</span>
+            <label className="field">
+              <span className="field-label">{t.email}</span>
               <input
                 className="input"
                 value={profile.email}
@@ -281,66 +254,51 @@ export default function AccountClient({ locale }: { locale: string }) {
                 autoComplete="email"
                 style={{ opacity: 0.75, cursor: "not-allowed" }}
               />
+              <span className="field-help">{t.emailLocked}</span>
             </label>
 
-            <label>
-              <span className="muted">{t.phone}</span>
-              <input
-                className="input"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder={isAr ? "رقم الهاتف" : "Phone number"}
-                autoComplete="tel"
-              />
+            <label className="field">
+              <span className="field-label">{t.phone}</span>
+              <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" />
             </label>
 
-            <label>
-              <span className="muted">{t.country}</span>
-              <input className="input" value={country} onChange={(e) => setCountry(e.target.value)} placeholder={t.country} autoComplete="country-name" />
+            <label className="field">
+              <span className="field-label">{t.country}</span>
+              <input className="input" value={country} onChange={(e) => setCountry(e.target.value)} autoComplete="country-name" />
             </label>
 
-            <label style={{ gridColumn: "1 / -1" }}>
-              <span className="muted">{t.address}</span>
-              <input
-                className="input"
-                value={addressLine1}
-                onChange={(e) => setAddressLine1(e.target.value)}
-                placeholder={isAr ? "العنوان" : "Address line"}
-                autoComplete="street-address"
-              />
+            <label className="field" style={{ gridColumn: "1 / -1" }}>
+              <span className="field-label">{t.address}</span>
+              <input className="input" value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} autoComplete="street-address" />
             </label>
 
-            <label style={{ gridColumn: "1 / -1" }}>
-              <span className="muted">{t.city}</span>
-              <input className="input" value={city} onChange={(e) => setCity(e.target.value)} placeholder={t.city} autoComplete="address-level2" />
+            <label className="field" style={{ gridColumn: "1 / -1" }}>
+              <span className="field-label">{t.city}</span>
+              <input className="input" value={city} onChange={(e) => setCity(e.target.value)} autoComplete="address-level2" />
             </label>
           </div>
 
-          {err ? (
-            <p className="muted" style={{ marginTop: 10, lineHeight: 1.6 }}>
-              {err}
-            </p>
-          ) : null}
+          {err ? <p className="muted" style={{ marginTop: 10, lineHeight: 1.6 }}>{err}</p> : null}
 
-          <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
-            <button type="button" className={"btn" + (!canSave ? " btn-disabled" : "")} disabled={!canSave} onClick={saveProfile}>
-              {savingProfile ? (isAr ? "جارٍ الحفظ..." : "Saving...") : t.save}
+          <div className="account-actions" style={{ marginTop: 12 }}>
+            <button type="button" className={"btn primary" + (!canSave ? " btn-disabled" : "")} disabled={!canSave} onClick={saveProfile}>
+              {savingProfile ? t.saving : t.save}
             </button>
-            {profileSaved ? <span className="muted">{isAr ? "تم الحفظ" : "Saved"}</span> : null}
+            {profileSaved ? <span className="muted">{t.saved}</span> : null}
           </div>
         </div>
 
-        {/* Orders card */}
+        {/* Orders */}
         <div className="panel">
-          <h3 style={{ marginTop: 0 }}>{t.ordersTitle}</h3>
+          <div className="card-head">
+            <h3>{t.ordersTitle}</h3>
+          </div>
 
           {!orders.length ? (
-            <p className="muted" style={{ marginTop: 8 }}>
-              {t.ordersEmpty}
-            </p>
+            <p className="muted">{t.ordersEmpty}</p>
           ) : (
-            <div style={{ overflowX: "auto", marginTop: 10 }}>
-              <table className="table" style={{ minWidth: 760 }}>
+            <div className="table-wrap">
+              <table className="table">
                 <thead>
                   <tr>
                     <th>ID</th>
@@ -352,15 +310,24 @@ export default function AccountClient({ locale }: { locale: string }) {
                     <th></th>
                   </tr>
                 </thead>
+
                 <tbody>
                   {orders.map((o) => (
                     <tr key={o.id}>
-                      <td>{o.id}</td>
-                      <td>{o.status}</td>
-                      <td>{o.created_at}</td>
-                      <td>{moneyOrDash(o.amount_jod)}</td>
-                      <td>{moneyOrDash(o.total_jod ?? o.amount_jod)}</td>
-                      <td>
+                      <td data-label="ID">{o.id}</td>
+
+                      <td data-label={t.status}>
+                        <span className="chip">
+                          <span className="chip-dot" style={statusDot(o.status)} />
+                          {o.status}
+                        </span>
+                      </td>
+
+                      <td data-label={t.created}>{o.created_at}</td>
+                      <td data-label={t.amount}>{moneyOrDash(o.amount_jod)}</td>
+                      <td data-label={t.total}>{moneyOrDash(o.total_jod ?? o.amount_jod)}</td>
+
+                      <td data-label={t.discountsApplied}>
                         <div style={{ display: "grid", gap: 4 }}>
                           <div className="muted">
                             {t.promoCode}: <strong>{o.promo_code ?? t.none}</strong>
@@ -373,10 +340,9 @@ export default function AccountClient({ locale }: { locale: string }) {
                           </div>
                         </div>
                       </td>
-                      <td style={{ textAlign: "right" }}>
-                        <a className="btn btn-outline" href={`/${locale}/account/orders/${o.id}`}>
-                          {t.view}
-                        </a>
+
+                      <td data-label="" style={{ textAlign: "right" }}>
+                        <a className="btn btn-outline" href={`/${locale}/account/orders/${o.id}`}>{t.view}</a>
                       </td>
                     </tr>
                   ))}

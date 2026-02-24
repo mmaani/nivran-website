@@ -330,3 +330,217 @@ a { color: inherit; text-decoration: none; }
 }
 .admin-kpi .label{ opacity:.7; font-size: 12px; }
 .admin-kpi .value{ font-size: 18px; font-weight: 700; margin-top: 6px; }
+
+/* =========================
+   ACCOUNT UI (NIVRAN)
+   ========================= */
+
+.account-shell{
+  width: min(980px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 1.2rem 0;
+}
+
+.account-header{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.account-title{
+  margin: 0;
+}
+
+.account-subtitle{
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.account-actions{
+  display:flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items:center;
+}
+
+.account-grid{
+  display:grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 14px;
+  align-items:start;
+}
+
+@media (max-width: 920px){
+  .account-grid{ grid-template-columns: 1fr; }
+}
+
+/* Card header row inside panels */
+.card-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.card-head h3{
+  margin: 0;
+}
+
+/* Nice label + helper */
+.field{
+  display:grid;
+  gap: 6px;
+}
+
+.field .field-label{
+  color: var(--muted);
+  font-size: .92rem;
+}
+
+.field .field-help{
+  color: var(--muted);
+  font-size: .82rem;
+  margin-top: 2px;
+}
+
+.field-inline{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 10px;
+}
+
+/* Button variants used in AccountClient */
+.btn-outline{
+  background: rgba(255,255,255,.8);
+}
+
+.btn-disabled{
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+/* Table system */
+.table-wrap{
+  overflow-x:auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.75);
+}
+
+.table{
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 760px;
+}
+
+.table thead th{
+  text-align: start;
+  font-size: .86rem;
+  color: rgba(20,20,20,.72);
+  background: rgba(245,240,231,.75);
+  border-bottom: 1px solid var(--line);
+  padding: 12px 12px;
+  position: sticky;
+  top: 0;
+  backdrop-filter: blur(10px);
+  z-index: 1;
+}
+
+.table tbody td{
+  padding: 12px 12px;
+  border-bottom: 1px solid rgba(20,20,20,.07);
+  vertical-align: top;
+}
+
+.table tbody tr:hover td{
+  background: rgba(251,248,243,.7);
+}
+
+.table tbody tr:last-child td{
+  border-bottom: 0;
+}
+
+/* Small status chip */
+.chip{
+  display:inline-flex;
+  align-items:center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(20,20,20,.10);
+  background: rgba(0,0,0,.04);
+  font-size: .86rem;
+  white-space: nowrap;
+}
+
+.chip-dot{
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(20,20,20,.35);
+}
+
+/* Mobile: make orders table become stacked cards */
+@media (max-width: 760px){
+  .table-wrap{
+    border: 0;
+    background: transparent;
+  }
+
+  .table{
+    min-width: 0;
+  }
+
+  .table thead{
+    display:none;
+  }
+
+  .table, .table tbody, .table tr, .table td{
+    display:block;
+    width: 100%;
+  }
+
+  .table tr{
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: rgba(255,255,255,.85);
+    box-shadow: 0 12px 26px var(--shadow);
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+
+  .table tbody td{
+    border-bottom: 0;
+    padding: 10px 8px;
+    display:flex;
+    justify-content:space-between;
+    gap: 12px;
+  }
+
+  .table tbody td::before{
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: .86rem;
+    padding-inline-end: 10px;
+    flex: 1;
+    max-width: 45%;
+  }
+
+  .table tbody td > *{
+    flex: 1;
+    text-align: end;
+  }
+
+  [dir="rtl"] .table tbody td > *{
+    text-align: start;
+  }
+}
+
