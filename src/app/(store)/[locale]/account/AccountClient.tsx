@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { readJsonSafe } from "@/lib/http";
 
 type Profile = {
@@ -11,7 +11,7 @@ type Profile = {
   country: string | null;
   address_line1: string | null;
   city: string | null;
-  is_verified: boolean;
+  is_verified: boolean | string | number | null;
 };
 
 type OrderListRow = {
@@ -66,27 +66,66 @@ function pickSlug(line: OrderItemLine): string | null {
   return s ? s : null;
 }
 
+function asBool(v: unknown): boolean {
+  if (v === true) return true;
+  if (v === false) return false;
+  if (typeof v === "number") return v === 1;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    return s === "true" || s === "1" || s === "t" || s === "yes" || s === "y";
+  }
+  return false;
+}
+
 function chipClass(statusRaw: string): string {
-  const s = String(statusRaw || "").toUpperCase().trim();
-  if (s === "PAID" || s === "PAID_COD" || s === "DELIVERED") return "chip chip--paid";
-  if (s === "SHIPPED") return "chip chip--shipped";
-  if (s === "PENDING" || s === "PENDING_PAYMENT" || s === "PROCESSING") return "chip chip--pending";
-  if (s === "FAILED" || s === "CANCELLED" || s === "CANCELED") return "chip chip--failed";
+  const s = String(statusRaw || "").toUpperCase();
+  if (!s) return "chip chip--neutral";
+  if (s.includes("PAID")) return "chip chip--paid";
+  if (s.includes("DELIVER")) return "chip chip--delivered";
+  if (s.includes("SHIP")) return "chip chip--shipped";
+  if (s.includes("PENDING")) return "chip chip--pending";
+  if (s.includes("FAIL") || s.includes("CANCEL")) return "chip chip--failed";
   return "chip chip--neutral";
 }
 
-function formatStatus(statusRaw: string, isAr: boolean): string {
-  const s = String(statusRaw || "").toUpperCase().trim();
-  if (isAr) {
-    if (s === "PAID" || s === "PAID_COD") return "مدفوع";
-    if (s === "DELIVERED") return "تم التسليم";
-    if (s === "SHIPPED") return "تم الشحن";
-    if (s === "PENDING_PAYMENT" || s === "PENDING") return "بانتظار الدفع";
-    if (s === "PROCESSING") return "قيد المعالجة";
-    if (s === "FAILED") return "فشل";
-    if (s === "CANCELLED" || s === "CANCELED") return "ملغي";
-  }
-  return s || (isAr ? "—" : "—");
+type CountryOption = { code: string; en: string; ar: string };
+
+const COUNTRIES: CountryOption[] = [
+  { code: "JO", en: "Jordan", ar: "الأردن" },
+  { code: "SA", en: "Saudi Arabia", ar: "السعودية" },
+  { code: "AE", en: "United Arab Emirates", ar: "الإمارات" },
+  { code: "KW", en: "Kuwait", ar: "الكويت" },
+  { code: "QA", en: "Qatar", ar: "قطر" },
+  { code: "BH", en: "Bahrain", ar: "البحرين" },
+  { code: "OM", en: "Oman", ar: "عُمان" },
+  { code: "IQ", en: "Iraq", ar: "العراق" },
+  { code: "LB", en: "Lebanon", ar: "لبنان" },
+  { code: "EG", en: "Egypt", ar: "مصر" },
+  { code: "PS", en: "Palestine", ar: "فلسطين" },
+  { code: "SY", en: "Syria", ar: "سوريا" },
+  { code: "TR", en: "Turkey", ar: "تركيا" },
+  { code: "US", en: "United States", ar: "الولايات المتحدة" },
+  { code: "GB", en: "United Kingdom", ar: "المملكة المتحدة" },
+  { code: "FR", en: "France", ar: "فرنسا" },
+  { code: "DE", en: "Germany", ar: "ألمانيا" },
+  { code: "IT", en: "Italy", ar: "إيطاليا" },
+  { code: "ES", en: "Spain", ar: "إسبانيا" },
+  { code: "CA", en: "Canada", ar: "كندا" },
+];
+
+function normalizeCountryInput(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function findCountryLabel(value: string, isAr: boolean): string {
+  const v = normalizeCountryInput(value);
+  if (!v) return "";
+  const hit =
+    COUNTRIES.find((c) => c.code.toLowerCase() === v.toLowerCase()) ||
+    COUNTRIES.find((c) => c.en.toLowerCase() === v.toLowerCase()) ||
+    COUNTRIES.find((c) => c.ar === v);
+  if (!hit) return v;
+  return isAr ? hit.ar : hit.en;
 }
 
 export default function AccountClient({ locale }: { locale: string }) {
@@ -96,17 +135,20 @@ export default function AccountClient({ locale }: { locale: string }) {
     () => ({
       verified: isAr ? "موثق" : "Verified",
       unverified: isAr ? "غير موثق" : "Unverified",
+
       fullName: isAr ? "الاسم الكامل *" : "Full name *",
       email: isAr ? "البريد الإلكتروني" : "Email",
       phone: isAr ? "الهاتف *" : "Phone *",
       country: isAr ? "الدولة" : "Country",
+      countryPlaceholder: isAr ? "ابحث عن دولة..." : "Search a country...",
       address: isAr ? "العنوان *" : "Address *",
       city: isAr ? "المدينة" : "City",
-      save: isAr ? "حفظ" : "Save",
-      saving: isAr ? "جارٍ الحفظ..." : "Saving...",
-      saved: isAr ? "تم الحفظ." : "Saved.",
+
+      update: isAr ? "تحديث" : "Update",
+      updating: isAr ? "جارٍ التحديث..." : "Updating...",
+      updated: isAr ? "تم التحديث." : "Updated.",
       error: isAr ? "حدث خطأ. حاول مرة أخرى." : "Something went wrong. Please try again.",
-      none: isAr ? "—" : "—",
+      none: "—",
 
       details: isAr ? "التفاصيل" : "Details",
       reorder: isAr ? "إعادة الطلب" : "Re-order",
@@ -117,18 +159,11 @@ export default function AccountClient({ locale }: { locale: string }) {
       cancel: isAr ? "إلغاء" : "Cancel",
 
       emptyOrders: isAr ? "لا توجد طلبات بعد." : "No orders yet.",
-      amount: isAr ? "الإجمالي" : "Total",
+      amount: isAr ? "المبلغ" : "Amount",
       status: isAr ? "الحالة" : "Status",
-      created: isAr ? "التاريخ" : "Date",
-      id: isAr ? "رقم الطلب" : "Order #",
+      created: isAr ? "التاريخ" : "Created",
+      id: isAr ? "رقم" : "ID",
       promo: isAr ? "خصم" : "Discount",
-
-      hello: isAr ? "مرحباً" : "Hello",
-      loginFirst: isAr ? "يرجى تسجيل الدخول أولاً." : "Please log in first.",
-      login: isAr ? "تسجيل الدخول" : "Login",
-      loading: isAr ? "جارٍ التحميل..." : "Loading...",
-
-      requiredHint: isAr ? "الحقول المميزة بعلامة * مطلوبة." : "Fields marked with * are required.",
     }),
     [isAr]
   );
@@ -149,6 +184,14 @@ export default function AccountClient({ locale }: { locale: string }) {
   const [reorderOpen, setReorderOpen] = useState(false);
   const [reorderBusy, setReorderBusy] = useState(false);
   const [reorderOrderId, setReorderOrderId] = useState<number | null>(null);
+
+  // Country combobox
+  const countryWrapRef = useRef<HTMLDivElement | null>(null);
+  const [countryOpen, setCountryOpen] = useState(false);
+  const [countryQuery, setCountryQuery] = useState("");
+  const [countryActiveIdx, setCountryActiveIdx] = useState(0);
+
+  const verified = useMemo(() => asBool(profile?.is_verified), [profile?.is_verified]);
 
   const canSave = useMemo(() => {
     if (!fullName.trim()) return false;
@@ -172,6 +215,34 @@ export default function AccountClient({ locale }: { locale: string }) {
       e !== city.trim()
     );
   }, [profile, fullName, phone, country, addressLine1, city]);
+
+  const countryOptions = useMemo(() => {
+    const q = normalizeCountryInput(countryQuery).toLowerCase();
+    const items = COUNTRIES.map((c) => ({
+      code: c.code,
+      label: isAr ? c.ar : c.en,
+      alt: isAr ? c.en : c.ar,
+      search: `${c.code} ${c.en} ${c.ar}`.toLowerCase(),
+    }));
+    const filtered = q ? items.filter((x) => x.search.includes(q)) : items;
+    return filtered.slice(0, 24);
+  }, [countryQuery, isAr]);
+
+  function syncCountryQueryFromValue() {
+    const label = findCountryLabel(country, isAr);
+    setCountryQuery(label);
+  }
+
+  useEffect(() => {
+    // Close dropdown on outside click
+    function onDocDown(e: MouseEvent) {
+      const el = countryWrapRef.current;
+      if (!el) return;
+      if (!el.contains(e.target as Node)) setCountryOpen(false);
+    }
+    document.addEventListener("mousedown", onDocDown);
+    return () => document.removeEventListener("mousedown", onDocDown);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -199,6 +270,10 @@ export default function AccountClient({ locale }: { locale: string }) {
         setAddressLine1((p.address_line1 || "").trim());
         setCity((p.city || "").trim());
 
+        // Initialize country query (label)
+        const initLabel = findCountryLabel((p.country || "").trim(), isAr);
+        setCountryQuery(initLabel);
+
         const or = await fetch("/api/orders", { cache: "no-store" });
         const oj: unknown = await readJsonSafe(or);
         if (!alive) return;
@@ -219,7 +294,14 @@ export default function AccountClient({ locale }: { locale: string }) {
     return () => {
       alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // If locale changes (rare), keep country label consistent
+  useEffect(() => {
+    syncCountryQueryFromValue();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAr]);
 
   async function saveProfile() {
     if (!canSave) return;
@@ -255,7 +337,7 @@ export default function AccountClient({ locale }: { locale: string }) {
         setProfile(p);
       }
 
-      setMsg(COPY.saved);
+      setMsg(COPY.updated);
     } catch {
       setMsg(COPY.error);
     } finally {
@@ -317,12 +399,53 @@ export default function AccountClient({ locale }: { locale: string }) {
     }
   }
 
+  function chooseCountry(label: string, code?: string) {
+    const v = normalizeCountryInput(label);
+    // Persist label (what user sees) - backend accepts string
+    setCountry(v || (code ? code : ""));
+    setCountryQuery(v);
+    setCountryOpen(false);
+  }
+
+  function onCountryKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!countryOpen && (e.key === "ArrowDown" || e.key === "Enter")) {
+      setCountryOpen(true);
+      setCountryActiveIdx(0);
+      return;
+    }
+
+    if (!countryOpen) return;
+
+    if (e.key === "Escape") {
+      setCountryOpen(false);
+      return;
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setCountryActiveIdx((i) => Math.min(countryOptions.length - 1, i + 1));
+      return;
+    }
+
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setCountryActiveIdx((i) => Math.max(0, i - 1));
+      return;
+    }
+
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const picked = countryOptions[countryActiveIdx];
+      if (picked) chooseCountry(picked.label, picked.code);
+    }
+  }
+
   if (loading) {
     return (
       <div className="account-shell">
-        <div className="panel account-panel">
+        <div className="panel">
           <p className="muted" style={{ margin: 0 }}>
-            {COPY.loading}
+            {isAr ? "جارٍ التحميل..." : "Loading..."}
           </p>
         </div>
       </div>
@@ -332,13 +455,13 @@ export default function AccountClient({ locale }: { locale: string }) {
   if (!profile) {
     return (
       <div className="account-shell">
-        <div className="panel account-panel">
+        <div className="panel">
           <p className="muted" style={{ margin: 0 }}>
-            {COPY.loginFirst}
+            {isAr ? "يرجى تسجيل الدخول أولاً." : "Please log in first."}
           </p>
           <div style={{ marginTop: 12 }}>
             <a className="btn primary" href={`/${locale}/account/login`}>
-              {COPY.login}
+              {isAr ? "تسجيل الدخول" : "Login"}
             </a>
           </div>
         </div>
@@ -346,38 +469,14 @@ export default function AccountClient({ locale }: { locale: string }) {
     );
   }
 
-  const displayName = fullName.trim() || (profile.full_name || "").trim() || profile.email;
-
   return (
     <div className="account-shell">
-      <div className="account-head">
-        <div>
-          <h1 className="account-title">
-            {COPY.hello},{" "}
-            <span style={{ fontFamily: "var(--font-serif), serif", letterSpacing: ".02em" }}>{displayName}</span>
-          </h1>
-          <p className="account-subtitle">{COPY.requiredHint}</p>
-        </div>
-
-        <div className="account-actions">
-          <span className={"badge " + (profile.is_verified ? "badge-verified" : "")}>
-            {profile.is_verified ? COPY.verified : COPY.unverified}
-          </span>
-          {msg ? <span className="muted">{msg}</span> : null}
-        </div>
-      </div>
-
-      <div className="account-grid">
-        <div className="panel account-panel">
-          <div className="account-panel-head">
-            <h3 className="account-panel-title">{isAr ? "بياناتك" : "Your details"}</h3>
-            <button
-              className={"btn primary" + (!canSave || !isDirty || saving ? " btn-disabled" : "")}
-              disabled={!canSave || !isDirty || saving}
-              onClick={saveProfile}
-            >
-              {saving ? COPY.saving : COPY.save}
-            </button>
+      <div className="account-grid account-grid-stack">
+        {/* Profile panel */}
+        <div className="card card-soft account-panel">
+          <div className="card-head">
+            <span className={"badge " + (verified ? "badge-verified" : "")}>{verified ? COPY.verified : COPY.unverified}</span>
+            {msg ? <span className="muted">{msg}</span> : <span className="muted" />}
           </div>
 
           <div className="field-grid">
@@ -388,8 +487,7 @@ export default function AccountClient({ locale }: { locale: string }) {
 
             <div className="field">
               <label className="field-label">{COPY.email}</label>
-              <input className="input" value={profile.email} readOnly aria-readonly="true" />
-              <div className="field-help">{isAr ? "لا يمكن تغيير البريد الإلكتروني." : "Email can’t be changed."}</div>
+              <input className="input" value={profile.email} readOnly />
             </div>
 
             <div className="field">
@@ -397,11 +495,71 @@ export default function AccountClient({ locale }: { locale: string }) {
               <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" />
             </div>
 
-            <div className="field">
-              <label className="field-label">{COPY.country}</label>
-              <input className="input" value={country} onChange={(e) => setCountry(e.target.value)} />
-            </div>
+            {/* Searchable Country Dropdown */}
+<div className="field" ref={countryWrapRef}>
+  <label className="field-label">{COPY.country}</label>
 
+  <div className="country-combobox">
+    <input
+      className="input country-input"
+      value={countryQuery}
+      placeholder={COPY.countryPlaceholder}
+      onChange={(e) => {
+        const v = e.target.value;
+        setCountryQuery(v);
+        setCountry(normalizeCountryInput(v)); // keep value in sync (user can type a custom country)
+        setCountryOpen(true);
+        setCountryActiveIdx(0);
+      }}
+      onFocus={() => {
+        setCountryOpen(true);
+        setCountryActiveIdx(0);
+      }}
+      onKeyDown={onCountryKeyDown}
+      role="combobox"
+      aria-expanded={countryOpen}
+      aria-haspopup="listbox"
+      aria-controls="country-listbox"
+      aria-autocomplete="list"
+      aria-activedescendant={countryOpen ? `country-opt-${countryActiveIdx}` : undefined}
+    />
+
+    <button
+      type="button"
+      className="btn btn-quiet country-toggle"
+      onClick={() => setCountryOpen((v) => !v)}
+      aria-label={isAr ? "فتح قائمة الدول" : "Open countries"}
+    >
+      ▾
+    </button>
+
+    {countryOpen ? (
+      <div className="country-popover" role="listbox" id="country-listbox">
+        {countryOptions.length === 0 ? (
+          <div className="country-empty muted">{isAr ? "لا نتائج" : "No results"}</div>
+        ) : (
+          countryOptions.map((opt, idx) => (
+            <button
+              key={opt.code + opt.label}
+              id={`country-opt-${idx}`}
+              type="button"
+              role="option"
+              aria-selected={idx === countryActiveIdx}
+              className={"country-option" + (idx === countryActiveIdx ? " is-active" : "")}
+              onMouseEnter={() => setCountryActiveIdx(idx)}
+              onClick={() => chooseCountry(opt.label, opt.code)}
+            >
+              <span>{opt.label}</span>
+              <span className="muted" style={{ fontSize: ".82rem" }}>
+                {opt.code}
+              </span>
+            </button>
+          ))
+        )}
+      </div>
+    ) : null}
+  </div>
+</div>
             <div className="field" style={{ gridColumn: "1 / -1" }}>
               <label className="field-label">{COPY.address}</label>
               <input className="input" value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} />
@@ -412,9 +570,20 @@ export default function AccountClient({ locale }: { locale: string }) {
               <input className="input" value={city} onChange={(e) => setCity(e.target.value)} />
             </div>
           </div>
+
+          <div className="actions-row" style={{ marginTop: 14 }}>
+            <button
+              className={"btn primary" + (!canSave || !isDirty || saving ? " btn-disabled" : "")}
+              disabled={!canSave || !isDirty || saving}
+              onClick={saveProfile}
+            >
+              {saving ? COPY.updating : COPY.update}
+            </button>
+          </div>
         </div>
 
-        <div className="panel account-panel">
+        {/* Orders panel */}
+        <div className="card account-panel">
           {orders.length === 0 ? (
             <p className="muted" style={{ margin: 0 }}>
               {COPY.emptyOrders}
@@ -429,13 +598,12 @@ export default function AccountClient({ locale }: { locale: string }) {
                     <th>{COPY.status}</th>
                     <th>{COPY.amount}</th>
                     <th>{COPY.promo}</th>
-                    <th style={{ width: 240 }} />
+                    <th style={{ width: 220 }} />
                   </tr>
                 </thead>
-
                 <tbody>
                   {orders.map((o) => {
-                    const statusRaw = String(o.status || "").toUpperCase();
+                    const status = String(o.status || "").toUpperCase();
                     const total = o.total_jod ? Number(o.total_jod) : Number(o.amount_jod || 0);
                     const discount = o.discount_jod ? Number(o.discount_jod) : 0;
 
@@ -446,9 +614,6 @@ export default function AccountClient({ locale }: { locale: string }) {
                           ? `-${discount.toFixed(2)} JOD`
                           : COPY.none;
 
-                    const created = new Date(o.created_at);
-                    const createdText = Number.isFinite(created.getTime()) ? created.toLocaleString() : o.created_at;
-
                     return (
                       <tr key={o.id}>
                         <td data-label={COPY.id}>
@@ -456,13 +621,13 @@ export default function AccountClient({ locale }: { locale: string }) {
                         </td>
 
                         <td data-label={COPY.created}>
-                          <span className="muted">{createdText}</span>
+                          <span className="muted">{new Date(o.created_at).toLocaleString()}</span>
                         </td>
 
                         <td data-label={COPY.status}>
-                          <span className={chipClass(statusRaw)}>
-                            <span className="chip-dot" aria-hidden="true" />
-                            {formatStatus(statusRaw, isAr)}
+                          <span className={chipClass(status)}>
+                            <span className="chip-dot" />
+                            {status}
                           </span>
                         </td>
 
@@ -497,20 +662,15 @@ export default function AccountClient({ locale }: { locale: string }) {
       {reorderOpen ? (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
           <div className="modal">
-            <h3 style={{ marginTop: 0 }}>{COPY.reorderTitle}</h3>
-            <p className="muted" style={{ marginTop: 6 }}>
-              {COPY.reorderBody}
-            </p>
-
+            <h3>{COPY.reorderTitle}</h3>
+            <p className="muted">{COPY.reorderBody}</p>
             <div className="modal-actions">
               <button className="btn btn-quiet" onClick={() => setReorderOpen(false)} disabled={reorderBusy}>
                 {COPY.cancel}
               </button>
-
               <button className="btn btn-quiet" onClick={() => applyReorder("add")} disabled={reorderBusy}>
                 {COPY.addToCart}
               </button>
-
               <button className="btn primary" onClick={() => applyReorder("replace")} disabled={reorderBusy}>
                 {COPY.startFresh}
               </button>
