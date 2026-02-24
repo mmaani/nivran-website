@@ -7,11 +7,9 @@ function normalizeDatabaseUrl(connectionString: string): string {
   try {
     const url = new URL(connectionString);
 
-    // Prefer explicit sslmode from env. If missing, default to `require` for Neon.
     const sslmode = url.searchParams.get("sslmode");
     if (!sslmode) url.searchParams.set("sslmode", "require");
 
-    // If verify-full is used, ensure libpq-style clients can find system roots.
     const sslmode2 = url.searchParams.get("sslmode");
     if (sslmode2 === "verify-full" && !url.searchParams.get("sslrootcert")) {
       url.searchParams.set("sslrootcert", "system");
@@ -33,8 +31,6 @@ function getPool(): Pool {
 
   pool = new Pool({
     connectionString,
-    // For managed Postgres (Neon), Node TLS is fine; rejectUnauthorized false avoids cert bundle surprises.
-    // If you later want strict verification, we can tighten this safely.
     ssl: connectionString.includes("localhost") ? undefined : { rejectUnauthorized: false },
   });
 
@@ -78,7 +74,7 @@ export async function withTransaction<T>(fn: (trx: DbTx) => Promise<T>): Promise
     try {
       await client.query("rollback");
     } catch {
-      // ignore rollback failure
+      // ignore
     }
     throw e;
   } finally {
@@ -97,7 +93,7 @@ export const db: DbExecutor = {
 export function isDbConnectivityError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
 
-  const nodeError = error as Error & { code?: unknown; errno?: unknown };
+  const nodeError = error as Error & { code?: unknown };
   const code = typeof nodeError.code === "string" ? nodeError.code.toUpperCase() : "";
   const msg = (error.message || "").toLowerCase();
 

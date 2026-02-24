@@ -1,4 +1,5 @@
 import "server-only";
+import type { DbTx } from "@/lib/db";
 import { db, type DbExecutor } from "@/lib/db";
 
 export async function ensureOrdersTables(): Promise<void> {
@@ -410,7 +411,7 @@ export async function commitInventoryForPaidCart(trx: DbExecutor, cartId: string
   return true;
 }
 
-export async function commitInventoryForPaidOrderId(trx: DbExecutor, orderId: number): Promise<boolean> {
+export async function commitInventoryForPaidOrderId(trx: DbTx, orderId: number): Promise<boolean> {
   const { rows } = await trx.query<OrderInventoryRow>(
     `select cart_id, status, inventory_committed_at, items
        from orders
