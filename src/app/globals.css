@@ -1170,3 +1170,278 @@ input:disabled{
   }
 }
 
+
+/* =========================
+   ACCOUNT (FINAL OVERRIDES)
+   Keeps desktop spacious + mobile perfect
+   ========================= */
+
+.account-shell{
+  width: min(1040px, calc(100% - 2.2rem));
+  margin: 0 auto;
+  padding: 1.8rem 0 2.2rem;
+}
+
+@media (max-width: 520px){
+  .account-shell{
+    width: min(980px, calc(100% - 1.4rem));
+    padding: 1.2rem 0 1.6rem;
+  }
+}
+
+.account-head{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.account-title{
+  margin: 0;
+  font-family: var(--font-serif), serif;
+  letter-spacing: .02em;
+  font-size: clamp(1.55rem, 2.4vw, 2.1rem);
+}
+
+.account-subtitle{
+  margin: 6px 0 0;
+  color: var(--muted);
+  max-width: 70ch;
+}
+
+.account-actions{
+  display:flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items:center;
+}
+
+.account-grid{
+  display:grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 16px;
+  align-items:start;
+}
+
+@media (max-width: 980px){
+  .account-grid{ grid-template-columns: 1fr; }
+}
+
+.account-panel{
+  padding: 1.25rem 1.2rem;
+}
+
+@media (max-width: 520px){
+  .account-panel{ padding: 1.05rem; }
+}
+
+.account-panel-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.account-panel-title{
+  margin: 0;
+  font-size: 1.08rem;
+  letter-spacing: .01em;
+}
+
+.field{
+  display:grid;
+  gap: 8px;
+}
+
+.field-label{
+  color: var(--muted);
+  font-size: .92rem;
+}
+
+.field-help{
+  color: var(--muted);
+  font-size: .84rem;
+  margin-top: 2px;
+}
+
+.field-grid{
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@media (max-width: 980px){
+  .field-grid{ grid-template-columns: 1fr; }
+}
+
+.input{
+  padding: .86rem .92rem;
+  border-radius: 14px;
+}
+
+.btn-disabled{
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+/* ===== Strong premium status chips ===== */
+.chip{
+  display:inline-flex;
+  align-items:center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(20,20,20,.14);
+  font-weight: 750;
+  font-size: .86rem;
+  white-space: nowrap;
+  letter-spacing: .01em;
+}
+
+.chip-dot{
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: rgba(20,20,20,.35);
+  box-shadow: 0 0 0 3px rgba(255,255,255,.72);
+}
+
+.chip--paid{
+  background: rgba(26,138,81,.18);
+  border-color: rgba(26,138,81,.24);
+}
+.chip--paid .chip-dot{ background: rgba(26,138,81,.82); }
+
+.chip--shipped{
+  background: rgba(0,105,170,.18);
+  border-color: rgba(0,105,170,.24);
+}
+.chip--shipped .chip-dot{ background: rgba(0,105,170,.82); }
+
+.chip--pending{
+  background: rgba(199,165,106,.30);
+  border-color: rgba(199,165,106,.36);
+}
+.chip--pending .chip-dot{ background: rgba(169,130,62,.92); }
+
+.chip--failed{
+  background: rgba(180,34,44,.15);
+  border-color: rgba(180,34,44,.22);
+}
+.chip--failed .chip-dot{ background: rgba(180,34,44,.78); }
+
+.chip--neutral{
+  background: rgba(20,20,20,.07);
+  border-color: rgba(20,20,20,.14);
+}
+
+/* ===== Orders table (desktop) + cards (mobile) ===== */
+.table-wrap{
+  overflow-x:auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 16px;
+  border: 1px solid rgba(20,20,20,.10);
+  background: rgba(255,255,255,.82);
+  box-shadow: 0 14px 30px var(--shadow);
+}
+
+.table{
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 860px;
+}
+
+.table thead th{
+  text-align: start;
+  font-size: .82rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(20,20,20,.74);
+  background: linear-gradient(180deg, rgba(251,248,243,.96), rgba(245,240,231,.86));
+  border-bottom: 1px solid rgba(20,20,20,.08);
+  padding: 13px 12px;
+  position: sticky;
+  top: 0;
+  backdrop-filter: blur(10px);
+  z-index: 1;
+}
+
+.table tbody td{
+  padding: 13px 12px;
+  border-bottom: 1px solid rgba(20,20,20,.07);
+  vertical-align: top;
+}
+
+.table tbody tr:hover td{
+  background: rgba(251,248,243,.74);
+}
+
+.table tbody tr:last-child td{
+  border-bottom: 0;
+}
+
+.order-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 760px){
+  .table-wrap{
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .table thead{ display:none; }
+  .table, .table tbody, .table tr, .table td{
+    display:block;
+    width:100%;
+    min-width: 0;
+  }
+
+  .table tr{
+    border: 1px solid rgba(20,20,20,.10);
+    border-radius: 18px;
+    background: rgba(255,255,255,.90);
+    box-shadow: 0 14px 30px var(--shadow);
+    padding: 10px;
+    margin-bottom: 12px;
+  }
+
+  .table tbody td{
+    border-bottom: 0;
+    padding: 10px 8px;
+    display:flex;
+    justify-content:space-between;
+    gap: 12px;
+  }
+
+  .table tbody td::before{
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: .86rem;
+    padding-inline-end: 10px;
+    flex: 1;
+    max-width: 46%;
+  }
+
+  .table tbody td > *{
+    flex: 1;
+    text-align: end;
+  }
+
+  [dir="rtl"] .table tbody td > *{
+    text-align: start;
+  }
+
+  .order-actions{
+    justify-content: flex-start;
+  }
+}

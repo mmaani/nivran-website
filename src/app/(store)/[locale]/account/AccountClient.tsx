@@ -66,10 +66,27 @@ function pickSlug(line: OrderItemLine): string | null {
   return s ? s : null;
 }
 
-function statusClass(statusRaw: string): string {
-  const s = String(statusRaw || "").toUpperCase();
-  if (!s) return "status-chip";
-  return `status-chip status-${s}`;
+function chipClass(statusRaw: string): string {
+  const s = String(statusRaw || "").toUpperCase().trim();
+  if (s === "PAID" || s === "PAID_COD" || s === "DELIVERED") return "chip chip--paid";
+  if (s === "SHIPPED") return "chip chip--shipped";
+  if (s === "PENDING" || s === "PENDING_PAYMENT" || s === "PROCESSING") return "chip chip--pending";
+  if (s === "FAILED" || s === "CANCELLED" || s === "CANCELED") return "chip chip--failed";
+  return "chip chip--neutral";
+}
+
+function formatStatus(statusRaw: string, isAr: boolean): string {
+  const s = String(statusRaw || "").toUpperCase().trim();
+  if (isAr) {
+    if (s === "PAID" || s === "PAID_COD") return "مدفوع";
+    if (s === "DELIVERED") return "تم التسليم";
+    if (s === "SHIPPED") return "تم الشحن";
+    if (s === "PENDING_PAYMENT" || s === "PENDING") return "بانتظار الدفع";
+    if (s === "PROCESSING") return "قيد المعالجة";
+    if (s === "FAILED") return "فشل";
+    if (s === "CANCELLED" || s === "CANCELED") return "ملغي";
+  }
+  return s || (isAr ? "—" : "—");
 }
 
 export default function AccountClient({ locale }: { locale: string }) {
@@ -78,6 +95,7 @@ export default function AccountClient({ locale }: { locale: string }) {
   const COPY = useMemo(
     () => ({
       verified: isAr ? "موثق" : "Verified",
+      unverified: isAr ? "غير موثق" : "Unverified",
       fullName: isAr ? "الاسم الكامل *" : "Full name *",
       email: isAr ? "البريد الإلكتروني" : "Email",
       phone: isAr ? "الهاتف *" : "Phone *",
@@ -89,21 +107,28 @@ export default function AccountClient({ locale }: { locale: string }) {
       saved: isAr ? "تم الحفظ." : "Saved.",
       error: isAr ? "حدث خطأ. حاول مرة أخرى." : "Something went wrong. Please try again.",
       none: isAr ? "—" : "—",
+
       details: isAr ? "التفاصيل" : "Details",
       reorder: isAr ? "إعادة الطلب" : "Re-order",
       reorderTitle: isAr ? "إعادة الطلب" : "Re-order",
-      reorderBody: isAr
-        ? "اختر طريقة إضافة المنتجات إلى السلة."
-        : "Choose how you want to add these items to your cart.",
+      reorderBody: isAr ? "اختر طريقة إضافة المنتجات إلى السلة." : "Choose how you want to add these items to your cart.",
       startFresh: isAr ? "ابدأ بسلة جديدة" : "Start fresh",
       addToCart: isAr ? "أضف إلى السلة الحالية" : "Add to existing cart",
       cancel: isAr ? "إلغاء" : "Cancel",
+
       emptyOrders: isAr ? "لا توجد طلبات بعد." : "No orders yet.",
-      amount: isAr ? "المبلغ" : "Amount",
+      amount: isAr ? "الإجمالي" : "Total",
       status: isAr ? "الحالة" : "Status",
-      created: isAr ? "التاريخ" : "Created",
-      id: isAr ? "رقم" : "ID",
+      created: isAr ? "التاريخ" : "Date",
+      id: isAr ? "رقم الطلب" : "Order #",
       promo: isAr ? "خصم" : "Discount",
+
+      hello: isAr ? "مرحباً" : "Hello",
+      loginFirst: isAr ? "يرجى تسجيل الدخول أولاً." : "Please log in first.",
+      login: isAr ? "تسجيل الدخول" : "Login",
+      loading: isAr ? "جارٍ التحميل..." : "Loading...",
+
+      requiredHint: isAr ? "الحقول المميزة بعلامة * مطلوبة." : "Fields marked with * are required.",
     }),
     [isAr]
   );
@@ -295,9 +320,9 @@ export default function AccountClient({ locale }: { locale: string }) {
   if (loading) {
     return (
       <div className="account-shell">
-        <div className="panel">
+        <div className="panel account-panel">
           <p className="muted" style={{ margin: 0 }}>
-            {isAr ? "جارٍ التحميل..." : "Loading..."}
+            {COPY.loading}
           </p>
         </div>
       </div>
@@ -307,13 +332,13 @@ export default function AccountClient({ locale }: { locale: string }) {
   if (!profile) {
     return (
       <div className="account-shell">
-        <div className="panel">
+        <div className="panel account-panel">
           <p className="muted" style={{ margin: 0 }}>
-            {isAr ? "يرجى تسجيل الدخول أولاً." : "Please log in first."}
+            {COPY.loginFirst}
           </p>
           <div style={{ marginTop: 12 }}>
             <a className="btn primary" href={`/${locale}/account/login`}>
-              {isAr ? "تسجيل الدخول" : "Login"}
+              {COPY.login}
             </a>
           </div>
         </div>
@@ -321,50 +346,31 @@ export default function AccountClient({ locale }: { locale: string }) {
     );
   }
 
+  const displayName = fullName.trim() || (profile.full_name || "").trim() || profile.email;
+
   return (
     <div className="account-shell">
+      <div className="account-head">
+        <div>
+          <h1 className="account-title">
+            {COPY.hello},{" "}
+            <span style={{ fontFamily: "var(--font-serif), serif", letterSpacing: ".02em" }}>{displayName}</span>
+          </h1>
+          <p className="account-subtitle">{COPY.requiredHint}</p>
+        </div>
+
+        <div className="account-actions">
+          <span className={"badge " + (profile.is_verified ? "badge-verified" : "")}>
+            {profile.is_verified ? COPY.verified : COPY.unverified}
+          </span>
+          {msg ? <span className="muted">{msg}</span> : null}
+        </div>
+      </div>
+
       <div className="account-grid">
-        <div className="card card-soft">
-          <div className="card-head">
-            <span className={"badge " + (profile.is_verified ? "badge-verified" : "")}>
-              {profile.is_verified ? COPY.verified : (isAr ? "غير موثق" : "Unverified")}
-            </span>
-            {msg ? <span className="muted">{msg}</span> : null}
-          </div>
-
-          <div className="form-grid">
-            <div className="field">
-              <label>{COPY.fullName}</label>
-              <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-            </div>
-
-            <div className="field">
-              <label>{COPY.email}</label>
-              <input className="input" value={profile.email} readOnly />
-            </div>
-
-            <div className="field">
-              <label>{COPY.phone}</label>
-              <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            </div>
-
-            <div className="field">
-              <label>{COPY.country}</label>
-              <input className="input" value={country} onChange={(e) => setCountry(e.target.value)} />
-            </div>
-
-            <div className="field" style={{ gridColumn: "1 / -1" }}>
-              <label>{COPY.address}</label>
-              <input className="input" value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} />
-            </div>
-
-            <div className="field" style={{ gridColumn: "1 / -1" }}>
-              <label>{COPY.city}</label>
-              <input className="input" value={city} onChange={(e) => setCity(e.target.value)} />
-            </div>
-          </div>
-
-          <div className="actions-row">
+        <div className="panel account-panel">
+          <div className="account-panel-head">
+            <h3 className="account-panel-title">{isAr ? "بياناتك" : "Your details"}</h3>
             <button
               className={"btn primary" + (!canSave || !isDirty || saving ? " btn-disabled" : "")}
               disabled={!canSave || !isDirty || saving}
@@ -373,9 +379,42 @@ export default function AccountClient({ locale }: { locale: string }) {
               {saving ? COPY.saving : COPY.save}
             </button>
           </div>
+
+          <div className="field-grid">
+            <div className="field">
+              <label className="field-label">{COPY.fullName}</label>
+              <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            </div>
+
+            <div className="field">
+              <label className="field-label">{COPY.email}</label>
+              <input className="input" value={profile.email} readOnly aria-readonly="true" />
+              <div className="field-help">{isAr ? "لا يمكن تغيير البريد الإلكتروني." : "Email can’t be changed."}</div>
+            </div>
+
+            <div className="field">
+              <label className="field-label">{COPY.phone}</label>
+              <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" />
+            </div>
+
+            <div className="field">
+              <label className="field-label">{COPY.country}</label>
+              <input className="input" value={country} onChange={(e) => setCountry(e.target.value)} />
+            </div>
+
+            <div className="field" style={{ gridColumn: "1 / -1" }}>
+              <label className="field-label">{COPY.address}</label>
+              <input className="input" value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} />
+            </div>
+
+            <div className="field" style={{ gridColumn: "1 / -1" }}>
+              <label className="field-label">{COPY.city}</label>
+              <input className="input" value={city} onChange={(e) => setCity(e.target.value)} />
+            </div>
+          </div>
         </div>
 
-        <div className="card">
+        <div className="panel account-panel">
           {orders.length === 0 ? (
             <p className="muted" style={{ margin: 0 }}>
               {COPY.emptyOrders}
@@ -390,12 +429,13 @@ export default function AccountClient({ locale }: { locale: string }) {
                     <th>{COPY.status}</th>
                     <th>{COPY.amount}</th>
                     <th>{COPY.promo}</th>
-                    <th style={{ width: 220 }} />
+                    <th style={{ width: 240 }} />
                   </tr>
                 </thead>
+
                 <tbody>
                   {orders.map((o) => {
-                    const status = String(o.status || "").toUpperCase();
+                    const statusRaw = String(o.status || "").toUpperCase();
                     const total = o.total_jod ? Number(o.total_jod) : Number(o.amount_jod || 0);
                     const discount = o.discount_jod ? Number(o.discount_jod) : 0;
 
@@ -406,6 +446,9 @@ export default function AccountClient({ locale }: { locale: string }) {
                           ? `-${discount.toFixed(2)} JOD`
                           : COPY.none;
 
+                    const created = new Date(o.created_at);
+                    const createdText = Number.isFinite(created.getTime()) ? created.toLocaleString() : o.created_at;
+
                     return (
                       <tr key={o.id}>
                         <td data-label={COPY.id}>
@@ -413,11 +456,14 @@ export default function AccountClient({ locale }: { locale: string }) {
                         </td>
 
                         <td data-label={COPY.created}>
-                          <span className="muted">{new Date(o.created_at).toLocaleString()}</span>
+                          <span className="muted">{createdText}</span>
                         </td>
 
                         <td data-label={COPY.status}>
-                          <span className={statusClass(status)}>{status}</span>
+                          <span className={chipClass(statusRaw)}>
+                            <span className="chip-dot" aria-hidden="true" />
+                            {formatStatus(statusRaw, isAr)}
+                          </span>
                         </td>
 
                         <td data-label={COPY.amount}>
@@ -429,7 +475,7 @@ export default function AccountClient({ locale }: { locale: string }) {
                         </td>
 
                         <td data-label={COPY.none}>
-                          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                          <div className="order-actions">
                             <a className="btn btn-quiet" href={`/${locale}/account/orders/${o.id}`}>
                               {COPY.details}
                             </a>
@@ -451,15 +497,20 @@ export default function AccountClient({ locale }: { locale: string }) {
       {reorderOpen ? (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
           <div className="modal">
-            <h3>{COPY.reorderTitle}</h3>
-            <p className="muted">{COPY.reorderBody}</p>
+            <h3 style={{ marginTop: 0 }}>{COPY.reorderTitle}</h3>
+            <p className="muted" style={{ marginTop: 6 }}>
+              {COPY.reorderBody}
+            </p>
+
             <div className="modal-actions">
               <button className="btn btn-quiet" onClick={() => setReorderOpen(false)} disabled={reorderBusy}>
                 {COPY.cancel}
               </button>
+
               <button className="btn btn-quiet" onClick={() => applyReorder("add")} disabled={reorderBusy}>
                 {COPY.addToCart}
               </button>
+
               <button className="btn primary" onClick={() => applyReorder("replace")} disabled={reorderBusy}>
                 {COPY.startFresh}
               </button>
