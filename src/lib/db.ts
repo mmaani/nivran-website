@@ -6,19 +6,23 @@ let pool: Pool | null = null;
 function normalizeDatabaseUrl(connectionString: string): string {
   try {
     const url = new URL(connectionString);
-    const sslmode = url.searchParams.get("sslmode");
-    const useLibpqCompat = url.searchParams.get("uselibpqcompat") === "true";
 
-    // pg v8 warns when sslmode=require because upcoming semantics will weaken TLS checks.
-    // Keep secure current behavior by upgrading to verify-full unless explicit libpq compatibility is requested.
-    if (!useLibpqCompat && sslmode === "require") {
-      url.searchParams.set("sslmode", "verify-full");
-      return url.toString();
+    // Prefer explicit sslmode from env. If missing, default to `require` for Neon.
+    const sslmode = url.searchParams.get("sslmode");
+    if (!sslmode) url.searchParams.set("sslmode", "require");
+
+    // If verify-full is used, ensure libpq-style clients can find system roots.
+    // (This is especially helpful for local psql usage inside containers.)
+    const sslmode2 = url.searchParams.get("sslmode");
+    if (sslmode2 === "verify-full" && !url.searchParams.get("sslrootcert")) {
+      url.searchParams.set("sslrootcert", "system");
     }
+
+    return url.toString();
   } catch {
     // Keep original if parsing fails.
+    return connectionString;
   }
-  return connectionString;
 }
 
 function getPool(): Pool {
@@ -52,58 +56,39 @@ function toExecutor(client: PoolClient): DbExecutor {
   };
 }
 
+export const db: DbExecutor = {
+  query: <T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]) => {
+    const values = params ? [...params] : undefined;
+    return getPool().query<T>(text, values);
+  },
+};
 
+export async function withDb<T>(fn: (exec: DbExecutor) => Promise<T>): Promise<T> {
+  const client = await getPool().connect();
+  try {
+    return await fn(toExecutor(client));
+  } finally {
+    client.release();
+  }
+}
 
 export function isDbConnectivityError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
 
   const nodeError = error as Error & { code?: unknown; errno?: unknown };
   const code = typeof nodeError.code === "string" ? nodeError.code.toUpperCase() : "";
-  const errno = typeof nodeError.errno === "string" ? nodeError.errno.toUpperCase() : "";
-  const message = String(error.message || "").toUpperCase();
+  const msg = (error.message || "").toLowerCase();
 
-  const connectivityCodes = new Set([
-    "ENETUNREACH",
-    "ETIMEDOUT",
-    "ECONNREFUSED",
-    "ECONNRESET",
-    "EHOSTUNREACH",
-    "EAI_AGAIN",
-    "EPIPE",
-  ]);
+  // Common DB connectivity indicators in serverless/containers
+  if (code === "ECONNREFUSED") return true;
+  if (code === "ETIMEDOUT") return true;
+  if (code === "ENOTFOUND") return true;
+  if (code === "57P01") return true; // admin_shutdown
+  if (code === "57P02") return true; // crash_shutdown
+  if (code === "57P03") return true; // cannot_connect_now
+  if (msg.includes("terminating connection")) return true;
+  if (msg.includes("no pg_hba.conf entry")) return true;
+  if (msg.includes("password authentication failed")) return false;
 
-  if (connectivityCodes.has(code) || connectivityCodes.has(errno)) return true;
-
-  return (
-    message.includes("ENETUNREACH")
-    || message.includes("ECONNREFUSED")
-    || message.includes("CONNECTION TERMINATED")
-    || message.includes("TIMED OUT")
-    || message.includes("NO PG_HBA.CONF ENTRY")
-    || message.includes("COULD NOT CONNECT TO SERVER")
-    || message.includes("DATABASE_URL ENV VAR IS REQUIRED")
-  );
+  return false;
 }
-
-export const db: DbExecutor & {
-  withTransaction: <T>(fn: (trx: DbExecutor) => Promise<T>) => Promise<T>;
-} = {
-  query: <T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]): Promise<QueryResult<T>> => {
-    const values = params ? [...params] : undefined;
-    return getPool().query<T>(text, values);
-  },
-  withTransaction: async <T>(fn: (trx: DbExecutor) => Promise<T>): Promise<T> => {
-    const client = await getPool().connect();
-    try {
-      await client.query("begin");
-      const result = await fn(toExecutor(client));
-      await client.query("commit");
-      return result;
-    } catch (error: unknown) {
-      await client.query("rollback");
-      throw error;
-    } finally {
-      client.release();
-    }
-  },
-};

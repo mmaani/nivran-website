@@ -331,40 +331,25 @@ export async function createCustomerSession(customerId: number, token: string): 
   const tokenHash = sha256Hex(token);
   const expiresAt = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(); // 30 days
 
-  const hasTokenHash = await hasColumn("customer_sessions", "token_hash");
-
-  // ✅ Always store token (because your DB token is NOT NULL in production)
-  // ✅ Also store token_hash if the column exists
-  if (hasTokenHash) {
-    await db.query(
-      `insert into customer_sessions (customer_id, token, token_hash, expires_at)
-       values ($1, $2, $3, $4)`,
-      [customerId, token, tokenHash, expiresAt],
-    );
-    return;
-  }
-
+  // Hash-only: DB stores only token_hash
   await db.query(
-    `insert into customer_sessions (customer_id, token, expires_at)
+    `insert into customer_sessions (customer_id, token_hash, expires_at)
      values ($1, $2, $3)`,
-    [customerId, token, expiresAt],
+    [customerId, tokenHash, expiresAt],
   );
 }
 export async function revokeCustomerSessionByToken(token: string): Promise<void> {
   await ensureIdentityTables();
+
   const tokenHash = sha256Hex(token);
-  const hasTokenHash = await hasColumn("customer_sessions", "token_hash");
-  if (hasTokenHash) {
-    await db.query(
-      `update customer_sessions
-          set revoked_at = now()
-        where revoked_at is null
-          and (token_hash = $1 or token = $2)`,
-      [tokenHash, token]
-    );
-    return;
-  }
-  await db.query(`update customer_sessions set revoked_at = now() where revoked_at is null and token = $1`, [token]);
+
+  await db.query(
+    `update customer_sessions
+        set revoked_at = now()
+      where revoked_at is null
+        and token_hash = $1`,
+    [tokenHash],
+  );
 }
 
 export async function rotateCustomerSession(customerId: number, oldToken: string): Promise<string> {
@@ -386,32 +371,22 @@ function readCookie(cookieHeader: string, name: string): string {
 
 export async function getCustomerIdFromRequest(req: Request): Promise<number | null> {
   await ensureIdentityTables();
+
   const cookie = req.headers.get("cookie") || "";
   const token = readCookie(cookie, CUSTOMER_SESSION_COOKIE);
   if (!token) return null;
 
   const tokenHash = sha256Hex(token);
-  const hasTokenHash = await hasColumn("customer_sessions", "token_hash");
 
-  const r = hasTokenHash
-    ? await db.query<{ customer_id: number }>(
-        `select customer_id
-           from customer_sessions
-          where (token_hash=$1 or token=$2)
-            and revoked_at is null
-            and expires_at > now()
-          limit 1`,
-        [tokenHash, token]
-      )
-    : await db.query<{ customer_id: number }>(
-        `select customer_id
-           from customer_sessions
-          where token=$1
-            and revoked_at is null
-            and expires_at > now()
-          limit 1`,
-        [token]
-      );
+  const r = await db.query<{ customer_id: number }>(
+    `select customer_id
+       from customer_sessions
+      where token_hash = $1
+        and revoked_at is null
+        and expires_at > now()
+      limit 1`,
+    [tokenHash],
+  );
 
   return r.rows[0]?.customer_id ?? null;
 }
