@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Profile = {
   id: number;
@@ -11,129 +11,94 @@ type Profile = {
   city: string | null;
   country: string | null;
   email_verified_at: string | null;
-  created_at: string;
+  promotions?: unknown[] | null;
+  orders?: unknown[] | null;
 };
 
 type OrderRow = {
   id: number;
-  cart_id: string;
+  cart_id: string | null;
   status: string;
+  created_at: string;
+
   amount_jod: string;
-  subtotal_jod?: string | null;
-  shipping_jod?: string | null;
+  subtotal_before_discount_jod?: string | null;
   discount_jod?: string | null;
+  subtotal_after_discount_jod?: string | null;
+  shipping_jod?: string | null;
   total_jod?: string | null;
+
   promo_code?: string | null;
   promotion_id?: string | null;
   discount_source?: string | null;
-  promo_rule_title?: string | null;
-  created_at: string;
 };
 
-function formatJod(v: unknown) {
-  const n = Number(v ?? 0);
-  if (!Number.isFinite(n)) return "0.00 JOD";
-  return `${n.toFixed(2)} JOD`;
+function isObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
 }
 
-function formatDate(d: string) {
-  const t = new Date(d);
-  if (Number.isNaN(t.getTime())) return d;
-  return t.toLocaleString();
-}
-
-function statusLabel(s: string) {
-  const v = String(s || "").trim().toUpperCase();
-  return v || "—";
-}
-
-function pillStyleForStatus(): React.CSSProperties {
-  // Neutral design: subtle background + border, no loud colors.
-  // (You can later map statuses to brand colors if you want.)
+function smallPill(label: string, tone: "neutral" | "gold") {
   return {
     display: "inline-flex",
     alignItems: "center",
     gap: 6,
-    padding: "3px 10px",
     borderRadius: 999,
-    border: "1px solid rgba(0,0,0,.12)",
-    background: "rgba(0,0,0,.02)",
+    padding: "6px 10px",
     fontSize: 12,
-    fontWeight: 700,
-    letterSpacing: ".02em",
-    whiteSpace: "nowrap",
+    border: "1px solid rgba(0,0,0,.08)",
+    background: tone === "gold" ? "rgba(201,164,106,.16)" : "rgba(0,0,0,.04)",
+    color: "rgba(0,0,0,.78)",
+    whiteSpace: "nowrap" as const,
   };
 }
 
-function smallPill(text: string, tone: "neutral" | "gold" = "neutral"): React.CSSProperties {
-  return {
-    display: "inline-flex",
-    alignItems: "center",
-    padding: "2px 10px",
-    borderRadius: 999,
-    fontSize: 12,
-    border: tone === "gold" ? "1px solid rgba(201,164,106,.55)" : "1px solid rgba(0,0,0,.12)",
-    background: tone === "gold" ? "rgba(201,164,106,.10)" : "rgba(0,0,0,.02)",
-    whiteSpace: "nowrap",
-  };
+function moneyOrDash(v: string | null | undefined) {
+  if (!v) return "—";
+  return `${v} JOD`;
 }
 
 export default function AccountClient({ locale }: { locale: string }) {
   const isAr = locale === "ar";
 
-  const t = useMemo(
-    () => ({
-      title: isAr ? "حسابي" : "My Account",
+  const t = useMemo(() => {
+    return {
+      title: isAr ? "الحساب" : "Account",
+      subtitle: isAr ? "إدارة معلوماتك وطلباتك." : "Manage your details and orders.",
       loading: isAr ? "جارٍ التحميل..." : "Loading...",
-      login: isAr ? "تسجيل الدخول" : "Login",
-      logout: isAr ? "تسجيل خروج" : "Logout",
-
-      verifyTitle: isAr ? "بريدك غير مُؤكَّد" : "Email not verified",
-      verifyBody: isAr
-        ? "أكد بريدك لتأمين حسابك واستلام تحديثات الطلبات."
-        : "Verify your email to secure your account and receive order updates.",
-      verifyBtn: isAr ? "تأكيد الآن" : "Verify now",
-
+      verified: isAr ? "موثق" : "Verified",
+      unverified: isAr ? "غير موثق" : "Unverified",
       profileTitle: isAr ? "ملفك الشخصي" : "Your profile",
       ordersTitle: isAr ? "الطلبات" : "Orders",
-
       fullName: isAr ? "الاسم الكامل *" : "Full name *",
       email: isAr ? "البريد الإلكتروني" : "Email",
-      verified: isAr ? "مؤكد" : "Verified",
-      unverified: isAr ? "غير مؤكد" : "Unverified",
       phone: isAr ? "الهاتف *" : "Phone *",
       country: isAr ? "الدولة" : "Country",
       address: isAr ? "العنوان *" : "Address *",
       city: isAr ? "المدينة" : "City",
-
       save: isAr ? "حفظ" : "Save",
-      saveErr: isAr ? "تعذر حفظ البيانات." : "Could not save profile.",
-
+      saveErr: isAr ? "تعذر الحفظ الآن" : "Unable to save right now",
       ordersEmpty: isAr ? "لا توجد طلبات بعد." : "No orders yet.",
-      id: isAr ? "الرقم" : "ID",
-      cart: isAr ? "السلة" : "Cart",
+      view: isAr ? "عرض" : "View",
       status: isAr ? "الحالة" : "Status",
+      created: isAr ? "التاريخ" : "Created",
+      amount: isAr ? "المبلغ" : "Amount",
       total: isAr ? "الإجمالي" : "Total",
-      discount: isAr ? "الخصم" : "Discount",
-      promo: isAr ? "الخصومات المطبقة" : "Discounts applied",
-      date: isAr ? "التاريخ" : "Date",
-      actions: isAr ? "إجراءات" : "Actions",
-      details: isAr ? "التفاصيل" : "Details",
-      comingSoon: isAr ? "قريباً" : "Coming soon",
-
-      promoTitle: isAr ? "العروض والخصومات" : "Promotions",
-      promoBody: isAr
-        ? "أكواد الخصم تُطبَّق أثناء الدفع. تابع صفحة المتجر للعروض الحالية."
-        : "Promo codes are applied during checkout. Check the shop for current offers.",
-      shop: isAr ? "الانتقال للمتجر" : "Go to shop",
-    }),
-    [isAr]
-  );
+      discountsApplied: isAr ? "الخصومات المطبقة" : "Discounts applied",
+      promoCode: isAr ? "الكود" : "Code",
+      discount: isAr ? "قيمة الخصم" : "Discount",
+      source: isAr ? "المصدر" : "Source",
+      none: isAr ? "—" : "—",
+      logout: isAr ? "تسجيل الخروج" : "Logout",
+      emailLocked: isAr ? "لا يمكن تغيير البريد الإلكتروني" : "Email cannot be changed",
+    };
+  }, [isAr]);
 
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
 
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -141,80 +106,93 @@ export default function AccountClient({ locale }: { locale: string }) {
   const [city, setCity] = useState("");
   const [country, setCountry] = useState("Jordan");
 
-  const canSave = useMemo(() => !!fullName.trim() && !!phone.trim() && !!addressLine1.trim(), [
-    fullName,
-    phone,
-    addressLine1,
-  ]);
+  const canSave = useMemo(
+    () => !savingProfile && !!fullName.trim() && !!phone.trim() && !!addressLine1.trim(),
+    [fullName, phone, addressLine1, savingProfile]
+  );
 
-  useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      setLoading(true);
-      setErr(null);
-
-      const res = await fetch("/api/auth/profile", { cache: "no-store" });
-      const data = await res.json().catch(() => ({}));
-
-      if (!alive) return;
-
-      if (!res.ok || !data?.ok) {
-        window.location.href = `/${locale}/account/login`;
-        return;
-      }
-
-      setProfile(data.profile);
-
-      // Prefer the hardened Orders API (customer-scoped) for discount/promo visibility.
-      try {
-        const rOrders = await fetch("/api/orders", { cache: "no-store" });
-        const dOrders = await rOrders.json().catch(() => ({}));
-        if (rOrders.ok && dOrders?.ok && Array.isArray(dOrders.orders)) {
-          setOrders(dOrders.orders);
-        } else {
-          setOrders(Array.isArray(data.orders) ? data.orders : []);
-        }
-      } catch {
-        setOrders(Array.isArray(data.orders) ? data.orders : []);
-      }
-setFullName(String(data.profile?.full_name || ""));
-      setPhone(String(data.profile?.phone || ""));
-      setAddressLine1(String(data.profile?.address_line1 || ""));
-      setCity(String(data.profile?.city || ""));
-      setCountry(String(data.profile?.country || "Jordan"));
-
-      setLoading(false);
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [locale]);
-
-  async function saveProfile() {
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
     setErr(null);
-    const res = await fetch("/api/auth/profile", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        full_name: fullName,
-        phone,
-        address_line1: addressLine1,
-        city,
-        country,
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data?.ok) {
-      setErr(data?.error || t.saveErr);
+
+    const res = await fetch("/api/auth/profile", { cache: "no-store" });
+    const data: unknown = await res.json().catch(() => null);
+
+    if (!res.ok || !isObject(data) || data.ok !== true || !isObject(data.profile)) {
+      setProfile(null);
+      setOrders([]);
+      setLoading(false);
       return;
     }
 
-    // Refresh
-    const r = await fetch("/api/auth/profile", { cache: "no-store" });
-    const d = await r.json().catch(() => ({}));
-    if (r.ok && d?.ok) setProfile(d.profile);
+    const p = data.profile as unknown as Profile;
+    setProfile(p);
+
+    setFullName(String(p.full_name || ""));
+    setPhone(String(p.phone || ""));
+    setAddressLine1(String(p.address_line1 || ""));
+    setCity(String(p.city || ""));
+    setCountry(String(p.country || "Jordan"));
+
+    try {
+      const rOrders = await fetch("/api/orders", { cache: "no-store" });
+      const dOrders: unknown = await rOrders.json().catch(() => null);
+      if (rOrders.ok && isObject(dOrders) && dOrders.ok === true && Array.isArray(dOrders.orders)) {
+        setOrders(dOrders.orders as OrderRow[]);
+      } else if (Array.isArray((data as Record<string, unknown>).orders)) {
+        setOrders((data as Record<string, unknown>).orders as OrderRow[]);
+      } else {
+        setOrders([]);
+      }
+    } catch {
+      setOrders([]);
+    }
+
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchAll().catch(() => {
+      setLoading(false);
+    });
+  }, [fetchAll]);
+
+  async function saveProfile() {
+    if (!canSave) return;
+    setErr(null);
+    setProfileSaved(false);
+    setSavingProfile(true);
+
+    try {
+      const res = await fetch("/api/auth/profile", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          full_name: fullName,
+          phone,
+          address_line1: addressLine1,
+          city,
+          country,
+        }),
+      });
+
+      const data: unknown = await res.json().catch(() => null);
+
+      if (!res.ok || !isObject(data) || data.ok !== true) {
+        const msg = isObject(data) && typeof data.error === "string" ? data.error : t.saveErr;
+        setErr(msg);
+        return;
+      }
+
+      const r = await fetch("/api/auth/profile", { cache: "no-store" });
+      const d: unknown = await r.json().catch(() => null);
+      if (r.ok && isObject(d) && d.ok === true && isObject(d.profile)) {
+        setProfile(d.profile as unknown as Profile);
+        setProfileSaved(true);
+      }
+    } finally {
+      setSavingProfile(false);
+    }
   }
 
   async function logout() {
@@ -226,70 +204,41 @@ setFullName(String(data.profile?.full_name || ""));
 
   if (!profile) {
     return (
-      <div className="panel">
-        <p className="muted">{err || (isAr ? "يرجى تسجيل الدخول." : "Please login.")}</p>
-        <a className="btn" href={`/${locale}/account/login`}>
-          {t.login}
-        </a>
+      <div style={{ padding: "1.2rem 0", maxWidth: 980, margin: "0 auto" }}>
+        <div className="panel">
+          <h1 className="title" style={{ marginTop: 0 }}>
+            {t.title}
+          </h1>
+          <p className="muted" style={{ marginTop: 8, lineHeight: 1.6 }}>
+            {isAr ? "تعذر تحميل الحساب. الرجاء تسجيل الدخول من جديد." : "Unable to load account. Please log in again."}
+          </p>
+          <a className="btn" href={`/${locale}/account/login`}>
+            {isAr ? "تسجيل الدخول" : "Login"}
+          </a>
+        </div>
       </div>
     );
   }
 
-  const dir = isAr ? "rtl" : "ltr";
-
-  const thStyle: React.CSSProperties = {
-    textAlign: isAr ? "right" : "left",
-    padding: "10px 12px",
-    fontSize: 12,
-    letterSpacing: ".08em",
-    textTransform: "uppercase",
-    color: "rgba(0,0,0,.55)",
-    borderBottom: "1px solid rgba(0,0,0,.08)",
-    whiteSpace: "nowrap",
-  };
-
-  const tdStyle: React.CSSProperties = {
-    padding: "12px 12px",
-    borderBottom: "1px solid rgba(0,0,0,.06)",
-    verticalAlign: "middle",
-  };
-
   return (
-    <div dir={dir} style={{ padding: "1.2rem 0", maxWidth: 980, margin: "0 auto" }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+    <div style={{ padding: "1.2rem 0", maxWidth: 980, margin: "0 auto" }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div>
-          <h1 className="title" style={{ margin: 0 }}>
+          <h1 className="title" style={{ marginTop: 0, marginBottom: 6 }}>
             {t.title}
           </h1>
-          <div className="muted" style={{ marginTop: 6 }}>
-            {profile.full_name ? profile.full_name : profile.email}
-          </div>
+          <p className="muted" style={{ marginTop: 0 }}>
+            {t.subtitle}
+          </p>
         </div>
 
-        <button className="btn btn-outline" onClick={logout}>
-          {t.logout}
-        </button>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button className="btn btn-outline" type="button" onClick={logout}>
+            {t.logout}
+          </button>
+        </div>
       </div>
 
-      {/* Verification banner */}
-      {!profile.email_verified_at ? (
-        <div className="panel" style={{ marginTop: 14, border: "1px solid rgba(201,164,106,.45)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-            <div>
-              <div style={{ fontWeight: 800 }}>{t.verifyTitle}</div>
-              <div className="muted" style={{ marginTop: 4, lineHeight: 1.5 }}>
-                {t.verifyBody}
-              </div>
-            </div>
-            <a className="btn" href={`/${locale}/account/verify?email=${encodeURIComponent(profile.email)}`}>
-              {t.verifyBtn}
-            </a>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Main grid */}
       <div
         style={{
           marginTop: 14,
@@ -316,12 +265,22 @@ setFullName(String(data.profile?.full_name || ""));
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder={isAr ? "مثال: محمد المعاني" : "e.g. Mohammad Maani"}
+                autoComplete="name"
               />
             </label>
 
             <label>
               <span className="muted">{t.email}</span>
-              <input className="input" value={profile.email} readOnly />
+              <input
+                className="input"
+                value={profile.email}
+                readOnly
+                disabled
+                aria-readonly="true"
+                title={t.emailLocked}
+                autoComplete="email"
+                style={{ opacity: 0.75, cursor: "not-allowed" }}
+              />
             </label>
 
             <label>
@@ -331,12 +290,13 @@ setFullName(String(data.profile?.full_name || ""));
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder={isAr ? "رقم الهاتف" : "Phone number"}
+                autoComplete="tel"
               />
             </label>
 
             <label>
               <span className="muted">{t.country}</span>
-              <input className="input" value={country} onChange={(e) => setCountry(e.target.value)} placeholder={t.country} />
+              <input className="input" value={country} onChange={(e) => setCountry(e.target.value)} placeholder={t.country} autoComplete="country-name" />
             </label>
 
             <label style={{ gridColumn: "1 / -1" }}>
@@ -346,143 +306,83 @@ setFullName(String(data.profile?.full_name || ""));
                 value={addressLine1}
                 onChange={(e) => setAddressLine1(e.target.value)}
                 placeholder={isAr ? "العنوان" : "Address line"}
+                autoComplete="street-address"
               />
             </label>
 
             <label style={{ gridColumn: "1 / -1" }}>
               <span className="muted">{t.city}</span>
-              <input className="input" value={city} onChange={(e) => setCity(e.target.value)} placeholder={t.city} />
+              <input className="input" value={city} onChange={(e) => setCity(e.target.value)} placeholder={t.city} autoComplete="address-level2" />
             </label>
           </div>
 
-          {err ? <p style={{ color: "crimson", marginTop: 10, marginBottom: 0 }}>{err}</p> : null}
+          {err ? (
+            <p className="muted" style={{ marginTop: 10, lineHeight: 1.6 }}>
+              {err}
+            </p>
+          ) : null}
 
-          <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
-            <button className={"btn" + (!canSave ? " btn-disabled" : "")} disabled={!canSave} onClick={saveProfile}>
-              {t.save}
+          <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <button type="button" className={"btn" + (!canSave ? " btn-disabled" : "")} disabled={!canSave} onClick={saveProfile}>
+              {savingProfile ? (isAr ? "جارٍ الحفظ..." : "Saving...") : t.save}
             </button>
+            {profileSaved ? <span className="muted">{isAr ? "تم الحفظ" : "Saved"}</span> : null}
           </div>
-        </div>
-
-        {/* Promotions (simple info card for now) */}
-        <div className="panel">
-          <h3 style={{ marginTop: 0, marginBottom: 8 }}>{t.promoTitle}</h3>
-          <p className="muted" style={{ marginTop: 0, lineHeight: 1.6 }}>
-            {t.promoBody}
-          </p>
-          <a className="btn btn-outline" href={`/${locale}/product`}>
-            {t.shop}
-          </a>
         </div>
 
         {/* Orders card */}
         <div className="panel">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-            <h3 style={{ marginTop: 0, marginBottom: 0 }}>{t.ordersTitle}</h3>
-            <div className="muted" style={{ fontSize: 13 }}>
-              {orders.length ? `${orders.length}` : "0"}
-            </div>
-          </div>
+          <h3 style={{ marginTop: 0 }}>{t.ordersTitle}</h3>
 
-          {orders.length ? (
-            <div style={{ overflowX: "auto", marginTop: 12 }}>
-              <table className="table" style={{ minWidth: 820, borderCollapse: "separate", borderSpacing: 0 }}>
+          {!orders.length ? (
+            <p className="muted" style={{ marginTop: 8 }}>
+              {t.ordersEmpty}
+            </p>
+          ) : (
+            <div style={{ overflowX: "auto", marginTop: 10 }}>
+              <table className="table" style={{ minWidth: 760 }}>
                 <thead>
                   <tr>
-                    <th style={{ ...thStyle, width: 70 }}>{t.id}</th>
-                    <th style={{ ...thStyle, width: 260 }}>{t.cart}</th>
-                    <th style={{ ...thStyle, width: 170 }}>{t.status}</th>
-                    <th style={{ ...thStyle, width: 150 }}>{t.total}</th>
-                    <th style={{ ...thStyle, width: 140 }}>{t.discount}</th>
-                    <th style={{ ...thStyle, width: 220 }}>{t.promo}</th>
-                    <th style={{ ...thStyle, width: 220 }}>{t.date}</th>
-                    <th style={{ ...thStyle, width: 120 }}>{t.actions}</th>
+                    <th>ID</th>
+                    <th>{t.status}</th>
+                    <th>{t.created}</th>
+                    <th>{t.amount}</th>
+                    <th>{t.total}</th>
+                    <th>{t.discountsApplied}</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {orders.map((o) => (
                     <tr key={o.id}>
-                      <td style={{ ...tdStyle, fontWeight: 800 }}>{o.id}</td>
-
-                      <td style={{ ...tdStyle, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: 12 }}>
-                        {o.cart_id}
-                      </td>
-
-                      <td style={tdStyle}>
-                        <span style={pillStyleForStatus()}>{statusLabel(o.status)}</span>
-                      </td>
-
-                      <td style={{ ...tdStyle, fontWeight: 700 }}>{formatJod(o.total_jod ?? o.amount_jod)}</td>
-
-                      <td style={{ ...tdStyle, fontWeight: 650 }}>
-                        {Number(o.discount_jod || 0) > 0 ? `-${formatJod(o.discount_jod)}` : <span className="muted">—</span>}
-                      </td>
-
-                      <td style={tdStyle}>
-                        {o.promo_code || o.promo_rule_title || Number(o.discount_jod || 0) > 0 || o.promotion_id || o.discount_source ? (
-                          <div style={{ display: "grid", gap: 3 }}>
-                            {o.promo_code ? (
-                              <span
-                                style={{
-                                  display: "inline-flex",
-                                  width: "fit-content",
-                                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                                  fontSize: 12,
-                                  padding: "2px 8px",
-                                  borderRadius: 999,
-                                  border: "1px solid rgba(0,0,0,.12)",
-                                }}
-                              >
-                                {o.promo_code}
-                              </span>
-                            ) : null}
-                            {o.promo_rule_title ? (
-                              <span className="muted" style={{ fontSize: 12 }}>
-                                {o.promo_rule_title}
-                              </span>
-                            ) : null}
-
-                            {o.discount_source ? (
-                              <span className="muted" style={{ fontSize: 12 }}>
-                                {isAr ? "المصدر:" : "Source:"} {o.discount_source}
-                              </span>
-                            ) : null}
-
-                            {o.promotion_id ? (
-                              <span className="muted" style={{ fontSize: 12 }}>
-                                {isAr ? "معرّف العرض:" : "Promotion ID:"} {o.promotion_id}
-                              </span>
-                            ) : null}
+                      <td>{o.id}</td>
+                      <td>{o.status}</td>
+                      <td>{o.created_at}</td>
+                      <td>{moneyOrDash(o.amount_jod)}</td>
+                      <td>{moneyOrDash(o.total_jod ?? o.amount_jod)}</td>
+                      <td>
+                        <div style={{ display: "grid", gap: 4 }}>
+                          <div className="muted">
+                            {t.promoCode}: <strong>{o.promo_code ?? t.none}</strong>
                           </div>
-                        ) : (
-                          <span className="muted">—</span>
-                        )}
+                          <div className="muted">
+                            {t.discount}: <strong>{moneyOrDash(o.discount_jod)}</strong>
+                          </div>
+                          <div className="muted">
+                            {t.source}: <strong>{o.discount_source ?? t.none}</strong>
+                          </div>
+                        </div>
                       </td>
-
-                      <td className="muted" style={{ ...tdStyle, fontSize: 13 }}>
-                        {formatDate(o.created_at)}
-                      </td>
-
-                      {/* Order details: coming soon */}
-                      <td style={tdStyle}>
-                        <a
-                          className="btn btn-outline"
-                          href={`/${locale}/account/orders/${o.id}`}
-                          style={{ padding: ".35rem .65rem", borderRadius: 10 }}
-                        >
-                          {t.details}
+                      <td style={{ textAlign: "right" }}>
+                        <a className="btn btn-outline" href={`/${locale}/account/orders/${o.id}`}>
+                          {t.view}
                         </a>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-
             </div>
-          ) : (
-            <p className="muted" style={{ marginTop: 10 }}>
-              {t.ordersEmpty}
-            </p>
           )}
         </div>
       </div>
