@@ -544,3 +544,346 @@ a { color: inherit; text-decoration: none; }
   }
 }
 
+
+/* =========================
+   ACCOUNT UI (NIVRAN)
+   Elegant profile + responsive orders
+   ========================= */
+
+.account-shell{
+  width: min(980px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 1.35rem 0 1.8rem;
+}
+
+.account-head{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.account-title{
+  margin: 0;
+}
+
+.account-subtitle{
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.account-actions{
+  display:flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items:center;
+}
+
+.account-grid{
+  display:grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 14px;
+  align-items:start;
+}
+
+@media (max-width: 920px){
+  .account-grid{ grid-template-columns: 1fr; }
+}
+
+.account-panel{
+  padding: 1.05rem;
+}
+
+@media (max-width: 520px){
+  .account-panel{ padding: .95rem; }
+}
+
+.account-panel-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.account-panel-title{
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.account-divider{
+  height: 1px;
+  background: rgba(20,20,20,.08);
+  margin: 14px 0;
+}
+
+.field{
+  display:grid;
+  gap: 6px;
+}
+
+.field-label{
+  color: var(--muted);
+  font-size: .9rem;
+}
+
+.field-help{
+  color: var(--muted);
+  font-size: .82rem;
+  margin-top: 2px;
+}
+
+.field-grid{
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 920px){
+  .field-grid{ grid-template-columns: 1fr; }
+}
+
+.btn-outline{
+  background: rgba(255,255,255,.85);
+}
+
+.btn-danger-outline{
+  background: rgba(255,255,255,.85);
+  border-color: rgba(180,34,44,.22);
+}
+
+.btn-danger-outline:hover{
+  background: rgba(255,255,255,.95);
+  border-color: rgba(180,34,44,.32);
+}
+
+.btn-disabled{
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+/* ====== Stronger status chips (premium) ====== */
+.chip{
+  display:inline-flex;
+  align-items:center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(20,20,20,.12);
+  font-weight: 700;
+  font-size: .86rem;
+  white-space: nowrap;
+  letter-spacing: .01em;
+}
+
+.chip-dot{
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: rgba(20,20,20,.35);
+  box-shadow: 0 0 0 3px rgba(255,255,255,.7);
+}
+
+.chip--paid,
+.chip--delivered{
+  background: rgba(26,138,81,.16);
+  border-color: rgba(26,138,81,.22);
+}
+.chip--paid .chip-dot,
+.chip--delivered .chip-dot{
+  background: rgba(26,138,81,.78);
+}
+
+.chip--shipped{
+  background: rgba(0,105,170,.16);
+  border-color: rgba(0,105,170,.22);
+}
+.chip--shipped .chip-dot{
+  background: rgba(0,105,170,.78);
+}
+
+.chip--pending{
+  background: rgba(199,165,106,.26);
+  border-color: rgba(199,165,106,.32);
+}
+.chip--pending .chip-dot{
+  background: rgba(169,130,62,.88);
+}
+
+.chip--failed,
+.chip--cancelled{
+  background: rgba(180,34,44,.13);
+  border-color: rgba(180,34,44,.20);
+}
+.chip--failed .chip-dot,
+.chip--cancelled .chip-dot{
+  background: rgba(180,34,44,.75);
+}
+
+.chip--neutral{
+  background: rgba(20,20,20,.06);
+  border-color: rgba(20,20,20,.12);
+}
+
+/* ====== Orders table system (brand-consistent) ====== */
+.table-wrap{
+  overflow-x:auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 16px;
+  border: 1px solid rgba(20,20,20,.10);
+  background: rgba(255,255,255,.78);
+  box-shadow: 0 14px 30px var(--shadow);
+}
+
+.table{
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 860px;
+}
+
+.table thead th{
+  text-align: start;
+  font-size: .82rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(20,20,20,.72);
+  background: linear-gradient(180deg, rgba(251,248,243,.95), rgba(245,240,231,.85));
+  border-bottom: 1px solid rgba(20,20,20,.08);
+  padding: 13px 12px;
+  position: sticky;
+  top: 0;
+  backdrop-filter: blur(10px);
+  z-index: 1;
+}
+
+.table tbody td{
+  padding: 13px 12px;
+  border-bottom: 1px solid rgba(20,20,20,.07);
+  vertical-align: top;
+}
+
+.table tbody tr:hover td{
+  background: rgba(251,248,243,.72);
+}
+
+.table tbody tr:last-child td{
+  border-bottom: 0;
+}
+
+/* Compact discounts stack */
+.order-discount-stack{
+  display:grid;
+  gap: 6px;
+  font-size: .92rem;
+}
+
+.order-discount-stack .muted{
+  font-size: .86rem;
+}
+
+/* Right aligned actions column */
+.order-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ====== Mobile: table -> cards ====== */
+@media (max-width: 860px){
+  .table{ min-width: 0; }
+}
+
+@media (max-width: 760px){
+  .table-wrap{
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .table thead{ display:none; }
+  .table, .table tbody, .table tr, .table td{
+    display:block;
+    width:100%;
+  }
+
+  .table tr{
+    border: 1px solid rgba(20,20,20,.10);
+    border-radius: 18px;
+    background: rgba(255,255,255,.88);
+    box-shadow: 0 14px 30px var(--shadow);
+    padding: 10px;
+    margin-bottom: 12px;
+  }
+
+  .table tbody td{
+    border-bottom: 0;
+    padding: 10px 8px;
+    display:flex;
+    justify-content:space-between;
+    gap: 12px;
+  }
+
+  .table tbody td::before{
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: .86rem;
+    padding-inline-end: 10px;
+    flex: 1;
+    max-width: 46%;
+  }
+
+  .table tbody td > *{
+    flex: 1;
+    text-align: end;
+  }
+
+  [dir="rtl"] .table tbody td > *{
+    text-align: start;
+  }
+
+  .order-actions{
+    justify-content: flex-start;
+  }
+}
+
+/* ====== Reorder mini menu ====== */
+.reorder-menu{
+  position: relative;
+  display: inline-flex;
+}
+
+.reorder-popover{
+  position:absolute;
+  top: calc(100% + 8px);
+  inset-inline-end: 0;
+  width: min(280px, calc(100vw - 2rem));
+  background: rgba(255,255,255,.96);
+  border: 1px solid rgba(20,20,20,.12);
+  border-radius: 16px;
+  padding: 10px;
+  box-shadow: 0 18px 40px var(--shadow);
+  z-index: 10;
+}
+
+.reorder-popover-title{
+  margin: 0 0 8px;
+  font-weight: 800;
+  font-size: .92rem;
+  letter-spacing: .02em;
+}
+
+.reorder-popover-actions{
+  display:grid;
+  gap: 8px;
+}
+
+.reorder-popover-actions .btn{
+  width: 100%;
+  justify-content: center;
+}
+
