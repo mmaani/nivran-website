@@ -56,7 +56,9 @@ function normDelta(value: unknown): Delta | null {
 
   const resolvedViaRaw = typeof value["resolvedVia"] === "string" ? value["resolvedVia"].toUpperCase() : "MISSING";
   const resolvedVia: Delta["resolvedVia"] =
-    resolvedViaRaw === "DIRECT" || resolvedViaRaw === "NORMALIZED" || resolvedViaRaw === "VARIANT" ? (resolvedViaRaw as Delta["resolvedVia"]) : "MISSING";
+    resolvedViaRaw === "DIRECT" || resolvedViaRaw === "NORMALIZED" || resolvedViaRaw === "VARIANT"
+      ? (resolvedViaRaw as Delta["resolvedVia"])
+      : "MISSING";
 
   const raw = typeof value["raw"] === "string" ? value["raw"] : null;
   const normalized = typeof value["normalized"] === "string" ? value["normalized"] : null;
@@ -96,11 +98,7 @@ function normalizeRows(value: unknown): Row[] {
       if (!isRecord(r)) return null;
 
       const deltasRaw = r["deltas"];
-      const deltas: Delta[] = Array.isArray(deltasRaw)
-        ? deltasRaw
-            .map((d) => normDelta(d))
-            .filter((x): x is Delta => x !== null)
-        : [];
+      const deltas: Delta[] = Array.isArray(deltasRaw) ? deltasRaw.map((d) => normDelta(d)).filter((x): x is Delta => x !== null) : [];
 
       return {
         id: toInt(r["id"]),
@@ -165,17 +163,21 @@ function pillStyle(variant: "ok" | "warn" | "danger" | "info") {
 }
 
 export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
+  const isAr = lang === "ar";
+
   const [rows, setRows] = useState<Row[]>([]);
   const [totalPending, setTotalPending] = useState<number>(0);
   const [busy, setBusy] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [q, setQ] = useState<string>("");
 
   const L = useMemo(() => {
-    if (lang === "ar") {
+    if (isAr) {
       return {
         title: "مطابقة المخزون",
         subtitle: "طلبات مدفوعة لم يتم خصم المخزون لها بعد.",
+        search: "بحث برقم الطلب / السلة / الحالة / الدفع",
         refresh: "تحديث",
         commitAll: "تنفيذ للكل",
         commit: "تنفيذ",
@@ -190,11 +192,13 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
         missing: "غير معروف",
         viaVariant: "عبر المتغير",
         normalized: "تمت المعالجة",
+        pending: "معلّق",
       };
     }
     return {
       title: "Inventory reconciliation",
       subtitle: "Paid orders that have not committed inventory yet.",
+      search: "Search by order id / cart_id / status / payment",
       refresh: "Refresh",
       commitAll: "Commit all",
       commit: "Commit",
@@ -209,8 +213,22 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
       missing: "Unresolved",
       viaVariant: "via variant",
       normalized: "normalized",
+      pending: "Pending",
     };
-  }, [lang]);
+  }, [isAr]);
+
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (!s) return rows;
+    return rows.filter((r) => {
+      return (
+        String(r.id).toLowerCase().includes(s) ||
+        String(r.cart_id).toLowerCase().includes(s) ||
+        String(r.status).toLowerCase().includes(s) ||
+        String(r.payment_method).toLowerCase().includes(s)
+      );
+    });
+  }, [rows, q]);
 
   async function load() {
     setErr(null);
@@ -233,6 +251,7 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
 
   useEffect(() => {
     load().catch(() => null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function commitOne(id: number) {
@@ -282,25 +301,33 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
 
   return (
     <div className="admin-grid">
-      <div className="admin-card" style={{ display: "grid", gap: 10 }}>
-        <div className="admin-row" style={{ justifyContent: "space-between" }}>
-          <div>
-            <p className="admin-kicker" style={{ marginBottom: 6 }}>
+      <div className="admin-card" style={{ display: "grid", gap: 12 }}>
+        <div className="admin-row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div style={{ display: "grid", gap: 6 }}>
+            <p className="admin-kicker" style={{ margin: 0 }}>
               {L.title}
             </p>
-            <p className="admin-muted">{L.subtitle}</p>
+            <p className="admin-muted" style={{ margin: 0 }}>
+              {L.subtitle}
+            </p>
           </div>
 
-          <div className="admin-row" style={{ justifyContent: "flex-end" }}>
-            <span className="admin-pill admin-pill-title">{totalPending}</span>
+          <div className="admin-row" style={{ justifyContent: "flex-end", flexWrap: "wrap" }}>
+            <span className="admin-pill admin-pill-title">
+              {L.pending}: <span className="ltr">{totalPending}</span>
+            </span>
+
             <button className="btn" type="button" onClick={() => load()} disabled={busy}>
               {L.refresh}
             </button>
+
             <button className="btn btn-primary" type="button" onClick={() => commitAll()} disabled={busy || rows.length === 0}>
               {L.commitAll}
             </button>
           </div>
         </div>
+
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={L.search} className="admin-input" />
 
         {err ? <div style={{ color: "crimson", fontWeight: 700 }}>{err}</div> : null}
       </div>
@@ -320,14 +347,14 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {filtered.length === 0 ? (
               <tr>
                 <td colSpan={8} style={{ padding: 14, opacity: 0.7 }}>
                   {L.none}
                 </td>
               </tr>
             ) : (
-              rows.map((r) => {
+              filtered.map((r) => {
                 const hasMissing = r.deltas.some((d) => d.resolved == null);
 
                 return (
@@ -338,7 +365,9 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
                       {r.status} / {r.payment_method}
                       {hasMissing ? <span style={{ marginInlineStart: 8, ...pillStyle("danger") }}>{L.missing}</span> : null}
                     </td>
-                    <td style={{ fontSize: 12, opacity: 0.85 }}>{new Date(r.created_at).toLocaleString()}</td>
+                    <td style={{ fontSize: 12, opacity: 0.85 }}>
+                      {r.created_at ? new Date(r.created_at).toLocaleString(isAr ? "ar-JO" : undefined) : "—"}
+                    </td>
 
                     <td>
                       <div style={{ display: "grid", gap: 10 }}>
@@ -368,7 +397,14 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
                                   {isNormalizedDifferent ? <span style={{ opacity: 0.65 }}>→</span> : null}
 
                                   {isNormalizedDifferent && showNorm ? (
-                                    <span className="badge" style={{ fontWeight: 900, borderColor: "rgba(199,165,106,.35)", background: "rgba(255,250,242,.9)" }}>
+                                    <span
+                                      className="badge"
+                                      style={{
+                                        fontWeight: 900,
+                                        borderColor: "rgba(199,165,106,.35)",
+                                        background: "rgba(255,250,242,.9)",
+                                      }}
+                                    >
                                       {d.normalized}
                                     </span>
                                   ) : null}
@@ -415,7 +451,11 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
                       <div style={{ display: "grid", gap: 8 }}>
                         {r.deltas.length ? (
                           r.deltas.map((d, idx) => (
-                            <div key={`${r.id}-${idx}-stock`} className="ltr" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                            <div
+                              key={`${r.id}-${idx}-stock`}
+                              className="ltr"
+                              style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}
+                            >
                               <span style={{ ...pillStyle(d.current != null ? "ok" : "danger") }}>{d.current == null ? "?" : d.current}</span>
                               <span style={{ opacity: 0.75 }}>→</span>
                               <span style={{ ...pillStyle(d.after != null ? "ok" : "danger") }}>{d.after == null ? "?" : d.after}</span>

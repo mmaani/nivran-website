@@ -70,11 +70,11 @@ const STATUS_AR: Record<string, string> = {
   PAID: "مدفوع",
   FAILED: "فشل",
   CANCELED: "ملغي",
-  PENDING_COD_CONFIRM: "بانتظار تأكيد COD",
+  PENDING_COD_CONFIRM: "بانتظار تأكيد الدفع عند الاستلام",
   PROCESSING: "قيد التجهيز",
   SHIPPED: "تم الشحن",
   DELIVERED: "تم التسليم",
-  PAID_COD: "مدفوع (COD)",
+  PAID_COD: "مدفوع (عند الاستلام)",
 };
 
 type UpdateStatusResponse = { ok?: boolean; error?: string };
@@ -99,6 +99,8 @@ function normalizeItems(items: unknown): OrderItem[] {
 }
 
 export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]; lang: "en" | "ar" }) {
+  const isAr = lang === "ar";
+
   const [rows, setRows] = useState<Row[]>(Array.isArray(initialRows) ? initialRows : []);
   const [q, setQ] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -106,9 +108,11 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
   const L = useMemo(() => {
-    if (lang === "ar") {
+    if (isAr) {
       return {
         search: "ابحث برقم السلة / الحالة / اسم العميل / الهاتف",
+        noResults: "لا توجد نتائج",
+
         id: "المعرّف",
         cart: "السلة",
         status: "الحالة",
@@ -116,18 +120,32 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
         amount: "المبلغ",
         customer: "العميل",
         created: "التاريخ",
-        update: "تحديث",
-        noResults: "لا توجد نتائج",
-        tranRef: "tran_ref",
         details: "التفاصيل",
+        update: "تحديث",
+
+        tranRef: "tran_ref",
         hideDetails: "إخفاء",
         showDetails: "عرض",
         items: "العناصر",
         totals: "الإجماليات",
+
+        subtotal: "المجموع قبل الخصم",
+        discount: "الخصم",
+        shipping: "الشحن",
+        total: "الإجمالي",
+        promo: "الكوبون/الترقية",
+        consumed: "تم الاستخدام",
+        consumeFailed: "فشل الاستخدام",
+        yes: "نعم",
+        no: "لا",
+        dash: "—",
       };
     }
+
     return {
       search: "Search by cart_id / status / customer name / phone",
+      noResults: "No results",
+
       id: "ID",
       cart: "Cart",
       status: "Status",
@@ -135,16 +153,27 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
       amount: "Amount",
       customer: "Customer",
       created: "Created",
-      update: "Update",
-      noResults: "No results",
-      tranRef: "tran_ref",
       details: "Details",
+      update: "Update",
+
+      tranRef: "tran_ref",
       hideDetails: "Hide",
       showDetails: "Show",
       items: "Items",
       totals: "Totals",
+
+      subtotal: "subtotal",
+      discount: "discount",
+      shipping: "shipping",
+      total: "total",
+      promo: "promo",
+      consumed: "consumed",
+      consumeFailed: "consume_failed",
+      yes: "yes",
+      no: "no",
+      dash: "—",
     };
-  }, [lang]);
+  }, [isAr]);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -153,8 +182,12 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
     return rows.filter((r) => {
       const name = readString(r.customer, "name").toLowerCase();
       const phone = readString(r.customer, "phone").toLowerCase();
-
-      return String(r.cart_id).toLowerCase().includes(s) || String(r.status).toLowerCase().includes(s) || name.includes(s) || phone.includes(s);
+      return (
+        String(r.cart_id).toLowerCase().includes(s) ||
+        String(r.status).toLowerCase().includes(s) ||
+        name.includes(s) ||
+        phone.includes(s)
+      );
     });
   }, [rows, q]);
 
@@ -172,14 +205,12 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
       const raw: unknown = await res.json().catch(() => null);
       const data: UpdateStatusResponse = isRecord(raw) ? (raw as UpdateStatusResponse) : {};
 
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error || "Update failed");
-      }
+      if (!res.ok || !data.ok) throw new Error(data.error || (isAr ? "فشل التحديث" : "Update failed"));
 
       setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: nextStatus } : r)));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      setErr(msg || "Error");
+      setErr(msg || (isAr ? "حدث خطأ" : "Error"));
     } finally {
       setBusyId(null);
     }
@@ -213,27 +244,35 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
 
           <tbody>
             {filtered.map((r) => {
-              const cname = readString(r.customer, "name") || "-";
-              const cphone = readString(r.customer, "phone") || "-";
+              const cname = readString(r.customer, "name") || L.dash;
+              const cphone = readString(r.customer, "phone") || L.dash;
               const customer = `${cname} / ${cphone}`;
 
               const amountValue = toNum(r.total_jod ?? r.amount);
               const amount = `${Number.isFinite(amountValue) ? amountValue.toFixed(2) : "0.00"} ${r.currency}`;
+
               const items = normalizeItems(r.items);
               const opened = !!expanded[r.id];
 
               return (
                 <Fragment key={`row-${r.id}`}>
                   <tr>
-                    <td>{r.id}</td>
-                    <td className="ltr">{r.cart_id}</td>
-                    <td>
+                    <td data-label={L.id} className="ltr">
+                      {r.id}
+                    </td>
+
+                    <td data-label={L.cart} className="ltr">
+                      {r.cart_id}
+                    </td>
+
+                    <td data-label={L.status}>
                       <b className="ltr">
                         {r.status}
-                        {lang === "ar" ? ` — ${STATUS_AR[r.status] || ""}` : ""}
+                        {isAr ? ` — ${STATUS_AR[r.status] || ""}` : ""}
                       </b>
                     </td>
-                    <td>
+
+                    <td data-label={L.payment}>
                       <span className="ltr">{r.payment_method}</span>
                       {r.paytabs_tran_ref ? (
                         <div style={{ fontSize: 12, opacity: 0.7 }} className="ltr">
@@ -241,15 +280,24 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                         </div>
                       ) : null}
                     </td>
-                    <td className="ltr">{amount}</td>
-                    <td>{customer}</td>
-                    <td style={{ fontSize: 12, opacity: 0.8 }}>{new Date(r.created_at).toLocaleString()}</td>
-                    <td>
+
+                    <td data-label={L.amount} className="ltr">
+                      {amount}
+                    </td>
+
+                    <td data-label={L.customer}>{customer}</td>
+
+                    <td data-label={L.created} style={{ fontSize: 12, opacity: 0.8 }}>
+                      {new Date(r.created_at).toLocaleString(isAr ? "ar-JO" : undefined)}
+                    </td>
+
+                    <td data-label={L.details}>
                       <button className="btn" type="button" onClick={() => toggleDetails(r.id)}>
                         {opened ? L.hideDetails : L.showDetails}
                       </button>
                     </td>
-                    <td>
+
+                    <td data-label={L.update}>
                       <select
                         value={r.status}
                         disabled={busyId === r.id}
@@ -259,37 +307,51 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                       >
                         {STATUS_OPTIONS.map((s) => (
                           <option key={s} value={s}>
-                            {lang === "ar" ? `${s} — ${STATUS_AR[s] || ""}` : s}
+                            {isAr ? `${s} — ${STATUS_AR[s] || ""}` : s}
                           </option>
                         ))}
                       </select>
                     </td>
                   </tr>
+
                   {opened ? (
-                    <tr key={`details-${r.id}`}>
-                      <td colSpan={9}>
+                    <tr key={`details-${r.id}`} className="admin-row-details">
+                      <td data-label={L.details} colSpan={9}>
                         <div className="admin-grid" style={{ gap: 8 }}>
                           <div>
                             <strong>{L.items}</strong>
                             {items.length === 0 ? (
-                              <p className="admin-muted" style={{ marginTop: 4 }}>—</p>
+                              <p className="admin-muted" style={{ marginTop: 4 }}>
+                                {L.dash}
+                              </p>
                             ) : (
                               <ul style={{ margin: "6px 0 0", paddingInlineStart: 18 }}>
                                 {items.map((item) => (
                                   <li key={`${r.id}-${item.slug}`}>
-                                    <span>{lang === "ar" ? item.name_ar || item.name_en || item.slug : item.name_en || item.name_ar || item.slug}</span>
-                                    <span className="mono"> — {item.qty} × {item.unit_price_jod.toFixed(2)} = {item.line_total_jod.toFixed(2)} JOD</span>
+                                    <span>{isAr ? item.name_ar || item.name_en || item.slug : item.name_en || item.name_ar || item.slug}</span>
+                                    <span className="mono">
+                                      {" "}
+                                      — {item.qty} × {item.unit_price_jod.toFixed(2)} = {item.line_total_jod.toFixed(2)} JOD
+                                    </span>
                                   </li>
                                 ))}
                               </ul>
                             )}
                           </div>
+
                           <div>
                             <strong>{L.totals}</strong>
                             <div className="mono" style={{ marginTop: 4 }}>
-                              subtotal: {toNum(r.subtotal_before_discount_jod).toFixed(2)} JOD • discount: {toNum(r.discount_jod).toFixed(2)} JOD • shipping: {toNum(r.shipping_jod).toFixed(2)} JOD • total: {toNum(r.total_jod ?? r.amount).toFixed(2)} JOD
+                              {L.subtotal}: {toNum(r.subtotal_before_discount_jod).toFixed(2)} JOD • {L.discount}:{" "}
+                              {toNum(r.discount_jod).toFixed(2)} JOD • {L.shipping}: {toNum(r.shipping_jod).toFixed(2)} JOD • {L.total}:{" "}
+                              {toNum(r.total_jod ?? r.amount).toFixed(2)} JOD
                               <br />
-                              promo: {String(r.discount_source || "-")} {r.promo_code ? `(${r.promo_code})` : ""} {r.promotion_id ? `#${r.promotion_id}` : ""} • consumed: {r.promo_consumed ? "yes" : "no"}{r.promo_consume_failed ? ` • consume_failed: ${String(r.promo_consume_error || "").trim() || "yes"}` : ""}
+                              {L.promo}: {String(r.discount_source || L.dash)}{" "}
+                              {r.promo_code ? `(${r.promo_code})` : ""} {r.promotion_id ? `#${r.promotion_id}` : ""} •{" "}
+                              {L.consumed}: {r.promo_consumed ? L.yes : L.no}
+                              {r.promo_consume_failed
+                                ? ` • ${L.consumeFailed}: ${String(r.promo_consume_error || "").trim() || L.yes}`
+                                : ""}
                             </div>
                           </div>
                         </div>
@@ -301,8 +363,10 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
             })}
 
             {!filtered.length && (
-              <tr>
-                <td colSpan={9} style={{ padding: 14, opacity: 0.7 }}>{L.noResults}</td>
+              <tr className="admin-row-details">
+                <td colSpan={9} style={{ padding: 14, opacity: 0.7 }}>
+                  {L.noResults}
+                </td>
               </tr>
             )}
           </tbody>
