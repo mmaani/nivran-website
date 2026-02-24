@@ -11,6 +11,8 @@ type Profile = {
   city: string | null;
   country: string | null;
   email_verified_at: string | null;
+  promotions?: unknown[] | null;
+  orders?: unknown[] | null;
 };
 
 type OrderRow = {
@@ -31,12 +33,7 @@ type OrderRow = {
   discount_source?: string | null;
 };
 
-type CartItem = { slug: string; qty: number; variantId: number | null };
-
-const CART_KEY = "nivran_cart_v1";
-
-type JsonRecord = Record<string, unknown>;
-function isRecord(v: unknown): v is JsonRecord {
+function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
@@ -45,7 +42,7 @@ function moneyOrDash(v: string | null | undefined) {
   return `${v} JOD`;
 }
 
-function statusClass(status: string) {
+function statusChipClass(status: string) {
   const s = String(status || "").toUpperCase();
   if (s.includes("DELIVERED")) return "chip chip--delivered";
   if (s.includes("PAID")) return "chip chip--paid";
@@ -54,84 +51,6 @@ function statusClass(status: string) {
   if (s.includes("CANCEL")) return "chip chip--cancelled";
   if (s.includes("PENDING")) return "chip chip--pending";
   return "chip chip--neutral";
-}
-
-function readCart(): CartItem[] {
-  try {
-    const raw = localStorage.getItem(CART_KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    const out: CartItem[] = [];
-    for (const it of parsed) {
-      if (!isRecord(it)) continue;
-      const slug = String(it.slug || "").trim();
-      const qty = Number(it.qty);
-      const variantIdNum = Number(it.variantId);
-      const variantId = Number.isFinite(variantIdNum) && variantIdNum > 0 ? Math.trunc(variantIdNum) : null;
-      if (!slug) continue;
-      if (!Number.isFinite(qty) || qty <= 0) continue;
-      out.push({ slug, qty: Math.max(1, Math.min(99, Math.trunc(qty))), variantId });
-    }
-    return out;
-  } catch {
-    return [];
-  }
-}
-
-function writeCart(items: CartItem[]) {
-  try {
-    localStorage.setItem(CART_KEY, JSON.stringify(items));
-    window.dispatchEvent(new Event("nivran_cart_updated"));
-  } catch {}
-}
-
-async function syncCart(mode: "merge" | "replace", items: CartItem[]) {
-  try {
-    await fetch("/api/cart/sync", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ mode, items }),
-    });
-  } catch {}
-}
-
-function extractCartItemsFromOrderPayload(order: unknown): CartItem[] {
-  if (!isRecord(order)) return [];
-
-  const itemsAny = order.items;
-  if (Array.isArray(itemsAny)) {
-    const out: CartItem[] = [];
-    for (const it of itemsAny) {
-      if (!isRecord(it)) continue;
-      const slug = String(it.slug || "").trim();
-      const qty = Number(it.qty);
-      const variantIdNum = Number(it.variantId ?? it.variant_id);
-      const variantId = Number.isFinite(variantIdNum) && variantIdNum > 0 ? Math.trunc(variantIdNum) : null;
-      if (!slug) continue;
-      if (!Number.isFinite(qty) || qty <= 0) continue;
-      out.push({ slug, qty: Math.max(1, Math.min(99, Math.trunc(qty))), variantId });
-    }
-    return out;
-  }
-
-  const lineItemsAny = order.line_items;
-  if (Array.isArray(lineItemsAny)) {
-    const out: CartItem[] = [];
-    for (const it of lineItemsAny) {
-      if (!isRecord(it)) continue;
-      const slug = String(it.slug || "").trim();
-      const qty = Number(it.qty);
-      const variantIdNum = Number(it.variantId ?? it.variant_id ?? it.variant_id);
-      const variantId = Number.isFinite(variantIdNum) && variantIdNum > 0 ? Math.trunc(variantIdNum) : null;
-      if (!slug) continue;
-      if (!Number.isFinite(qty) || qty <= 0) continue;
-      out.push({ slug, qty: Math.max(1, Math.min(99, Math.trunc(qty))), variantId });
-    }
-    return out;
-  }
-
-  return [];
 }
 
 export default function AccountClient({ locale }: { locale: string }) {
@@ -176,14 +95,6 @@ export default function AccountClient({ locale }: { locale: string }) {
       logout: isAr ? "تسجيل الخروج" : "Logout",
       emailLocked: isAr ? "لا يمكن تغيير البريد الإلكتروني" : "Email cannot be changed",
 
-      reorder: isAr ? "إعادة الطلب" : "Order again",
-      reorderTitle: isAr ? "إعادة الطلب" : "Reorder",
-      reorderAdd: isAr ? "إضافة إلى السلة الحالية" : "Add to current cart",
-      reorderFresh: isAr ? "بدء سلة جديدة" : "Start fresh cart",
-      reorderMissing: isAr ? "لا يمكن إعادة الطلب (تفاصيل العناصر غير متوفرة)." : "Unable to reorder (missing item details).",
-      reorderBusy: isAr ? "جارٍ الإضافة..." : "Adding...",
-      reorderDone: isAr ? "تمت إضافة العناصر إلى السلة." : "Items added to cart.",
-
       cannotLoad: isAr ? "تعذر تحميل الحساب. الرجاء تسجيل الدخول من جديد." : "Unable to load account. Please log in again.",
       login: isAr ? "تسجيل الدخول" : "Login",
     };
@@ -203,10 +114,6 @@ export default function AccountClient({ locale }: { locale: string }) {
   const [city, setCity] = useState("");
   const [country, setCountry] = useState("Jordan");
 
-  const [reorderOpenId, setReorderOpenId] = useState<number | null>(null);
-  const [reorderBusyId, setReorderBusyId] = useState<number | null>(null);
-  const [reorderMsg, setReorderMsg] = useState<string | null>(null);
-
   const canSave = useMemo(
     () => !savingProfile && !!fullName.trim() && !!phone.trim() && !!addressLine1.trim(),
     [fullName, phone, addressLine1, savingProfile]
@@ -215,12 +122,12 @@ export default function AccountClient({ locale }: { locale: string }) {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     setErr(null);
-    setReorderMsg(null);
+    setProfileSaved(false);
 
     const res = await fetch("/api/auth/profile", { cache: "no-store" });
     const data: unknown = await res.json().catch(() => null);
 
-    if (!res.ok || !isRecord(data) || data.ok !== true || !isRecord(data.profile)) {
+    if (!res.ok || !isObject(data) || data.ok !== true || !isObject(data.profile)) {
       setProfile(null);
       setOrders([]);
       setLoading(false);
@@ -239,8 +146,10 @@ export default function AccountClient({ locale }: { locale: string }) {
     try {
       const rOrders = await fetch("/api/orders", { cache: "no-store" });
       const dOrders: unknown = await rOrders.json().catch(() => null);
-      if (rOrders.ok && isRecord(dOrders) && dOrders.ok === true && Array.isArray(dOrders.orders)) {
+      if (rOrders.ok && isObject(dOrders) && dOrders.ok === true && Array.isArray(dOrders.orders)) {
         setOrders(dOrders.orders as OrderRow[]);
+      } else if (Array.isArray((data as Record<string, unknown>).orders)) {
+        setOrders((data as Record<string, unknown>).orders as OrderRow[]);
       } else {
         setOrders([]);
       }
@@ -277,15 +186,15 @@ export default function AccountClient({ locale }: { locale: string }) {
 
       const data: unknown = await res.json().catch(() => null);
 
-      if (!res.ok || !isRecord(data) || data.ok !== true) {
-        const msg = isRecord(data) && typeof data.error === "string" ? data.error : t.saveErr;
+      if (!res.ok || !isObject(data) || data.ok !== true) {
+        const msg = isObject(data) && typeof data.error === "string" ? data.error : t.saveErr;
         setErr(msg);
         return;
       }
 
       const r = await fetch("/api/auth/profile", { cache: "no-store" });
       const d: unknown = await r.json().catch(() => null);
-      if (r.ok && isRecord(d) && d.ok === true && isRecord(d.profile)) {
+      if (r.ok && isObject(d) && d.ok === true && isObject(d.profile)) {
         setProfile(d.profile as unknown as Profile);
         setProfileSaved(true);
       }
@@ -297,43 +206,6 @@ export default function AccountClient({ locale }: { locale: string }) {
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
     window.location.href = `/${locale}/`;
-  }
-
-  async function reorder(orderId: number, mode: "merge" | "replace") {
-    setReorderMsg(null);
-    setReorderBusyId(orderId);
-
-    try {
-      const res = await fetch(`/api/orders?id=${orderId}&includeItems=1`, { cache: "no-store" });
-      const data: unknown = await res.json().catch(() => null);
-
-      if (!res.ok || !isRecord(data) || data.ok !== true || !isRecord(data.order)) {
-        setReorderMsg(t.reorderMissing);
-        return;
-      }
-
-      const extracted = extractCartItemsFromOrderPayload(data.order);
-      if (!extracted.length) {
-        setReorderMsg(t.reorderMissing);
-        return;
-      }
-
-      const current = readCart();
-
-      if (mode === "replace") {
-        writeCart(extracted);
-        await syncCart("replace", extracted);
-      } else {
-        writeCart([...current, ...extracted]);
-        await syncCart("merge", extracted);
-      }
-
-      setReorderOpenId(null);
-      setReorderMsg(t.reorderDone);
-      window.location.href = `/${locale}/cart`;
-    } finally {
-      setReorderBusyId(null);
-    }
   }
 
   if (loading) return <div className="account-shell"><p className="muted">{t.loading}</p></div>;
@@ -357,7 +229,6 @@ export default function AccountClient({ locale }: { locale: string }) {
           <h1 className="title account-title">{t.title}</h1>
           <p className="account-subtitle">{t.subtitle}</p>
         </div>
-
         <div className="account-actions">
           <button className="btn btn-outline" type="button" onClick={logout}>{t.logout}</button>
         </div>
@@ -390,7 +261,7 @@ export default function AccountClient({ locale }: { locale: string }) {
                 aria-readonly="true"
                 title={t.emailLocked}
                 autoComplete="email"
-                style={{ opacity: 0.78, cursor: "not-allowed" }}
+                style={{ cursor: "not-allowed" }}
               />
               <span className="field-help">{t.emailLocked}</span>
             </label>
@@ -432,7 +303,6 @@ export default function AccountClient({ locale }: { locale: string }) {
         <div className="panel account-panel">
           <div className="account-panel-head">
             <h3 className="account-panel-title">{t.ordersTitle}</h3>
-            {reorderMsg ? <span className="muted">{reorderMsg}</span> : null}
           </div>
 
           {!orders.length ? (
@@ -458,7 +328,7 @@ export default function AccountClient({ locale }: { locale: string }) {
                       <td data-label="ID"><strong>{o.id}</strong></td>
 
                       <td data-label={t.status}>
-                        <span className={statusClass(o.status)}>
+                        <span className={statusChipClass(o.status)}>
                           <span className="chip-dot" />
                           {o.status}
                         </span>
@@ -469,55 +339,22 @@ export default function AccountClient({ locale }: { locale: string }) {
                       <td data-label={t.total}>{moneyOrDash(o.total_jod ?? o.amount_jod)}</td>
 
                       <td data-label={t.discountsApplied}>
-                        <div className="order-discount-stack">
-                          <div className="muted">
-                            {t.promoCode}: <strong>{o.promo_code ?? t.none}</strong>
-                          </div>
-                          <div className="muted">
-                            {t.discount}: <strong>{moneyOrDash(o.discount_jod)}</strong>
-                          </div>
-                          <div className="muted">
-                            {t.source}: <strong>{o.discount_source ?? t.none}</strong>
-                          </div>
+                        <div style={{ display: "grid", gap: 6 }}>
+                          <div className="muted">{t.promoCode}: <strong>{o.promo_code ?? t.none}</strong></div>
+                          <div className="muted">{t.discount}: <strong>{moneyOrDash(o.discount_jod)}</strong></div>
+                          <div className="muted">{t.source}: <strong>{o.discount_source ?? t.none}</strong></div>
                         </div>
                       </td>
 
                       <td data-label="">
                         <div className="order-actions">
                           <a className="btn btn-outline" href={`/${locale}/account/orders/${o.id}`}>{t.view}</a>
-
-                          <span className="reorder-menu">
-                            <button
-                              className="btn btn-outline"
-                              type="button"
-                              onClick={() => setReorderOpenId(reorderOpenId === o.id ? null : o.id)}
-                              disabled={reorderBusyId === o.id}
-                            >
-                              {reorderBusyId === o.id ? t.reorderBusy : t.reorder}
-                            </button>
-
-                            {reorderOpenId === o.id ? (
-                              <div className="reorder-popover">
-                                <p className="reorder-popover-title">{t.reorderTitle}</p>
-                                <div className="reorder-popover-actions">
-                                  <button className="btn primary" type="button" onClick={() => reorder(o.id, "merge")} disabled={reorderBusyId === o.id}>
-                                    {t.reorderAdd}
-                                  </button>
-                                  <button className="btn btn-outline" type="button" onClick={() => reorder(o.id, "replace")} disabled={reorderBusyId === o.id}>
-                                    {t.reorderFresh}
-                                  </button>
-                                  <button className="btn btn-danger-outline" type="button" onClick={() => setReorderOpenId(null)} disabled={reorderBusyId === o.id}>
-                                    {isAr ? "إغلاق" : "Close"}
-                                  </button>
-                                </div>
-                              </div>
-                            ) : null}
-                          </span>
                         </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
+
               </table>
             </div>
           )}
