@@ -12,7 +12,6 @@ function normalizeDatabaseUrl(connectionString: string): string {
     if (!sslmode) url.searchParams.set("sslmode", "require");
 
     // If verify-full is used, ensure libpq-style clients can find system roots.
-    // (This is especially helpful for local psql usage inside containers.)
     const sslmode2 = url.searchParams.get("sslmode");
     if (sslmode2 === "verify-full" && !url.searchParams.get("sslrootcert")) {
       url.searchParams.set("sslrootcert", "system");
@@ -20,7 +19,6 @@ function normalizeDatabaseUrl(connectionString: string): string {
 
     return url.toString();
   } catch {
-    // Keep original if parsing fails.
     return connectionString;
   }
 }
@@ -29,25 +27,29 @@ function getPool(): Pool {
   if (pool) return pool;
 
   const rawConnectionString = process.env.DATABASE_URL;
-  if (!rawConnectionString) {
-    throw new Error("DATABASE_URL env var is required");
-  }
+  if (!rawConnectionString) throw new Error("DATABASE_URL env var is required");
 
   const connectionString = normalizeDatabaseUrl(rawConnectionString);
 
   pool = new Pool({
     connectionString,
+    // For managed Postgres (Neon), Node TLS is fine; rejectUnauthorized false avoids cert bundle surprises.
+    // If you later want strict verification, we can tighten this safely.
     ssl: connectionString.includes("localhost") ? undefined : { rejectUnauthorized: false },
   });
 
   return pool;
 }
 
-export type DbExecutor = {
+export type DbTx = {
   query: <T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]) => Promise<QueryResult<T>>;
 };
 
-function toExecutor(client: PoolClient): DbExecutor {
+export type DbExecutor = DbTx & {
+  withTransaction: <T>(fn: (trx: DbTx) => Promise<T>) => Promise<T>;
+};
+
+function toTxExecutor(client: PoolClient): DbTx {
   return {
     query: <T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]) => {
       const values = params ? [...params] : undefined;
@@ -56,21 +58,41 @@ function toExecutor(client: PoolClient): DbExecutor {
   };
 }
 
+export async function withDb<T>(fn: (exec: DbTx) => Promise<T>): Promise<T> {
+  const client = await getPool().connect();
+  try {
+    return await fn(toTxExecutor(client));
+  } finally {
+    client.release();
+  }
+}
+
+export async function withTransaction<T>(fn: (trx: DbTx) => Promise<T>): Promise<T> {
+  const client = await getPool().connect();
+  try {
+    await client.query("begin");
+    const out = await fn(toTxExecutor(client));
+    await client.query("commit");
+    return out;
+  } catch (e) {
+    try {
+      await client.query("rollback");
+    } catch {
+      // ignore rollback failure
+    }
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 export const db: DbExecutor = {
   query: <T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]) => {
     const values = params ? [...params] : undefined;
     return getPool().query<T>(text, values);
   },
+  withTransaction: <T>(fn: (trx: DbTx) => Promise<T>) => withTransaction(fn),
 };
-
-export async function withDb<T>(fn: (exec: DbExecutor) => Promise<T>): Promise<T> {
-  const client = await getPool().connect();
-  try {
-    return await fn(toExecutor(client));
-  } finally {
-    client.release();
-  }
-}
 
 export function isDbConnectivityError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
@@ -79,16 +101,14 @@ export function isDbConnectivityError(error: unknown): boolean {
   const code = typeof nodeError.code === "string" ? nodeError.code.toUpperCase() : "";
   const msg = (error.message || "").toLowerCase();
 
-  // Common DB connectivity indicators in serverless/containers
   if (code === "ECONNREFUSED") return true;
   if (code === "ETIMEDOUT") return true;
   if (code === "ENOTFOUND") return true;
-  if (code === "57P01") return true; // admin_shutdown
-  if (code === "57P02") return true; // crash_shutdown
-  if (code === "57P03") return true; // cannot_connect_now
+  if (code === "57P01") return true;
+  if (code === "57P02") return true;
+  if (code === "57P03") return true;
   if (msg.includes("terminating connection")) return true;
   if (msg.includes("no pg_hba.conf entry")) return true;
-  if (msg.includes("password authentication failed")) return false;
 
   return false;
 }
