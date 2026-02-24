@@ -1,27 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { readJsonSafe } from "@/lib/http";
 
 type Profile = {
   id: number;
   email: string;
   full_name: string | null;
   phone: string | null;
+  country: string | null;
   address_line1: string | null;
   city: string | null;
-  country: string | null;
-  email_verified_at: string | null;
-  promotions?: unknown[] | null;
-  orders?: unknown[] | null;
+  is_verified: boolean;
 };
 
-type OrderRow = {
+type OrderListRow = {
   id: number;
   cart_id: string | null;
   status: string;
   created_at: string;
-
   amount_jod: string;
+
   subtotal_before_discount_jod?: string | null;
   discount_jod?: string | null;
   subtotal_after_discount_jod?: string | null;
@@ -33,190 +32,290 @@ type OrderRow = {
   discount_source?: string | null;
 };
 
-function isObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
+type OrderItemLine = {
+  qty?: number;
+  variant_id?: number;
+  variantId?: number;
+  product_slug?: string | null;
+  productSlug?: string | null;
+  slug?: string | null;
+};
+
+type CartReorderItem = { slug: string; qty: number; variantId: number | null };
+
+function toInt(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return Math.trunc(value);
+  if (typeof value === "string") {
+    const n = Number(value.trim());
+    if (Number.isFinite(n) && n > 0) return Math.trunc(n);
+  }
+  return null;
 }
 
-function moneyOrDash(v: string | null | undefined) {
-  if (!v) return "—";
-  return `${v} JOD`;
+function toQty(value: unknown): number {
+  const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(1, Math.min(99, Math.trunc(n)));
 }
 
-function statusChipClass(status: string) {
-  const s = String(status || "").toUpperCase();
-  if (s.includes("DELIVERED")) return "chip chip--delivered";
-  if (s.includes("PAID")) return "chip chip--paid";
-  if (s.includes("SHIPPED")) return "chip chip--shipped";
-  if (s.includes("FAILED")) return "chip chip--failed";
-  if (s.includes("CANCEL")) return "chip chip--cancelled";
-  if (s.includes("PENDING")) return "chip chip--pending";
-  return "chip chip--neutral";
+function pickSlug(line: OrderItemLine): string | null {
+  const a = typeof line.product_slug === "string" ? line.product_slug : null;
+  const b = typeof line.productSlug === "string" ? line.productSlug : null;
+  const c = typeof line.slug === "string" ? line.slug : null;
+  const s = (a || b || c || "").trim();
+  return s ? s : null;
+}
+
+function statusClass(statusRaw: string): string {
+  const s = String(statusRaw || "").toUpperCase();
+  if (!s) return "status-chip";
+  return `status-chip status-${s}`;
 }
 
 export default function AccountClient({ locale }: { locale: string }) {
   const isAr = locale === "ar";
 
-  const t = useMemo(() => {
-    return {
-      title: isAr ? "الحساب" : "Account",
-      subtitle: isAr ? "إدارة معلوماتك وطلباتك." : "Manage your details and orders.",
-      loading: isAr ? "جارٍ التحميل..." : "Loading...",
-
+  const COPY = useMemo(
+    () => ({
       verified: isAr ? "موثق" : "Verified",
-      unverified: isAr ? "غير موثق" : "Unverified",
-
-      profileTitle: isAr ? "ملفك الشخصي" : "Your profile",
-      ordersTitle: isAr ? "الطلبات" : "Orders",
-
       fullName: isAr ? "الاسم الكامل *" : "Full name *",
       email: isAr ? "البريد الإلكتروني" : "Email",
       phone: isAr ? "الهاتف *" : "Phone *",
       country: isAr ? "الدولة" : "Country",
       address: isAr ? "العنوان *" : "Address *",
       city: isAr ? "المدينة" : "City",
-
       save: isAr ? "حفظ" : "Save",
       saving: isAr ? "جارٍ الحفظ..." : "Saving...",
-      saved: isAr ? "تم الحفظ" : "Saved",
-      saveErr: isAr ? "تعذر الحفظ الآن" : "Unable to save right now",
-
-      ordersEmpty: isAr ? "لا توجد طلبات بعد." : "No orders yet.",
-      view: isAr ? "عرض" : "View",
+      saved: isAr ? "تم الحفظ." : "Saved.",
+      error: isAr ? "حدث خطأ. حاول مرة أخرى." : "Something went wrong. Please try again.",
+      none: isAr ? "—" : "—",
+      details: isAr ? "التفاصيل" : "Details",
+      reorder: isAr ? "إعادة الطلب" : "Re-order",
+      reorderTitle: isAr ? "إعادة الطلب" : "Re-order",
+      reorderBody: isAr
+        ? "اختر طريقة إضافة المنتجات إلى السلة."
+        : "Choose how you want to add these items to your cart.",
+      startFresh: isAr ? "ابدأ بسلة جديدة" : "Start fresh",
+      addToCart: isAr ? "أضف إلى السلة الحالية" : "Add to existing cart",
+      cancel: isAr ? "إلغاء" : "Cancel",
+      emptyOrders: isAr ? "لا توجد طلبات بعد." : "No orders yet.",
+      amount: isAr ? "المبلغ" : "Amount",
       status: isAr ? "الحالة" : "Status",
       created: isAr ? "التاريخ" : "Created",
-      amount: isAr ? "المبلغ" : "Amount",
-      total: isAr ? "الإجمالي" : "Total",
-      discountsApplied: isAr ? "الخصومات" : "Discounts",
-      promoCode: isAr ? "الكود" : "Code",
-      discount: isAr ? "قيمة الخصم" : "Discount",
-      source: isAr ? "المصدر" : "Source",
-      none: "—",
-
-      logout: isAr ? "تسجيل الخروج" : "Logout",
-      emailLocked: isAr ? "لا يمكن تغيير البريد الإلكتروني" : "Email cannot be changed",
-
-      cannotLoad: isAr ? "تعذر تحميل الحساب. الرجاء تسجيل الدخول من جديد." : "Unable to load account. Please log in again.",
-      login: isAr ? "تسجيل الدخول" : "Login",
-    };
-  }, [isAr]);
+      id: isAr ? "رقم" : "ID",
+      promo: isAr ? "خصم" : "Discount",
+    }),
+    [isAr]
+  );
 
   const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [orders, setOrders] = useState<OrderRow[]>([]);
-  const [err, setErr] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
 
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [profileSaved, setProfileSaved] = useState(false);
+  const [profile, setProfile] = useState<Profile | null>(null);
 
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
+  const [country, setCountry] = useState("");
   const [addressLine1, setAddressLine1] = useState("");
   const [city, setCity] = useState("");
-  const [country, setCountry] = useState("Jordan");
 
-  const canSave = useMemo(
-    () => !savingProfile && !!fullName.trim() && !!phone.trim() && !!addressLine1.trim(),
-    [fullName, phone, addressLine1, savingProfile]
-  );
+  const [orders, setOrders] = useState<OrderListRow[]>([]);
+  const [reorderOpen, setReorderOpen] = useState(false);
+  const [reorderBusy, setReorderBusy] = useState(false);
+  const [reorderOrderId, setReorderOrderId] = useState<number | null>(null);
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
-    setErr(null);
-    setProfileSaved(false);
+  const canSave = useMemo(() => {
+    if (!fullName.trim()) return false;
+    if (!phone.trim()) return false;
+    if (!addressLine1.trim()) return false;
+    return true;
+  }, [fullName, phone, addressLine1]);
 
-    const res = await fetch("/api/auth/profile", { cache: "no-store" });
-    const data: unknown = await res.json().catch(() => null);
-
-    if (!res.ok || !isObject(data) || data.ok !== true || !isObject(data.profile)) {
-      setProfile(null);
-      setOrders([]);
-      setLoading(false);
-      return;
-    }
-
-    const p = data.profile as unknown as Profile;
-    setProfile(p);
-
-    setFullName(String(p.full_name || ""));
-    setPhone(String(p.phone || ""));
-    setAddressLine1(String(p.address_line1 || ""));
-    setCity(String(p.city || ""));
-    setCountry(String(p.country || "Jordan"));
-
-    try {
-      const rOrders = await fetch("/api/orders", { cache: "no-store" });
-      const dOrders: unknown = await rOrders.json().catch(() => null);
-      if (rOrders.ok && isObject(dOrders) && dOrders.ok === true && Array.isArray(dOrders.orders)) {
-        setOrders(dOrders.orders as OrderRow[]);
-      } else if (Array.isArray((data as Record<string, unknown>).orders)) {
-        setOrders((data as Record<string, unknown>).orders as OrderRow[]);
-      } else {
-        setOrders([]);
-      }
-    } catch {
-      setOrders([]);
-    }
-
-    setLoading(false);
-  }, []);
+  const isDirty = useMemo(() => {
+    if (!profile) return false;
+    const a = (profile.full_name || "").trim();
+    const b = (profile.phone || "").trim();
+    const c = (profile.country || "").trim();
+    const d = (profile.address_line1 || "").trim();
+    const e = (profile.city || "").trim();
+    return (
+      a !== fullName.trim() ||
+      b !== phone.trim() ||
+      c !== country.trim() ||
+      d !== addressLine1.trim() ||
+      e !== city.trim()
+    );
+  }, [profile, fullName, phone, country, addressLine1, city]);
 
   useEffect(() => {
-    fetchAll().catch(() => setLoading(false));
-  }, [fetchAll]);
+    let alive = true;
+
+    (async () => {
+      setLoading(true);
+      setMsg(null);
+
+      try {
+        const pr = await fetch("/api/auth/profile", { cache: "no-store" });
+        const pj: unknown = await readJsonSafe(pr);
+        if (!alive) return;
+
+        if (!pr.ok || !pj || typeof pj !== "object" || (pj as Record<string, unknown>).ok !== true) {
+          setLoading(false);
+          return;
+        }
+
+        const p = (pj as Record<string, unknown>).profile as Profile;
+        setProfile(p);
+
+        setFullName((p.full_name || "").trim());
+        setPhone((p.phone || "").trim());
+        setCountry((p.country || "").trim());
+        setAddressLine1((p.address_line1 || "").trim());
+        setCity((p.city || "").trim());
+
+        const or = await fetch("/api/orders", { cache: "no-store" });
+        const oj: unknown = await readJsonSafe(or);
+        if (!alive) return;
+
+        if (or.ok && oj && typeof oj === "object" && (oj as Record<string, unknown>).ok === true) {
+          const list = ((oj as Record<string, unknown>).orders || []) as OrderListRow[];
+          setOrders(Array.isArray(list) ? list : []);
+        } else {
+          setOrders([]);
+        }
+      } catch {
+        setOrders([]);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   async function saveProfile() {
     if (!canSave) return;
+    if (!isDirty) return;
 
-    setErr(null);
-    setProfileSaved(false);
-    setSavingProfile(true);
+    setSaving(true);
+    setMsg(null);
 
     try {
       const res = await fetch("/api/auth/profile", {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          full_name: fullName,
-          phone,
-          address_line1: addressLine1,
-          city,
-          country,
+          full_name: fullName.trim(),
+          phone: phone.trim(),
+          country: country.trim() || null,
+          address_line1: addressLine1.trim(),
+          city: city.trim() || null,
         }),
       });
 
-      const data: unknown = await res.json().catch(() => null);
+      const data: unknown = await readJsonSafe(res);
 
-      if (!res.ok || !isObject(data) || data.ok !== true) {
-        const msg = isObject(data) && typeof data.error === "string" ? data.error : t.saveErr;
-        setErr(msg);
+      if (!res.ok || !data || typeof data !== "object" || (data as Record<string, unknown>).ok !== true) {
+        setMsg(COPY.error);
         return;
       }
 
       const r = await fetch("/api/auth/profile", { cache: "no-store" });
-      const d: unknown = await r.json().catch(() => null);
-      if (r.ok && isObject(d) && d.ok === true && isObject(d.profile)) {
-        setProfile(d.profile as unknown as Profile);
-        setProfileSaved(true);
+      const j: unknown = await readJsonSafe(r);
+      if (r.ok && j && typeof j === "object" && (j as Record<string, unknown>).ok === true) {
+        const p = (j as Record<string, unknown>).profile as Profile;
+        setProfile(p);
       }
+
+      setMsg(COPY.saved);
+    } catch {
+      setMsg(COPY.error);
     } finally {
-      setSavingProfile(false);
+      setSaving(false);
     }
   }
 
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
-    window.location.href = `/${locale}/`;
+  async function openReorder(orderId: number) {
+    setReorderOrderId(orderId);
+    setReorderOpen(true);
+    setMsg(null);
   }
 
-  if (loading) return <div className="account-shell"><p className="muted">{t.loading}</p></div>;
+  async function applyReorder(mode: "replace" | "add") {
+    if (!reorderOrderId) return;
+
+    setReorderBusy(true);
+    try {
+      const res = await fetch(`/api/orders?id=${reorderOrderId}&includeItems=1`, { cache: "no-store" });
+      const data: unknown = await readJsonSafe(res);
+
+      if (!res.ok || !data || typeof data !== "object" || (data as Record<string, unknown>).ok !== true) {
+        setMsg(COPY.error);
+        return;
+      }
+
+      const orderObj = (data as Record<string, unknown>).order as Record<string, unknown> | undefined;
+      const linesUnknown = orderObj ? (orderObj.line_items as unknown) : null;
+
+      const list = Array.isArray(linesUnknown) ? (linesUnknown as OrderItemLine[]) : [];
+
+      const mapped: CartReorderItem[] = list
+        .map((x) => {
+          const slug = pickSlug(x);
+          if (!slug) return null;
+          const qty = toQty(x.qty);
+          const variantId = toInt(x.variant_id ?? x.variantId);
+          return { slug, qty, variantId: variantId ?? null };
+        })
+        .filter((x): x is CartReorderItem => Boolean(x));
+
+      if (!mapped.length) {
+        setMsg(COPY.error);
+        return;
+      }
+
+      try {
+        sessionStorage.setItem("nivran_reorder_payload_v1", JSON.stringify({ items: mapped, mode }));
+      } catch {
+        // ignore
+      }
+
+      window.location.href = `/${locale}/cart?reorder=1`;
+    } catch {
+      setMsg(COPY.error);
+    } finally {
+      setReorderBusy(false);
+      setReorderOpen(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="account-shell">
+        <div className="panel">
+          <p className="muted" style={{ margin: 0 }}>
+            {isAr ? "جارٍ التحميل..." : "Loading..."}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!profile) {
     return (
       <div className="account-shell">
-        <div className="panel account-panel">
-          <h1 className="title account-title">{t.title}</h1>
-          <p className="muted" style={{ marginTop: 8, lineHeight: 1.7 }}>{t.cannotLoad}</p>
-          <a className="btn primary" href={`/${locale}/account/login`}>{t.login}</a>
+        <div className="panel">
+          <p className="muted" style={{ margin: 0 }}>
+            {isAr ? "يرجى تسجيل الدخول أولاً." : "Please log in first."}
+          </p>
+          <div style={{ marginTop: 12 }}>
+            <a className="btn primary" href={`/${locale}/account/login`}>
+              {isAr ? "تسجيل الدخول" : "Login"}
+            </a>
+          </div>
         </div>
       </div>
     );
@@ -224,142 +323,150 @@ export default function AccountClient({ locale }: { locale: string }) {
 
   return (
     <div className="account-shell">
-      <div className="account-head">
-        <div>
-          <h1 className="title account-title">{t.title}</h1>
-          <p className="account-subtitle">{t.subtitle}</p>
-        </div>
-        <div className="account-actions">
-          <button className="btn btn-outline" type="button" onClick={logout}>{t.logout}</button>
-        </div>
-      </div>
-
       <div className="account-grid">
-        {/* PROFILE */}
-        <div className="panel account-panel">
-          <div className="account-panel-head">
-            <h3 className="account-panel-title">{t.profileTitle}</h3>
-            <span className={profile.email_verified_at ? "chip chip--paid" : "chip chip--pending"}>
-              <span className="chip-dot" />
-              {profile.email_verified_at ? t.verified : t.unverified}
+        <div className="card card-soft">
+          <div className="card-head">
+            <span className={"badge " + (profile.is_verified ? "badge-verified" : "")}>
+              {profile.is_verified ? COPY.verified : (isAr ? "غير موثق" : "Unverified")}
             </span>
+            {msg ? <span className="muted">{msg}</span> : null}
           </div>
 
-          <div className="field-grid">
-            <label className="field">
-              <span className="field-label">{t.fullName}</span>
-              <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" />
-            </label>
+          <div className="form-grid">
+            <div className="field">
+              <label>{COPY.fullName}</label>
+              <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            </div>
 
-            <label className="field">
-              <span className="field-label">{t.email}</span>
-              <input
-                className="input"
-                value={profile.email}
-                readOnly
-                disabled
-                aria-readonly="true"
-                title={t.emailLocked}
-                autoComplete="email"
-                style={{ cursor: "not-allowed" }}
-              />
-              <span className="field-help">{t.emailLocked}</span>
-            </label>
+            <div className="field">
+              <label>{COPY.email}</label>
+              <input className="input" value={profile.email} readOnly />
+            </div>
 
-            <label className="field">
-              <span className="field-label">{t.phone}</span>
-              <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" />
-            </label>
+            <div className="field">
+              <label>{COPY.phone}</label>
+              <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            </div>
 
-            <label className="field">
-              <span className="field-label">{t.country}</span>
-              <input className="input" value={country} onChange={(e) => setCountry(e.target.value)} autoComplete="country-name" />
-            </label>
+            <div className="field">
+              <label>{COPY.country}</label>
+              <input className="input" value={country} onChange={(e) => setCountry(e.target.value)} />
+            </div>
 
-            <label className="field" style={{ gridColumn: "1 / -1" }}>
-              <span className="field-label">{t.address}</span>
-              <input className="input" value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} autoComplete="street-address" />
-            </label>
+            <div className="field" style={{ gridColumn: "1 / -1" }}>
+              <label>{COPY.address}</label>
+              <input className="input" value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} />
+            </div>
 
-            <label className="field" style={{ gridColumn: "1 / -1" }}>
-              <span className="field-label">{t.city}</span>
-              <input className="input" value={city} onChange={(e) => setCity(e.target.value)} autoComplete="address-level2" />
-            </label>
+            <div className="field" style={{ gridColumn: "1 / -1" }}>
+              <label>{COPY.city}</label>
+              <input className="input" value={city} onChange={(e) => setCity(e.target.value)} />
+            </div>
           </div>
 
-          {err ? <p className="muted" style={{ marginTop: 12, lineHeight: 1.7 }}>{err}</p> : null}
-
-          <div className="account-divider" />
-
-          <div className="account-actions" style={{ justifyContent: "flex-start" }}>
-            <button type="button" className={"btn primary" + (!canSave ? " btn-disabled" : "")} disabled={!canSave} onClick={saveProfile}>
-              {savingProfile ? t.saving : t.save}
+          <div className="actions-row">
+            <button
+              className={"btn primary" + (!canSave || !isDirty || saving ? " btn-disabled" : "")}
+              disabled={!canSave || !isDirty || saving}
+              onClick={saveProfile}
+            >
+              {saving ? COPY.saving : COPY.save}
             </button>
-            {profileSaved ? <span className="muted">{t.saved}</span> : null}
           </div>
         </div>
 
-        {/* ORDERS */}
-        <div className="panel account-panel">
-          <div className="account-panel-head">
-            <h3 className="account-panel-title">{t.ordersTitle}</h3>
-          </div>
-
-          {!orders.length ? (
-            <p className="muted">{t.ordersEmpty}</p>
+        <div className="card">
+          {orders.length === 0 ? (
+            <p className="muted" style={{ margin: 0 }}>
+              {COPY.emptyOrders}
+            </p>
           ) : (
             <div className="table-wrap">
               <table className="table">
                 <thead>
                   <tr>
-                    <th>ID</th>
-                    <th>{t.status}</th>
-                    <th>{t.created}</th>
-                    <th>{t.amount}</th>
-                    <th>{t.total}</th>
-                    <th>{t.discountsApplied}</th>
-                    <th></th>
+                    <th>{COPY.id}</th>
+                    <th>{COPY.created}</th>
+                    <th>{COPY.status}</th>
+                    <th>{COPY.amount}</th>
+                    <th>{COPY.promo}</th>
+                    <th style={{ width: 220 }} />
                   </tr>
                 </thead>
-
                 <tbody>
-                  {orders.map((o) => (
-                    <tr key={o.id}>
-                      <td data-label="ID"><strong>{o.id}</strong></td>
+                  {orders.map((o) => {
+                    const status = String(o.status || "").toUpperCase();
+                    const total = o.total_jod ? Number(o.total_jod) : Number(o.amount_jod || 0);
+                    const discount = o.discount_jod ? Number(o.discount_jod) : 0;
 
-                      <td data-label={t.status}>
-                        <span className={statusChipClass(o.status)}>
-                          <span className="chip-dot" />
-                          {o.status}
-                        </span>
-                      </td>
+                    const promoText =
+                      o.discount_source && String(o.discount_source).toUpperCase() === "CODE"
+                        ? (o.promo_code || "").toString().trim() || COPY.none
+                        : discount > 0
+                          ? `-${discount.toFixed(2)} JOD`
+                          : COPY.none;
 
-                      <td data-label={t.created}>{o.created_at}</td>
-                      <td data-label={t.amount}>{moneyOrDash(o.amount_jod)}</td>
-                      <td data-label={t.total}>{moneyOrDash(o.total_jod ?? o.amount_jod)}</td>
+                    return (
+                      <tr key={o.id}>
+                        <td data-label={COPY.id}>
+                          <strong>#{o.id}</strong>
+                        </td>
 
-                      <td data-label={t.discountsApplied}>
-                        <div style={{ display: "grid", gap: 6 }}>
-                          <div className="muted">{t.promoCode}: <strong>{o.promo_code ?? t.none}</strong></div>
-                          <div className="muted">{t.discount}: <strong>{moneyOrDash(o.discount_jod)}</strong></div>
-                          <div className="muted">{t.source}: <strong>{o.discount_source ?? t.none}</strong></div>
-                        </div>
-                      </td>
+                        <td data-label={COPY.created}>
+                          <span className="muted">{new Date(o.created_at).toLocaleString()}</span>
+                        </td>
 
-                      <td data-label="">
-                        <div className="order-actions">
-                          <a className="btn btn-outline" href={`/${locale}/account/orders/${o.id}`}>{t.view}</a>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        <td data-label={COPY.status}>
+                          <span className={statusClass(status)}>{status}</span>
+                        </td>
+
+                        <td data-label={COPY.amount}>
+                          <strong>{Number.isFinite(total) ? total.toFixed(2) : "0.00"} JOD</strong>
+                        </td>
+
+                        <td data-label={COPY.promo}>
+                          <span className="muted">{promoText}</span>
+                        </td>
+
+                        <td data-label={COPY.none}>
+                          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                            <a className="btn btn-quiet" href={`/${locale}/account/orders/${o.id}`}>
+                              {COPY.details}
+                            </a>
+                            <button className="btn primary" onClick={() => openReorder(o.id)}>
+                              {COPY.reorder}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
-
               </table>
             </div>
           )}
         </div>
       </div>
+
+      {reorderOpen ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal">
+            <h3>{COPY.reorderTitle}</h3>
+            <p className="muted">{COPY.reorderBody}</p>
+            <div className="modal-actions">
+              <button className="btn btn-quiet" onClick={() => setReorderOpen(false)} disabled={reorderBusy}>
+                {COPY.cancel}
+              </button>
+              <button className="btn btn-quiet" onClick={() => applyReorder("add")} disabled={reorderBusy}>
+                {COPY.addToCart}
+              </button>
+              <button className="btn primary" onClick={() => applyReorder("replace")} disabled={reorderBusy}>
+                {COPY.startFresh}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
