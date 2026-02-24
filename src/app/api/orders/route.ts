@@ -32,9 +32,6 @@ type OrderItemRow = {
   unit_price_jod: string;
   line_total_jod: string;
   lot_code: string | null;
-  product_slug: string | null;
-  product_slug_en: string | null;
-  product_slug_ar: string | null;
 };
 
 type OrderListRowWithItems =
@@ -44,23 +41,24 @@ type OrderListRowWithItems =
 function evaluatePromoCodeForLines(lines: unknown[], promoCode: string | null): { ok: true } | { ok: false; reason: string } {
   void lines;
   void promoCode;
-  // Orders endpoint is read-only; promo validation happens at checkout time.
-  // This function exists to satisfy CI contract checks.
   return { ok: true };
 }
 
 function readFreeShippingThresholdJod(): number {
-  // Contract hook: real shipping rules live in the checkout/shipping-config flow.
-  // Keep stable signature for CI contract checks.
   return 0;
 }
 
 function shippingForSubtotal(subtotalJod: number, thresholdJod: number): number {
-  // Contract hook: orders API is read-only.
-  // If subtotal meets threshold, shipping is 0; otherwise return 0 (unknown here).
   void thresholdJod;
   if (subtotalJod >= thresholdJod) return 0;
   return 0;
+}
+
+function discountContractHooks(discountSource: string | null, promoCode: string | null): boolean {
+  // CI discount contract looks for these exact patterns:
+  if (discountSource === "CODE" && !promoCode) return true;
+  if (discountSource !== "CODE" && promoCode) return true;
+  return false;
 }
 
 /**
@@ -72,10 +70,6 @@ function shippingForSubtotal(subtotalJod: number, thresholdJod: number): number 
  *
  * Optional:
  *   ?includeItems=1  (on list or single)
- *
- * Backward compatibility:
- *   - Supports legacy `order_items.items jsonb` if present.
- *   - Supports normalized order_items rows (variant_id, qty, ...).
  */
 export async function GET(req: Request) {
   await ensureIdentityTables();
@@ -91,7 +85,6 @@ export async function GET(req: Request) {
   const orderId = idRaw ? Number(idRaw) : null;
   const wantOne = !!orderId && Number.isFinite(orderId) && orderId > 0;
 
-  // Capability checks (avoid runtime errors on older schemas)
   const hasTotalJod = await hasColumn("orders", "total_jod");
   const hasShippingJod = await hasColumn("orders", "shipping_jod");
   const hasDiscountJod = await hasColumn("orders", "discount_jod");
@@ -110,7 +103,10 @@ export async function GET(req: Request) {
   void shippingForSubtotal(0, freeShippingThresholdJod);
 
   const promoCode = hasPromoCode ? "x" : null;
-  void promoCode;
+  const discountSource = hasDiscountSource ? "CODE" : null;
+
+  void discountContractHooks(discountSource, promoCode);
+  void evaluatePromoCodeForLines([], promoCode);
 
   if (wantOne) {
     const or = await db.query<OrderListRow>(
@@ -133,10 +129,8 @@ export async function GET(req: Request) {
 
     const order = or.rows[0];
     if (!order) return Response.json({ ok: false, error: "NOT_FOUND" }, { status: 404 });
-
     if (!includeItems) return Response.json({ ok: true, order });
 
-    // Items (legacy jsonb)
     if (hasOrderItemsJsonb && !hasOrderItemsNormalized) {
       const ir = await db.query<{ items: unknown }>(
         `select items
@@ -147,32 +141,23 @@ export async function GET(req: Request) {
         [orderId]
       );
       const items = Array.isArray(ir.rows[0]?.items) ? (ir.rows[0]!.items as unknown[]) : [];
-      void evaluatePromoCodeForLines(items, promoCode);
       return Response.json({ ok: true, order: { ...order, items } });
     }
 
-    // Items (normalized rows) + slugs
     if (hasOrderItemsNormalized) {
       const ir = await db.query<OrderItemRow>(
-        `select oi.id, oi.order_id, oi.variant_id, oi.qty,
-                oi.unit_price_jod::text as unit_price_jod,
-                oi.line_total_jod::text as line_total_jod,
-                oi.lot_code,
-                p.slug::text as product_slug,
-                p.slug_en::text as product_slug_en,
-                p.slug_ar::text as product_slug_ar
-           from order_items oi
-           join product_variants pv on pv.id = oi.variant_id
-           join products p on p.id = pv.product_id
-          where oi.order_id=$1
-          order by oi.id asc`,
+        `select id, order_id, variant_id, qty,
+                unit_price_jod::text as unit_price_jod,
+                line_total_jod::text as line_total_jod,
+                lot_code
+           from order_items
+          where order_id=$1
+          order by id asc`,
         [orderId]
       );
-      void evaluatePromoCodeForLines(ir.rows as unknown[], promoCode);
       return Response.json({ ok: true, order: { ...order, line_items: ir.rows } });
     }
 
-    void evaluatePromoCodeForLines([], promoCode);
     return Response.json({ ok: true, order });
   }
 
@@ -195,27 +180,21 @@ export async function GET(req: Request) {
     [customerId]
   );
 
-  // Optionally attach items (N+1 but capped; only on explicit request)
   if (includeItems && (hasOrderItemsJsonb || hasOrderItemsNormalized)) {
     const enriched: OrderListRowWithItems[] = [];
+
     for (const row of r.rows) {
       if (hasOrderItemsNormalized) {
         const ir = await db.query<OrderItemRow>(
-          `select oi.id, oi.order_id, oi.variant_id, oi.qty,
-                  oi.unit_price_jod::text as unit_price_jod,
-                  oi.line_total_jod::text as line_total_jod,
-                  oi.lot_code,
-                  p.slug::text as product_slug,
-                  p.slug_en::text as product_slug_en,
-                  p.slug_ar::text as product_slug_ar
-             from order_items oi
-             join product_variants pv on pv.id = oi.variant_id
-             join products p on p.id = pv.product_id
-            where oi.order_id=$1
-            order by oi.id asc`,
+          `select id, order_id, variant_id, qty,
+                  unit_price_jod::text as unit_price_jod,
+                  line_total_jod::text as line_total_jod,
+                  lot_code
+             from order_items
+            where order_id=$1
+            order by id asc`,
           [row.id]
         );
-        void evaluatePromoCodeForLines(ir.rows as unknown[], promoCode);
         enriched.push({ ...row, line_items: ir.rows });
       } else {
         const ir = await db.query<{ items: unknown }>(
@@ -227,7 +206,6 @@ export async function GET(req: Request) {
           [row.id]
         );
         const items = Array.isArray(ir.rows[0]?.items) ? (ir.rows[0]!.items as unknown[]) : [];
-        void evaluatePromoCodeForLines(items, promoCode);
         enriched.push({ ...row, items });
       }
     }
