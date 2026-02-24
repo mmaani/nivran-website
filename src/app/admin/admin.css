@@ -1074,3 +1074,97 @@
     opacity: 1;
   }
 }
+/* =========================================================
+   Mobile table mode: stack rows as cards (NO horizontal scroll)
+   Requires <td data-label="..."> on each cell
+   ========================================================= */
+@media (max-width: 640px) {
+  /* Turn table into block layout */
+  .admin-table-wrap,
+  .table-wrap,
+  .admin-scroll {
+    overflow: visible; /* no horizontal scroll on mobile */
+    border: 0;
+    background: transparent;
+  }
+
+  .admin-table,
+  .table,
+  .admin-scroll table {
+    min-width: 0 !important;
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .admin-table thead,
+  .table thead,
+  .admin-scroll thead {
+    display: none; /* hide header row */
+  }
+
+  .admin-table tbody,
+  .table tbody,
+  .admin-scroll tbody,
+  .admin-table tr,
+  .table tr,
+  .admin-scroll tr {
+    display: block;
+    width: 100%;
+  }
+
+  /* Each row becomes a card */
+  .admin-table tbody tr,
+  .table tbody tr,
+  .admin-scroll tbody tr {
+    border: 1px solid var(--bd);
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 10px 26px rgba(18, 16, 12, 0.08);
+    padding: 10px 12px;
+    margin: 10px 0;
+  }
+
+  /* Cells become label/value rows */
+  .admin-table td,
+  .table td,
+  .admin-scroll td {
+    display: grid;
+    grid-template-columns: minmax(120px, 40%) 1fr;
+    gap: 10px;
+    padding: 8px 0;
+    border: 0;
+    background: transparent;
+    align-items: start;
+  }
+
+  .admin-table td::before,
+  .table td::before,
+  .admin-scroll td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-weight: 800;
+    font-size: 12px;
+    letter-spacing: 0.02em;
+  }
+
+  /* Remove desktop sticky column behavior on mobile */
+  .admin-table th:first-child,
+  .admin-table td:first-child,
+  .table th:first-child,
+  .table td:first-child,
+  .admin-scroll th:first-child,
+  .admin-scroll td:first-child {
+    position: static;
+    box-shadow: none;
+    font-weight: 800;
+  }
+
+  /* Make action buttons wrap nicely inside a row card */
+  .admin-table td[data-label="Actions"],
+  .admin-table td[data-label="إجراءات"],
+  .table td[data-label="Actions"],
+  .table td[data-label="إجراءات"] {
+    grid-template-columns: 1fr;
+  }
+}
