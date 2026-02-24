@@ -1,6 +1,6 @@
 import "server-only";
 import type { DbTx } from "@/lib/db";
-import { db, type DbExecutor } from "@/lib/db";
+import { db } from "@/lib/db";
 
 export async function ensureOrdersTables(): Promise<void> {
   // 1) Create tables (only if missing)
