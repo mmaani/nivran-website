@@ -507,6 +507,48 @@
   border: 1px solid var(--bd);
   border-radius: 14px;
   background: #fff;
+  -webkit-overflow-scrolling: touch;
+  position: relative;
+}
+
+/* Subtle scroll affordance (keeps theme, improves mobile UX) */
+.admin-table-wrap::before,
+.admin-table-wrap::after,
+.table-wrap::before,
+.table-wrap::after,
+.admin-scroll::before,
+.admin-scroll::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 18px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.admin-table-wrap::before,
+.table-wrap::before,
+.admin-scroll::before {
+  inset-inline-start: 0;
+  background: linear-gradient(90deg, rgba(20,20,20,.10), transparent);
+}
+
+.admin-table-wrap::after,
+.table-wrap::after,
+.admin-scroll::after {
+  inset-inline-end: 0;
+  background: linear-gradient(270deg, rgba(20,20,20,.10), transparent);
+}
+
+.admin-table-wrap:hover::after,
+.admin-table-wrap:hover::before,
+.table-wrap:hover::after,
+.table-wrap:hover::before,
+.admin-scroll:hover::after,
+.admin-scroll:hover::before {
+  opacity: 1;
 }
 
 .admin-table,
@@ -515,6 +557,7 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  min-width: 760px; /* keeps columns readable; wrapper handles scroll */
 }
 
 .admin-table th,
@@ -526,6 +569,9 @@
   background: var(--cream);
   color: #3f3a33;
   white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .admin-table td,
@@ -534,11 +580,63 @@
   padding: 10px;
   border-bottom: 1px solid rgba(20, 20, 20, 0.10);
   vertical-align: top;
+  background: #fff;
+}
+
+/* Zebra + hover (more readable, especially on mobile) */
+.admin-table tbody tr:nth-child(even) td,
+.table tbody tr:nth-child(even) td,
+.admin-scroll tbody tr:nth-child(even) td {
+  background: rgba(251, 248, 243, 0.55);
 }
 
 .admin-table tbody tr:hover,
 .table tbody tr:hover,
 .admin-scroll tbody tr:hover { background: #fffaf2; }
+
+.admin-table tbody tr:hover td,
+.table tbody tr:hover td,
+.admin-scroll tbody tr:hover td {
+  background: #fffaf2;
+}
+
+/* Sticky first column to make wide tables usable on phones */
+.admin-table th:first-child,
+.admin-table td:first-child,
+.table th:first-child,
+.table td:first-child,
+.admin-scroll th:first-child,
+.admin-scroll td:first-child {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 3;
+  box-shadow: 1px 0 0 rgba(20, 20, 20, 0.10);
+}
+
+.admin-table td:first-child,
+.table td:first-child,
+.admin-scroll td:first-child {
+  font-weight: 900;
+}
+
+/* Slightly denser, safer spacing on small screens */
+@media (max-width: 640px) {
+  .admin-table,
+  .table,
+  .admin-scroll table {
+    font-size: 12px;
+    min-width: 720px;
+  }
+
+  .admin-table th,
+  .admin-table td,
+  .table th,
+  .table td,
+  .admin-scroll th,
+  .admin-scroll td {
+    padding: 10px 10px;
+  }
+}
 
 .badge {
   display: inline-flex;
