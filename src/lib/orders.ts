@@ -272,7 +272,7 @@ function buildSlugCandidates(delta: InventoryDelta): string[] {
   return out;
 }
 
-async function resolveProductSlugByVariantId(trx: DbExecutor, variantId: number): Promise<string | null> {
+async function resolveProductSlugByVariantId(trx: DbTx, variantId: number): Promise<string | null> {
   // Best-effort resolution. If variants table is absent or schema differs, just return null.
   try {
     const r = await trx.query<{ slug: string }>(
@@ -289,8 +289,7 @@ async function resolveProductSlugByVariantId(trx: DbExecutor, variantId: number)
   }
 }
 
-async function resolveInventoryDeltasToSlugs(
-  trx: DbExecutor,
+async function resolveInventoryDeltasToSlugs(trx: DbTx,
   deltas: InventoryDelta[]
 ): Promise<{ resolved: Array<{ slug: string; qty: number }>; missing: InventoryDelta[] }> {
   const perDeltaCandidates = deltas.map((d) => buildSlugCandidates(d));
@@ -351,7 +350,7 @@ type OrderInventoryRow = {
  * Commit inventory (decrement products.inventory_qty) once the order is PAID / PAID_COD.
  * Idempotent via orders.inventory_committed_at.
  */
-export async function commitInventoryForPaidCart(trx: DbExecutor, cartId: string): Promise<boolean> {
+export async function commitInventoryForPaidCart(trx: DbTx, cartId: string): Promise<boolean> {
   const { rows } = await trx.query<OrderInventoryRow>(
     `select cart_id, status, inventory_committed_at, items
        from orders

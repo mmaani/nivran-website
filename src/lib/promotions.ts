@@ -1,5 +1,5 @@
 import "server-only";
-import type { DbExecutor } from "@/lib/db";
+import type { DbExecutor, DbTx } from "@/lib/db";
 
 export type PricedOrderLine = {
   slug: string;
@@ -290,7 +290,7 @@ export async function evaluateAutoPromotionForLines(
   return best || { ok: false, code: "PROMO_NOT_FOUND", error: "No eligible AUTO promotion" };
 }
 
-export async function consumePromotionUsage(dbx: DbExecutor, promotionId: number): Promise<boolean> {
+export async function consumePromotionUsage(dbx: DbTx, promotionId: number): Promise<boolean> {
   const r = await dbx.query<{ id: number }>(
     `update promotions
         set used_count = coalesce(used_count, 0) + 1,
