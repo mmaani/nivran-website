@@ -6,8 +6,10 @@ import {
   products,
   testimonials,
   type Locale,
+  type ProductCategory,
   type Product,
 } from "@/lib/siteContent";
+import QuickFactsRotator from "./QuickFactsRotator";
 
 const fallbackCategoryLabels: Record<string, Record<Locale, string>> = {
   perfume: { en: "Perfume", ar: "عطور" },
@@ -31,11 +33,16 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
   const heroNotes = (featuredProduct.notes?.[locale] || []).slice(0, 6);
   const categoryLabelMap: Record<string, Record<Locale, string>> =
     categoryLabels || fallbackCategoryLabels;
+  const minPriceByCategory = productList.reduce<Record<string, number>>((acc, item) => {
+    const current = acc[item.category];
+    acc[item.category] = typeof current === "number" ? Math.min(current, item.priceJod) : item.priceJod;
+    return acc;
+  }, {});
 
   const t = {
     en: {
-      hero: "Elegant fragrance shopping with a luxury feel and local simplicity.",
-      sub: "Discover NIVRAN Calm — our signature scent made for confident, modern daily wear.",
+      hero: "Wear the calm.",
+      sub: "Elegant fragrance and body care — crafted for modern daily wear in Jordan.",
       explore: "Explore the scent",
       checkout: "Start checkout",
       story: "Read our story",
@@ -46,15 +53,30 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
       join: "Join now",
       quick: "Quick facts",
       categories: "Categories",
+      editorialCategories: "Editorial categories",
+      featuredProducts: "Featured products",
       catalog: "Browse catalog",
-      perfumeFocus: "Perfume focus",
-      trail: "Scent trail",
-      placeholderTitle: "Banner space reserved",
-      placeholderBody: "We left a premium block here so your upcoming campaign banner can drop in cleanly.",
+      viewAllCategories: "View all categories",
+      factsControls: "Quick facts controls",
+      campaign: "Members-only launch offers — calm luxury, early access.",
+      campaignHint: "Free shipping threshold available on qualifying orders.",
+      madeJordan: "Made in Jordan",
+      madeJordanBody: "Crafted and fulfilled locally",
+      edpFocus: "EDP Focus",
+      edpFocusBody: "Balanced for lasting presence",
+      fastDelivery: "Fast delivery",
+      fastDeliveryBody: "Amman + nationwide shipping",
+      premiumAccess: "Accessible premium",
+      premiumAccessBody: "Perfume starts from 15 JOD",
+      cleanLineup: "Clean lineup",
+      cleanLineupBody: "Perfume + care essentials",
+      perfumeDesc: "Signature scent collection",
+      creamDesc: "Daily skin comfort, minimalist ritual",
+      handGelDesc: "Clean care on the go",
     },
     ar: {
-      hero: "تجربة تسوق عطور أنيقة بطابع فاخر وسهولة محلية.",
-      sub: "اكتشف نيفـران كالم — عطرنا الأساسي لإطلالة يومية واثقة وعصرية.",
+      hero: "ارتدِ الهدوء.",
+      sub: "عطور وعناية أنيقة — مصممة للاستخدام اليومي العصري في الأردن.",
       explore: "استكشف العطر",
       checkout: "ابدأ الدفع",
       story: "اقرأ قصتنا",
@@ -65,13 +87,42 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
       join: "اشترك الآن",
       quick: "معلومات سريعة",
       categories: "الفئات",
+      editorialCategories: "فئات مختارة",
+      featuredProducts: "منتجات مختارة",
       catalog: "تصفح المنتجات",
-      perfumeFocus: "تركيزنا على العطور",
-      trail: "أثر العطر",
-      placeholderTitle: "مساحة مخصصة للبنر",
-      placeholderBody: "تركنا هذا الموضع مجهزاً بشكل فاخر حتى تضيف بنر الحملة مباشرة عند اكتمال التصميم.",
+      viewAllCategories: "عرض جميع الفئات",
+      factsControls: "خيارات الحقائق السريعة",
+      campaign: "عروض الإطلاق للأعضاء — وصول مبكر وهدوء فاخر.",
+      campaignHint: "شحن مجاني عند حد أدنى للطلبات المؤهلة.",
+      madeJordan: "صُنع في الأردن",
+      madeJordanBody: "تصنيع وتوصيل محلي",
+      edpFocus: "تركيز EDP",
+      edpFocusBody: "توازن وثبات",
+      fastDelivery: "توصيل سريع",
+      fastDeliveryBody: "عمّان وكافة المحافظات",
+      premiumAccess: "فخامة بسعر قريب",
+      premiumAccessBody: "العطر يبدأ من 15 د.أ",
+      cleanLineup: "تشكيلة نظيفة",
+      cleanLineupBody: "عطور + عناية أساسية",
+      perfumeDesc: "مجموعة العطر الأساسية",
+      creamDesc: "راحة يومية... بطقوس بسيطة",
+      handGelDesc: "نظافة أنيقة أثناء التنقل",
     },
   }[locale];
+
+  const quickFacts = [
+    { title: t.madeJordan, body: t.madeJordanBody },
+    { title: t.edpFocus, body: t.edpFocusBody },
+    { title: t.fastDelivery, body: t.fastDeliveryBody },
+    { title: t.premiumAccess, body: t.premiumAccessBody },
+    { title: t.cleanLineup, body: t.cleanLineupBody },
+  ];
+
+  const spotlightCategories: Array<{ key: ProductCategory; desc: string }> = [
+    { key: "perfume", desc: t.perfumeDesc },
+    { key: "cream", desc: t.creamDesc },
+    { key: "hand-gel", desc: t.handGelDesc },
+  ];
 
   if (!featuredProduct) return null;
 
@@ -104,11 +155,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
 
           <aside className="feature-card">
             <p className="muted" style={{ marginTop: 0 }}>{t.quick}</p>
-            <div className="badge-row" style={{ marginBottom: ".6rem" }}>
-              {Object.entries(categoryLabelMap).map(([key, label]) => (
-                <span className="badge" key={key}>{label[locale]}</span>
-              ))}
-            </div>
+            <QuickFactsRotator facts={quickFacts} dotsLabel={t.factsControls} />
             <h3 style={{ margin: "0 0 .3rem" }}>{featuredProduct.name[locale]}</h3>
             <p className="muted" style={{ marginTop: 0 }}>{featuredProduct.subtitle[locale]}</p>
             <p style={{ marginBottom: ".45rem" }}><strong>{featuredProduct.priceJod.toFixed(2)} JOD</strong> · {featuredProduct.size}</p>
@@ -121,18 +168,38 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
       </section>
 
       <section className="section">
-        <article className="panel banner-placeholder">
-          <p className="kicker" style={{ marginBottom: ".65rem" }}>{t.placeholderTitle}</p>
-          <p className="muted" style={{ margin: 0 }}>{t.placeholderBody}</p>
+        <article className="panel campaign-strip">
+          <p className="campaign-text">{t.campaign}</p>
+          <p className="muted" style={{ margin: 0 }}>{t.campaignHint}</p>
         </article>
       </section>
 
       <section className="section">
-        <h2 className="section-title">{t.categories}</h2>
+        <h2 className="section-title">{t.editorialCategories}</h2>
+        <p className="muted" style={{ marginTop: 0 }}>{t.categories}</p>
+        <div className="grid-3">
+          {spotlightCategories.map((item) => (
+            <article key={item.key} className="panel category-editorial-card lift-panel">
+              <p className="kicker" style={{ marginBottom: ".55rem" }}>{categoryLabelMap[item.key][locale]}</p>
+              <p className="muted" style={{ marginTop: 0 }}>{item.desc}</p>
+              <p style={{ margin: "0 0 .75rem" }}>
+                <strong>{(minPriceByCategory[item.key] || 0).toFixed(2)} JOD</strong>
+              </p>
+              <a className="btn" href={`/${locale}/product`}>{t.catalog}</a>
+            </article>
+          ))}
+        </div>
+        <div className="cta-row" style={{ marginTop: ".8rem" }}>
+          <a className="btn ghost" href={`/${locale}/product`}>{t.viewAllCategories}</a>
+        </div>
+      </section>
+
+      <section className="section">
+        <h2 className="section-title">{t.featuredProducts}</h2>
         <p className="muted" style={{ marginTop: 0 }}>{mainProductMessage[locale]}</p>
         <div className="grid-3">
           {productList.slice(0, 6).map((item) => (
-            <article key={item.slug} className="panel">
+            <article key={item.slug} className="panel lift-panel">
               <p className="muted" style={{ marginTop: 0 }}>{(categoryLabelMap[item.category] || fallbackCategoryLabels[item.category])[locale]} · {item.size}</p>
               <h3 style={{ margin: "0 0 .3rem" }}>{item.name[locale]}</h3>
               <p className="muted">{item.subtitle[locale]}</p>
