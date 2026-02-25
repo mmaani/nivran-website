@@ -30,6 +30,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
   const localizedBenefits = (benefits[locale] || []) as BenefitItem[];
   const localizedTestimonials = (testimonials[locale] || []) as TestimonialItem[];
   const productList: Product[] = products || [];
+  const heroNotes = (featuredProduct.notes?.[locale] || []).slice(0, 6);
   const categoryLabelMap: Record<string, Record<Locale, string>> =
     categoryLabels || fallbackCategoryLabels;
   const minPriceByCategory = productList.reduce<Record<string, number>>((acc, item) => {
@@ -138,6 +139,13 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
             <span className="kicker">{isAr ? "دار عطور أردنية" : "Jordanian perfume house"}</span>
             <h1 className="title">{t.hero}</h1>
             <p className="lead">{t.sub}</p>
+            <div className="hero-marquee" aria-label={t.trail}>
+              <div className="hero-marquee-track">
+                {[...heroNotes, ...heroNotes].map((note, idx) => (
+                  <span className="badge" key={`${note}-${idx}`}>{note}</span>
+                ))}
+              </div>
+            </div>
             <div className="cta-row">
               <a className="btn primary" href={`/${locale}/product/${featuredProduct.slug}`}>{t.explore}</a>
               <a className="btn" href={`/${locale}/checkout`}>{t.checkout}</a>
