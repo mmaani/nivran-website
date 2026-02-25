@@ -163,19 +163,6 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
     { key: "hand-gel", desc: t.handGelDesc },
   ];
 
-  const quickFacts = [
-    { title: t.madeJordan, body: t.madeJordanBody },
-    { title: t.edpFocus, body: t.edpFocusBody },
-    { title: t.fastDelivery, body: t.fastDeliveryBody },
-    { title: t.premiumAccess, body: t.premiumAccessBody },
-    { title: t.cleanLineup, body: t.cleanLineupBody },
-  ];
-
-  const spotlightCategories: Array<{ key: ProductCategory; desc: string }> = [
-    { key: "perfume", desc: t.perfumeDesc },
-    { key: "cream", desc: t.creamDesc },
-    { key: "hand-gel", desc: t.handGelDesc },
-  ];
 
   if (!featuredProduct) return null;
 
