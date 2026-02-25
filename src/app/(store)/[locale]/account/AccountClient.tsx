@@ -187,8 +187,9 @@ export default function AccountClient({ locale }: { locale: string }) {
   const [city, setCity] = useState("");
 
   const [orders, setOrders] = useState<OrderListRow[]>([]);
-  const [reorderBusyOrderId, setReorderBusyOrderId] = useState<number | null>(null);
-  const [reorderMenuOrderId, setReorderMenuOrderId] = useState<number | null>(null);
+  const [reorderOpen, setReorderOpen] = useState(false);
+  const [reorderBusy, setReorderBusy] = useState(false);
+  const [reorderOrderId, setReorderOrderId] = useState<number | null>(null);
   const [authBusy, setAuthBusy] = useState<"verify" | "logout" | null>(null);
 
   // Country combobox
@@ -351,8 +352,9 @@ export default function AccountClient({ locale }: { locale: string }) {
     }
   }
 
-  function toggleReorderMenu(orderId: number) {
-    setReorderMenuOrderId((current) => (current === orderId ? null : orderId));
+  function openReorder(orderId: number) {
+    setReorderOrderId(orderId);
+    setReorderOpen(true);
     setMsg(null);
   }
 
@@ -392,8 +394,9 @@ export default function AccountClient({ locale }: { locale: string }) {
     } catch {
       setMsg(COPY.error);
     } finally {
-      setReorderBusyOrderId(null);
-      setReorderMenuOrderId(null);
+      setReorderBusy(false);
+      setReorderOpen(false);
+      setReorderOrderId(null);
     }
   }
 
@@ -696,27 +699,9 @@ export default function AccountClient({ locale }: { locale: string }) {
                             <a className="btn btn-quiet" href={`/${locale}/account/orders/${o.id}`}>
                               {COPY.details}
                             </a>
-                            <div className="reorder-menu">
-                              <button className="btn primary" onClick={() => toggleReorderMenu(o.id)} disabled={reorderBusyOrderId !== null}>
-                                {reorderBusyOrderId === o.id ? COPY.reorderLoading : COPY.reorder}
-                              </button>
-                              {reorderMenuOrderId === o.id ? (
-                                <div className="reorder-popover" role="dialog" aria-label={COPY.reorderTitle}>
-                                  <p className="reorder-popover-title">{COPY.reorderBody}</p>
-                                  <div className="reorder-popover-actions">
-                                    <button className="btn btn-quiet" onClick={() => setReorderMenuOrderId(null)}>
-                                      {COPY.cancel}
-                                    </button>
-                                    <button className="btn btn-quiet" onClick={() => applyReorder(o.id, "add")}>
-                                      {COPY.addToCart}
-                                    </button>
-                                    <button className="btn primary" onClick={() => applyReorder(o.id, "replace")}>
-                                      {COPY.startFresh}
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : null}
-                            </div>
+                            <button className="btn primary" onClick={() => openReorder(o.id)} disabled={reorderBusy}>
+                              {reorderBusy && reorderOrderId === o.id ? COPY.reorderLoading : COPY.reorder}
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -728,6 +713,26 @@ export default function AccountClient({ locale }: { locale: string }) {
           )}
         </div>
       </div>
+
+      {reorderOpen ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={COPY.reorderTitle}>
+          <div className="modal">
+            <h3>{COPY.reorderTitle}</h3>
+            <p className="muted">{COPY.reorderBody}</p>
+            <div className="modal-actions">
+              <button className="btn btn-quiet" onClick={() => setReorderOpen(false)} disabled={reorderBusy}>
+                {COPY.cancel}
+              </button>
+              <button className="btn btn-quiet" onClick={() => applyReorder("add")} disabled={reorderBusy}>
+                {COPY.addToCart}
+              </button>
+              <button className="btn primary" onClick={() => applyReorder("replace")} disabled={reorderBusy}>
+                {COPY.startFresh}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

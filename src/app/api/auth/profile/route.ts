@@ -29,6 +29,7 @@ export async function GET(req: Request) {
             ${hasCity ? "city" : "null::text"} as city,
             ${hasCountry ? "country" : "null::text"} as country,
             ${hasEmailVerifiedAt ? "email_verified_at::text" : "null::text"} as email_verified_at,
+            ${hasEmailVerifiedAt ? "(email_verified_at is not null)" : "false"} as is_verified,
             created_at::text as created_at
        from customers
       where id=$1 and is_active=true
