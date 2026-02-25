@@ -23,18 +23,33 @@ export default function QuickFactsRotator({
     return () => media.removeEventListener("change", update);
   }, []);
 
+  const factCount = facts.length;
+
   useEffect(() => {
-    if (reducedMotion || paused || facts.length < 2) return;
+    if (factCount === 0) {
+      setActive(0);
+      return;
+    }
+    setActive((current) => (current >= factCount ? 0 : current));
+  }, [factCount]);
+
+  useEffect(() => {
+    if (reducedMotion || paused || factCount < 2) return;
     const id = window.setInterval(() => {
-      setActive((current) => (current + 1) % facts.length);
+      setActive((current) => (current + 1) % factCount);
     }, 5000);
     return () => window.clearInterval(id);
-  }, [facts.length, paused, reducedMotion]);
+  }, [factCount, paused, reducedMotion]);
 
-  const visibleFacts = useMemo(
-    () => [0, 1, 2].map((offset) => facts[(active + offset) % facts.length]).filter(Boolean),
-    [active, facts],
-  );
+  const normalizedActive = factCount > 0 ? active % factCount : 0;
+
+  const visibleFacts = useMemo(() => {
+    if (factCount === 0) return [] as Fact[];
+    if (reducedMotion) return facts.slice(0, Math.min(3, factCount));
+    return [0, 1, 2].map((offset) => facts[(normalizedActive + offset) % factCount]);
+  }, [factCount, facts, normalizedActive, reducedMotion]);
+
+  if (factCount === 0) return null;
 
   return (
     <div
@@ -55,9 +70,9 @@ export default function QuickFactsRotator({
           <button
             key={fact.title}
             type="button"
-            className={`quick-dot${idx === active ? " is-active" : ""}`}
+            className={`quick-dot${idx === normalizedActive ? " is-active" : ""}`}
             aria-label={fact.title}
-            aria-pressed={idx === active}
+            aria-pressed={idx === normalizedActive}
             onClick={() => setActive(idx)}
           />
         ))}
