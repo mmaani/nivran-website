@@ -8,6 +8,12 @@ type Locale = "en" | "ar";
 type JsonRecord = Record<string, unknown>;
 
 const CART_KEY = "nivran_cart_v1";
+const REORDER_KEY = "nivran_reorder_payload_v1";
+
+type ReorderPayload = {
+  items: CartItem[];
+  mode: "replace" | "add";
+};
 
 function isRecord(v: unknown): v is JsonRecord {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -16,6 +22,59 @@ function isRecord(v: unknown): v is JsonRecord {
 function toNum(v: unknown): number {
   const n = typeof v === "number" ? v : Number(v);
   return Number.isFinite(n) ? n : 0;
+}
+
+function readReorderPayload(): ReorderPayload | null {
+  try {
+    const raw = sessionStorage.getItem(REORDER_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed)) return null;
+
+    const modeValue = parsed["mode"];
+    const mode: "replace" | "add" = modeValue === "add" ? "add" : modeValue === "replace" ? "replace" : "replace";
+
+    const rawItems = parsed["items"];
+    if (!Array.isArray(rawItems) || rawItems.length === 0) return null;
+
+    const items = rawItems
+      .map((item): CartItem | null => {
+        if (!isRecord(item)) return null;
+        const slug = String(item["slug"] || "").trim();
+        if (!slug) return null;
+        const qty = Math.max(1, Math.min(99, Math.trunc(toNum(item["qty"]) || 1)));
+        const variantSource = item["variantId"];
+        const variantNum = toNum(variantSource);
+        const variantId = Number.isFinite(variantNum) && variantNum > 0 ? Math.trunc(variantNum) : null;
+        return { slug, name: slug, priceJod: 0, qty, variantId };
+      })
+      .filter((entry): entry is CartItem => entry !== null);
+
+    if (!items.length) return null;
+    return { mode, items };
+  } catch {
+    return null;
+  }
+}
+
+function mergeCartItems(current: CartItem[], incoming: CartItem[]): CartItem[] {
+  const map = new Map<string, CartItem>();
+  for (const item of current) {
+    map.set(buildKey(item.slug, item.variantId), { ...item });
+  }
+  for (const item of incoming) {
+    const key = buildKey(item.slug, item.variantId);
+    const existing = map.get(key);
+    if (existing) {
+      map.set(key, {
+        ...existing,
+        qty: Math.max(1, Math.min(99, existing.qty + item.qty)),
+      });
+    } else {
+      map.set(key, item);
+    }
+  }
+  return Array.from(map.values());
 }
 
 function readCart(): CartItem[] {
@@ -89,11 +148,27 @@ export default function CartClient({ locale }: { locale: Locale }) {
   const [quoteError, setQuoteError] = useState<string | null>(null);
 
   useEffect(() => {
-    setItems(readCart());
+    const current = readCart();
+    const reorderPayload = readReorderPayload();
+
+    if (reorderPayload) {
+      const nextItems = reorderPayload.mode === "replace" ? reorderPayload.items : mergeCartItems(current, reorderPayload.items);
+      writeCart(nextItems);
+      bestEffortSync(nextItems);
+      setItems(nextItems);
+      sessionStorage.removeItem(REORDER_KEY);
+      if (window.location.search.includes("reorder=1")) {
+        const target = `/${locale}/cart`;
+        window.history.replaceState({}, "", target);
+      }
+    } else {
+      setItems(current);
+    }
+
     const onCustom = () => setItems(readCart());
     window.addEventListener("nivran_cart_updated", onCustom as EventListener);
     return () => window.removeEventListener("nivran_cart_updated", onCustom as EventListener);
-  }, []);
+  }, [locale]);
 
   useEffect(() => {
     let cancelled = false;

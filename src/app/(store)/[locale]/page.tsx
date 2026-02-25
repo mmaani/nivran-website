@@ -5,10 +5,11 @@ import {
   mainProductMessage,
   products,
   testimonials,
-  type Locale,
   type ProductCategory,
   type Product,
 } from "@/lib/siteContent";
+import type { Locale } from "@/lib/locale";
+import { getHomeCopy } from "@/lib/homeCopy";
 import QuickFactsRotator from "./QuickFactsRotator";
 
 const fallbackCategoryLabels: Record<string, Record<Locale, string>> = {
@@ -22,114 +23,6 @@ const fallbackCategoryLabels: Record<string, Record<Locale, string>> = {
 type BenefitItem = { title: string; body: string };
 type TestimonialItem = { name: string; text: string };
 
-type HomeCopy = {
-  hero: string;
-  sub: string;
-  explore: string;
-  checkout: string;
-  story: string;
-  why: string;
-  proof: string;
-  newsletter: string;
-  email: string;
-  join: string;
-  quick: string;
-  categories: string;
-  editorialCategories: string;
-  featuredProducts: string;
-  catalog: string;
-  viewAllCategories: string;
-  factsControls: string;
-  trail: string;
-  campaign: string;
-  campaignHint: string;
-  madeJordan: string;
-  madeJordanBody: string;
-  edpFocus: string;
-  edpFocusBody: string;
-  fastDelivery: string;
-  fastDeliveryBody: string;
-  premiumAccess: string;
-  premiumAccessBody: string;
-  cleanLineup: string;
-  cleanLineupBody: string;
-  perfumeDesc: string;
-  creamDesc: string;
-  handGelDesc: string;
-};
-
-const homeCopy: Record<Locale, HomeCopy> = {
-  en: {
-    hero: "Wear the calm.",
-    sub: "Elegant fragrance and body care — crafted for modern daily wear in Jordan.",
-    explore: "Explore the scent",
-    checkout: "Start checkout",
-    story: "Read our story",
-    why: "Why NIVRAN feels premium",
-    proof: "Loved by customers",
-    newsletter: "Members-only launch offers",
-    email: "Your email",
-    join: "Join now",
-    quick: "Quick facts",
-    categories: "Categories",
-    editorialCategories: "Editorial categories",
-    featuredProducts: "Featured products",
-    catalog: "Browse catalog",
-    viewAllCategories: "View all categories",
-    factsControls: "Quick facts controls",
-    trail: "Scent trail",
-    campaign: "Members-only launch offers — calm luxury, early access.",
-    campaignHint: "Free shipping threshold available on qualifying orders.",
-    madeJordan: "Made in Jordan",
-    madeJordanBody: "Crafted and fulfilled locally",
-    edpFocus: "EDP Focus",
-    edpFocusBody: "Balanced for lasting presence",
-    fastDelivery: "Fast delivery",
-    fastDeliveryBody: "Amman + nationwide shipping",
-    premiumAccess: "Accessible premium",
-    premiumAccessBody: "Perfume starts from 15 JOD",
-    cleanLineup: "Clean lineup",
-    cleanLineupBody: "Perfume + care essentials",
-    perfumeDesc: "Signature scent collection",
-    creamDesc: "Daily skin comfort, minimalist ritual",
-    handGelDesc: "Clean care on the go",
-  },
-  ar: {
-    hero: "ارتدِ الهدوء.",
-    sub: "عطور وعناية أنيقة — مصممة للاستخدام اليومي العصري في الأردن.",
-    explore: "استكشف العطر",
-    checkout: "ابدأ الدفع",
-    story: "اقرأ قصتنا",
-    why: "لماذا تبدو نيفـران فاخرة",
-    proof: "آراء العملاء",
-    newsletter: "عروض حصرية للمشتركين",
-    email: "بريدك الإلكتروني",
-    join: "اشترك الآن",
-    quick: "معلومات سريعة",
-    categories: "الفئات",
-    editorialCategories: "فئات مختارة",
-    featuredProducts: "منتجات مختارة",
-    catalog: "تصفح المنتجات",
-    viewAllCategories: "عرض جميع الفئات",
-    factsControls: "خيارات الحقائق السريعة",
-    trail: "أثر العطر",
-    campaign: "عروض الإطلاق للأعضاء — وصول مبكر وهدوء فاخر.",
-    campaignHint: "شحن مجاني عند حد أدنى للطلبات المؤهلة.",
-    madeJordan: "صُنع في الأردن",
-    madeJordanBody: "تصنيع وتوصيل محلي",
-    edpFocus: "تركيز EDP",
-    edpFocusBody: "توازن وثبات",
-    fastDelivery: "توصيل سريع",
-    fastDeliveryBody: "عمّان وكافة المحافظات",
-    premiumAccess: "فخامة بسعر قريب",
-    premiumAccessBody: "العطر يبدأ من 15 د.أ",
-    cleanLineup: "تشكيلة نظيفة",
-    cleanLineupBody: "عطور + عناية أساسية",
-    perfumeDesc: "مجموعة العطر الأساسية",
-    creamDesc: "راحة يومية... بطقوس بسيطة",
-    handGelDesc: "نظافة أنيقة أثناء التنقل",
-  },
-};
 export default async function Home({ params }: { params: Promise<{ locale: string }> }) {
   const { locale: raw } = await params;
   const locale: Locale = raw === "ar" ? "ar" : "en";
@@ -147,7 +40,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
     return acc;
   }, {});
 
-  const t = homeCopy[locale];
+  const t = getHomeCopy(locale);
 
   const quickFacts = [
     { title: t.madeJordan, body: t.madeJordanBody },
@@ -179,7 +72,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
             <span className="kicker">{isAr ? "دار عطور أردنية" : "Jordanian perfume house"}</span>
             <h1 className="title">{t.hero}</h1>
             <p className="lead">{t.sub}</p>
-            <div className="hero-marquee" aria-label="Scent trail">
+            <div className="hero-marquee" aria-label={t.trail}>
               <div className="hero-marquee-track">
                 {[...heroNotes, ...heroNotes].map((note, idx) => (
                   <span className="badge" key={`${note}-${idx}`}>{note}</span>

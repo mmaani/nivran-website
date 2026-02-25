@@ -164,6 +164,12 @@ export default function AccountClient({ locale }: { locale: string }) {
       created: isAr ? "التاريخ" : "Created",
       id: isAr ? "رقم" : "ID",
       promo: isAr ? "خصم" : "Discount",
+      accountTitle: isAr ? "الحساب" : "Account",
+      sendVerification: isAr ? "تحقق من البريد" : "Verify email",
+      loggingOut: isAr ? "جارٍ تسجيل الخروج..." : "Logging out...",
+      logout: isAr ? "تسجيل الخروج" : "Logout",
+      reorderLoading: isAr ? "جارٍ التحضير..." : "Preparing...",
+      verifySending: isAr ? "جارٍ الإرسال..." : "Sending...",
     }),
     [isAr]
   );
@@ -181,9 +187,9 @@ export default function AccountClient({ locale }: { locale: string }) {
   const [city, setCity] = useState("");
 
   const [orders, setOrders] = useState<OrderListRow[]>([]);
-  const [reorderOpen, setReorderOpen] = useState(false);
-  const [reorderBusy, setReorderBusy] = useState(false);
-  const [reorderOrderId, setReorderOrderId] = useState<number | null>(null);
+  const [reorderBusyOrderId, setReorderBusyOrderId] = useState<number | null>(null);
+  const [reorderMenuOrderId, setReorderMenuOrderId] = useState<number | null>(null);
+  const [authBusy, setAuthBusy] = useState<"verify" | "logout" | null>(null);
 
   // Country combobox
   const countryWrapRef = useRef<HTMLDivElement | null>(null);
@@ -345,18 +351,15 @@ export default function AccountClient({ locale }: { locale: string }) {
     }
   }
 
-  async function openReorder(orderId: number) {
-    setReorderOrderId(orderId);
-    setReorderOpen(true);
+  function toggleReorderMenu(orderId: number) {
+    setReorderMenuOrderId((current) => (current === orderId ? null : orderId));
     setMsg(null);
   }
 
-  async function applyReorder(mode: "replace" | "add") {
-    if (!reorderOrderId) return;
-
-    setReorderBusy(true);
+  async function applyReorder(orderId: number, mode: "replace" | "add") {
+    setReorderBusyOrderId(orderId);
     try {
-      const res = await fetch(`/api/orders?id=${reorderOrderId}&includeItems=1`, { cache: "no-store" });
+      const res = await fetch(`/api/orders?id=${orderId}&includeItems=1`, { cache: "no-store" });
       const data: unknown = await readJsonSafe(res);
 
       if (!res.ok || !data || typeof data !== "object" || (data as Record<string, unknown>).ok !== true) {
@@ -384,18 +387,51 @@ export default function AccountClient({ locale }: { locale: string }) {
         return;
       }
 
-      try {
-        sessionStorage.setItem("nivran_reorder_payload_v1", JSON.stringify({ items: mapped, mode }));
-      } catch {
-        // ignore
-      }
-
+      sessionStorage.setItem("nivran_reorder_payload_v1", JSON.stringify({ items: mapped, mode }));
       window.location.href = `/${locale}/cart?reorder=1`;
     } catch {
       setMsg(COPY.error);
     } finally {
-      setReorderBusy(false);
-      setReorderOpen(false);
+      setReorderBusyOrderId(null);
+      setReorderMenuOrderId(null);
+    }
+  }
+
+  async function startVerification() {
+    if (!profile || verified || authBusy) return;
+    setAuthBusy("verify");
+    setMsg(null);
+
+    try {
+      const res = await fetch("/api/auth/verify/start", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ locale }),
+      });
+      const data: unknown = await readJsonSafe(res);
+      if (!res.ok || !data || typeof data !== "object" || (data as Record<string, unknown>).ok !== true) {
+        setMsg(COPY.error);
+        return;
+      }
+      window.location.href = `/${locale}/account/verify?email=${encodeURIComponent(profile.email)}`;
+    } catch {
+      setMsg(COPY.error);
+    } finally {
+      setAuthBusy(null);
+    }
+  }
+
+  async function logout() {
+    if (authBusy) return;
+    setAuthBusy("logout");
+    setMsg(null);
+
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      window.location.href = `/${locale}/account/login`;
+    } catch {
+      setMsg(COPY.error);
+      setAuthBusy(null);
     }
   }
 
@@ -474,10 +510,26 @@ export default function AccountClient({ locale }: { locale: string }) {
       <div className="account-grid account-grid-stack">
         {/* Profile panel */}
         <div className="card card-soft account-panel">
-          <div className="card-head">
-            <span className={"badge " + (verified ? "badge-verified" : "")}>{verified ? COPY.verified : COPY.unverified}</span>
-            {msg ? <span className="muted">{msg}</span> : <span className="muted" />}
+          <div className="account-head">
+            <div>
+              <h1 className="account-title">{COPY.accountTitle}</h1>
+              <p className="account-subtitle" style={{ marginBottom: 0 }}>
+                <span className={"badge " + (verified ? "badge-verified" : "")}>{verified ? COPY.verified : COPY.unverified}</span>
+              </p>
+            </div>
+            <div className="account-actions">
+              {!verified ? (
+                <button className="btn btn-quiet" onClick={startVerification} disabled={authBusy !== null}>
+                  {authBusy === "verify" ? COPY.verifySending : COPY.sendVerification}
+                </button>
+              ) : null}
+              <button className="btn" onClick={logout} disabled={authBusy !== null}>
+                {authBusy === "logout" ? COPY.loggingOut : COPY.logout}
+              </button>
+            </div>
           </div>
+
+          {msg ? <p className="muted" style={{ marginTop: 0 }}>{msg}</p> : null}
 
           <div className="field-grid">
             <div className="field">
@@ -644,9 +696,27 @@ export default function AccountClient({ locale }: { locale: string }) {
                             <a className="btn btn-quiet" href={`/${locale}/account/orders/${o.id}`}>
                               {COPY.details}
                             </a>
-                            <button className="btn primary" onClick={() => openReorder(o.id)}>
-                              {COPY.reorder}
-                            </button>
+                            <div className="reorder-menu">
+                              <button className="btn primary" onClick={() => toggleReorderMenu(o.id)} disabled={reorderBusyOrderId !== null}>
+                                {reorderBusyOrderId === o.id ? COPY.reorderLoading : COPY.reorder}
+                              </button>
+                              {reorderMenuOrderId === o.id ? (
+                                <div className="reorder-popover" role="dialog" aria-label={COPY.reorderTitle}>
+                                  <p className="reorder-popover-title">{COPY.reorderBody}</p>
+                                  <div className="reorder-popover-actions">
+                                    <button className="btn btn-quiet" onClick={() => setReorderMenuOrderId(null)}>
+                                      {COPY.cancel}
+                                    </button>
+                                    <button className="btn btn-quiet" onClick={() => applyReorder(o.id, "add")}>
+                                      {COPY.addToCart}
+                                    </button>
+                                    <button className="btn primary" onClick={() => applyReorder(o.id, "replace")}>
+                                      {COPY.startFresh}
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -658,26 +728,6 @@ export default function AccountClient({ locale }: { locale: string }) {
           )}
         </div>
       </div>
-
-      {reorderOpen ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true">
-          <div className="modal">
-            <h3>{COPY.reorderTitle}</h3>
-            <p className="muted">{COPY.reorderBody}</p>
-            <div className="modal-actions">
-              <button className="btn btn-quiet" onClick={() => setReorderOpen(false)} disabled={reorderBusy}>
-                {COPY.cancel}
-              </button>
-              <button className="btn btn-quiet" onClick={() => applyReorder("add")} disabled={reorderBusy}>
-                {COPY.addToCart}
-              </button>
-              <button className="btn primary" onClick={() => applyReorder("replace")} disabled={reorderBusy}>
-                {COPY.startFresh}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
