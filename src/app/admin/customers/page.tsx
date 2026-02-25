@@ -50,7 +50,6 @@ export default async function AdminCustomersPage({
         subtitle: "عرض بيانات العملاء وملخص المشتريات.",
         refresh: "تحديث",
         export: "تصدير Excel",
-        filters: "إعدادات",
         pageSize: "عدد الصفوف",
         exportScope: "نطاق التصدير",
         exportPage: "الصفحة الحالية",
@@ -71,13 +70,13 @@ export default async function AdminCustomersPage({
         thLast: "آخر طلب",
         thCreated: "تاريخ الإنشاء",
         na: "—",
+        view: "عرض",
       }
     : {
         title: "Customers",
         subtitle: "Shows customer contact/location + purchase history summary.",
         refresh: "Refresh",
         export: "Export Excel",
-        filters: "Settings",
         pageSize: "Rows",
         exportScope: "Export scope",
         exportPage: "Current page",
@@ -98,12 +97,15 @@ export default async function AdminCustomersPage({
         thLast: "Last Order",
         thCreated: "Created",
         na: "—",
+        view: "View",
       };
 
   const exportHref =
     exportScope === "all"
       ? `/api/admin/customers/export?scope=all`
       : `/api/admin/customers/export?scope=page&page=${data.page}&pageSize=${data.pageSize}`;
+
+  const backParam = encodeURIComponent(buildCustomersHref({ page: data.page, pageSize: data.pageSize, scope: exportScope }));
 
   return (
     <div className="admin-grid">
@@ -187,7 +189,11 @@ export default async function AdminCustomersPage({
             {data.rows.map((x) => (
               <tr key={x.id}>
                 <td className="ltr">{x.id}</td>
-                <td className="ltr">{x.email}</td>
+                <td className="ltr">
+                  <Link className="btn btn-link" href={`/admin/customers/${x.id}?back=${backParam}`}>
+                    {x.email}
+                  </Link>
+                </td>
                 <td>{x.full_name || L.na}</td>
                 <td className="ltr">{x.phone || L.na}</td>
                 <td>{[x.address_line1, x.city, x.country].filter(Boolean).join(", ") || L.na}</td>
