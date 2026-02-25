@@ -23,9 +23,8 @@ jobs:
       - name: Enable pnpm (Corepack)
         run: |
           set -euxo pipefail
-          npm i -g corepack@latest
           corepack enable
-          corepack prepare pnpm@10 --activate
+          corepack prepare pnpm@10.4.1 --activate
           node -v
           pnpm -v
 
