@@ -22,6 +22,114 @@ const fallbackCategoryLabels: Record<string, Record<Locale, string>> = {
 type BenefitItem = { title: string; body: string };
 type TestimonialItem = { name: string; text: string };
 
+type HomeCopy = {
+  hero: string;
+  sub: string;
+  explore: string;
+  checkout: string;
+  story: string;
+  why: string;
+  proof: string;
+  newsletter: string;
+  email: string;
+  join: string;
+  quick: string;
+  categories: string;
+  editorialCategories: string;
+  featuredProducts: string;
+  catalog: string;
+  viewAllCategories: string;
+  factsControls: string;
+  trail: string;
+  campaign: string;
+  campaignHint: string;
+  madeJordan: string;
+  madeJordanBody: string;
+  edpFocus: string;
+  edpFocusBody: string;
+  fastDelivery: string;
+  fastDeliveryBody: string;
+  premiumAccess: string;
+  premiumAccessBody: string;
+  cleanLineup: string;
+  cleanLineupBody: string;
+  perfumeDesc: string;
+  creamDesc: string;
+  handGelDesc: string;
+};
+
+const homeCopy: Record<Locale, HomeCopy> = {
+  en: {
+    hero: "Wear the calm.",
+    sub: "Elegant fragrance and body care — crafted for modern daily wear in Jordan.",
+    explore: "Explore the scent",
+    checkout: "Start checkout",
+    story: "Read our story",
+    why: "Why NIVRAN feels premium",
+    proof: "Loved by customers",
+    newsletter: "Members-only launch offers",
+    email: "Your email",
+    join: "Join now",
+    quick: "Quick facts",
+    categories: "Categories",
+    editorialCategories: "Editorial categories",
+    featuredProducts: "Featured products",
+    catalog: "Browse catalog",
+    viewAllCategories: "View all categories",
+    factsControls: "Quick facts controls",
+    trail: "Scent trail",
+    campaign: "Members-only launch offers — calm luxury, early access.",
+    campaignHint: "Free shipping threshold available on qualifying orders.",
+    madeJordan: "Made in Jordan",
+    madeJordanBody: "Crafted and fulfilled locally",
+    edpFocus: "EDP Focus",
+    edpFocusBody: "Balanced for lasting presence",
+    fastDelivery: "Fast delivery",
+    fastDeliveryBody: "Amman + nationwide shipping",
+    premiumAccess: "Accessible premium",
+    premiumAccessBody: "Perfume starts from 15 JOD",
+    cleanLineup: "Clean lineup",
+    cleanLineupBody: "Perfume + care essentials",
+    perfumeDesc: "Signature scent collection",
+    creamDesc: "Daily skin comfort, minimalist ritual",
+    handGelDesc: "Clean care on the go",
+  },
+  ar: {
+    hero: "ارتدِ الهدوء.",
+    sub: "عطور وعناية أنيقة — مصممة للاستخدام اليومي العصري في الأردن.",
+    explore: "استكشف العطر",
+    checkout: "ابدأ الدفع",
+    story: "اقرأ قصتنا",
+    why: "لماذا تبدو نيفـران فاخرة",
+    proof: "آراء العملاء",
+    newsletter: "عروض حصرية للمشتركين",
+    email: "بريدك الإلكتروني",
+    join: "اشترك الآن",
+    quick: "معلومات سريعة",
+    categories: "الفئات",
+    editorialCategories: "فئات مختارة",
+    featuredProducts: "منتجات مختارة",
+    catalog: "تصفح المنتجات",
+    viewAllCategories: "عرض جميع الفئات",
+    factsControls: "خيارات الحقائق السريعة",
+    trail: "أثر العطر",
+    campaign: "عروض الإطلاق للأعضاء — وصول مبكر وهدوء فاخر.",
+    campaignHint: "شحن مجاني عند حد أدنى للطلبات المؤهلة.",
+    madeJordan: "صُنع في الأردن",
+    madeJordanBody: "تصنيع وتوصيل محلي",
+    edpFocus: "تركيز EDP",
+    edpFocusBody: "توازن وثبات",
+    fastDelivery: "توصيل سريع",
+    fastDeliveryBody: "عمّان وكافة المحافظات",
+    premiumAccess: "فخامة بسعر قريب",
+    premiumAccessBody: "العطر يبدأ من 15 د.أ",
+    cleanLineup: "تشكيلة نظيفة",
+    cleanLineupBody: "عطور + عناية أساسية",
+    perfumeDesc: "مجموعة العطر الأساسية",
+    creamDesc: "راحة يومية... بطقوس بسيطة",
+    handGelDesc: "نظافة أنيقة أثناء التنقل",
+  },
+};
 export default async function Home({ params }: { params: Promise<{ locale: string }> }) {
   const { locale: raw } = await params;
   const locale: Locale = raw === "ar" ? "ar" : "en";
@@ -39,78 +147,21 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
     return acc;
   }, {});
 
-  const t = {
-    en: {
-      hero: "Wear the calm.",
-      sub: "Elegant fragrance and body care — crafted for modern daily wear in Jordan.",
-      explore: "Explore the scent",
-      checkout: "Start checkout",
-      story: "Read our story",
-      why: "Why NIVRAN feels premium",
-      proof: "Loved by customers",
-      newsletter: "Members-only launch offers",
-      email: "Your email",
-      join: "Join now",
-      quick: "Quick facts",
-      categories: "Categories",
-      editorialCategories: "Editorial categories",
-      featuredProducts: "Featured products",
-      catalog: "Browse catalog",
-      viewAllCategories: "View all categories",
-      factsControls: "Quick facts controls",
-      trail: "Scent trail",
-      campaign: "Members-only launch offers — calm luxury, early access.",
-      campaignHint: "Free shipping threshold available on qualifying orders.",
-      madeJordan: "Made in Jordan",
-      madeJordanBody: "Crafted and fulfilled locally",
-      edpFocus: "EDP Focus",
-      edpFocusBody: "Balanced for lasting presence",
-      fastDelivery: "Fast delivery",
-      fastDeliveryBody: "Amman + nationwide shipping",
-      premiumAccess: "Accessible premium",
-      premiumAccessBody: "Perfume starts from 15 JOD",
-      cleanLineup: "Clean lineup",
-      cleanLineupBody: "Perfume + care essentials",
-      perfumeDesc: "Signature scent collection",
-      creamDesc: "Daily skin comfort, minimalist ritual",
-      handGelDesc: "Clean care on the go",
-    },
-    ar: {
-      hero: "ارتدِ الهدوء.",
-      sub: "عطور وعناية أنيقة — مصممة للاستخدام اليومي العصري في الأردن.",
-      explore: "استكشف العطر",
-      checkout: "ابدأ الدفع",
-      story: "اقرأ قصتنا",
-      why: "لماذا تبدو نيفـران فاخرة",
-      proof: "آراء العملاء",
-      newsletter: "عروض حصرية للمشتركين",
-      email: "بريدك الإلكتروني",
-      join: "اشترك الآن",
-      quick: "معلومات سريعة",
-      categories: "الفئات",
-      editorialCategories: "فئات مختارة",
-      featuredProducts: "منتجات مختارة",
-      catalog: "تصفح المنتجات",
-      viewAllCategories: "عرض جميع الفئات",
-      factsControls: "خيارات الحقائق السريعة",
-      trail: "أثر العطر",
-      campaign: "عروض الإطلاق للأعضاء — وصول مبكر وهدوء فاخر.",
-      campaignHint: "شحن مجاني عند حد أدنى للطلبات المؤهلة.",
-      madeJordan: "صُنع في الأردن",
-      madeJordanBody: "تصنيع وتوصيل محلي",
-      edpFocus: "تركيز EDP",
-      edpFocusBody: "توازن وثبات",
-      fastDelivery: "توصيل سريع",
-      fastDeliveryBody: "عمّان وكافة المحافظات",
-      premiumAccess: "فخامة بسعر قريب",
-      premiumAccessBody: "العطر يبدأ من 15 د.أ",
-      cleanLineup: "تشكيلة نظيفة",
-      cleanLineupBody: "عطور + عناية أساسية",
-      perfumeDesc: "مجموعة العطر الأساسية",
-      creamDesc: "راحة يومية... بطقوس بسيطة",
-      handGelDesc: "نظافة أنيقة أثناء التنقل",
-    },
-  }[locale];
+  const t = homeCopy[locale];
+
+  const quickFacts = [
+    { title: t.madeJordan, body: t.madeJordanBody },
+    { title: t.edpFocus, body: t.edpFocusBody },
+    { title: t.fastDelivery, body: t.fastDeliveryBody },
+    { title: t.premiumAccess, body: t.premiumAccessBody },
+    { title: t.cleanLineup, body: t.cleanLineupBody },
+  ];
+
+  const spotlightCategories: Array<{ key: ProductCategory; desc: string }> = [
+    { key: "perfume", desc: t.perfumeDesc },
+    { key: "cream", desc: t.creamDesc },
+    { key: "hand-gel", desc: t.handGelDesc },
+  ];
 
   const quickFacts = [
     { title: t.madeJordan, body: t.madeJordanBody },
