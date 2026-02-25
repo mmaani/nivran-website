@@ -58,6 +58,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
       catalog: "Browse catalog",
       viewAllCategories: "View all categories",
       factsControls: "Quick facts controls",
+      trail: "Scent trail",
       campaign: "Members-only launch offers — calm luxury, early access.",
       campaignHint: "Free shipping threshold available on qualifying orders.",
       madeJordan: "Made in Jordan",
@@ -92,6 +93,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
       catalog: "تصفح المنتجات",
       viewAllCategories: "عرض جميع الفئات",
       factsControls: "خيارات الحقائق السريعة",
+      trail: "أثر العطر",
       campaign: "عروض الإطلاق للأعضاء — وصول مبكر وهدوء فاخر.",
       campaignHint: "شحن مجاني عند حد أدنى للطلبات المؤهلة.",
       madeJordan: "صُنع في الأردن",
@@ -139,7 +141,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
             <span className="kicker">{isAr ? "دار عطور أردنية" : "Jordanian perfume house"}</span>
             <h1 className="title">{t.hero}</h1>
             <p className="lead">{t.sub}</p>
-            <div className="hero-marquee" aria-label={t.trail}>
+            <div className="hero-marquee" aria-label="Scent trail">
               <div className="hero-marquee-track">
                 {[...heroNotes, ...heroNotes].map((note, idx) => (
                   <span className="badge" key={`${note}-${idx}`}>{note}</span>
