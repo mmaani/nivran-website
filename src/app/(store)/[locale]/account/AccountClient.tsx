@@ -186,6 +186,7 @@ export default function AccountClient({ locale }: { locale: string }) {
   const [addressLine1, setAddressLine1] = useState("");
   const [city, setCity] = useState("");
 
+  // IMPORTANT: popup-based reorder state (fixes your compile mismatch)
   const [orders, setOrders] = useState<OrderListRow[]>([]);
   const [reorderOpen, setReorderOpen] = useState(false);
   const [reorderBusy, setReorderBusy] = useState(false);
@@ -241,7 +242,6 @@ export default function AccountClient({ locale }: { locale: string }) {
   }
 
   useEffect(() => {
-    // Close dropdown on outside click
     function onDocDown(e: MouseEvent) {
       const el = countryWrapRef.current;
       if (!el) return;
@@ -277,7 +277,6 @@ export default function AccountClient({ locale }: { locale: string }) {
         setAddressLine1((p.address_line1 || "").trim());
         setCity((p.city || "").trim());
 
-        // Initialize country query (label)
         const initLabel = findCountryLabel((p.country || "").trim(), isAr);
         setCountryQuery(initLabel);
 
@@ -304,7 +303,6 @@ export default function AccountClient({ locale }: { locale: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // If locale changes (rare), keep country label consistent
   useEffect(() => {
     syncCountryQueryFromValue();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -358,10 +356,12 @@ export default function AccountClient({ locale }: { locale: string }) {
     setMsg(null);
   }
 
-  async function applyReorder(orderId: number, mode: "replace" | "add") {
-    setReorderBusyOrderId(orderId);
+  async function applyReorder(mode: "replace" | "add") {
+    if (!reorderOrderId) return;
+
+    setReorderBusy(true);
     try {
-      const res = await fetch(`/api/orders?id=${orderId}&includeItems=1`, { cache: "no-store" });
+      const res = await fetch(`/api/orders?id=${reorderOrderId}&includeItems=1`, { cache: "no-store" });
       const data: unknown = await readJsonSafe(res);
 
       if (!res.ok || !data || typeof data !== "object" || (data as Record<string, unknown>).ok !== true) {
@@ -440,7 +440,6 @@ export default function AccountClient({ locale }: { locale: string }) {
 
   function chooseCountry(label: string, code?: string) {
     const v = normalizeCountryInput(label);
-    // Persist label (what user sees) - backend accepts string
     setCountry(v || (code ? code : ""));
     setCountryQuery(v);
     setCountryOpen(false);
@@ -483,9 +482,7 @@ export default function AccountClient({ locale }: { locale: string }) {
     return (
       <div className="account-shell">
         <div className="panel">
-          <p className="muted" style={{ margin: 0 }}>
-            {isAr ? "جارٍ التحميل..." : "Loading..."}
-          </p>
+          <p className="muted" style={{ margin: 0 }}>{isAr ? "جارٍ التحميل..." : "Loading..."}</p>
         </div>
       </div>
     );
@@ -495,9 +492,7 @@ export default function AccountClient({ locale }: { locale: string }) {
     return (
       <div className="account-shell">
         <div className="panel">
-          <p className="muted" style={{ margin: 0 }}>
-            {isAr ? "يرجى تسجيل الدخول أولاً." : "Please log in first."}
-          </p>
+          <p className="muted" style={{ margin: 0 }}>{isAr ? "يرجى تسجيل الدخول أولاً." : "Please log in first."}</p>
           <div style={{ marginTop: 12 }}>
             <a className="btn primary" href={`/${locale}/account/login`}>
               {isAr ? "تسجيل الدخول" : "Login"}
@@ -511,13 +506,14 @@ export default function AccountClient({ locale }: { locale: string }) {
   return (
     <div className="account-shell">
       <div className="account-grid account-grid-stack">
-        {/* Profile panel */}
         <div className="card card-soft account-panel">
           <div className="account-head">
             <div>
               <h1 className="account-title">{COPY.accountTitle}</h1>
               <p className="account-subtitle" style={{ marginBottom: 0 }}>
-                <span className={"badge " + (verified ? "badge-verified" : "")}>{verified ? COPY.verified : COPY.unverified}</span>
+                <span className={"badge " + (verified ? "badge-verified" : "")}>
+                  {verified ? COPY.verified : COPY.unverified}
+                </span>
               </p>
             </div>
             <div className="account-actions">
@@ -550,71 +546,68 @@ export default function AccountClient({ locale }: { locale: string }) {
               <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" />
             </div>
 
-            {/* Searchable Country Dropdown */}
-<div className="field" ref={countryWrapRef}>
-  <label className="field-label">{COPY.country}</label>
+            <div className="field" ref={countryWrapRef}>
+              <label className="field-label">{COPY.country}</label>
+              <div className="country-combobox">
+                <input
+                  className="input country-input"
+                  value={countryQuery}
+                  placeholder={COPY.countryPlaceholder}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setCountryQuery(v);
+                    setCountry(normalizeCountryInput(v));
+                    setCountryOpen(true);
+                    setCountryActiveIdx(0);
+                  }}
+                  onFocus={() => {
+                    setCountryOpen(true);
+                    setCountryActiveIdx(0);
+                  }}
+                  onKeyDown={onCountryKeyDown}
+                  role="combobox"
+                  aria-expanded={countryOpen}
+                  aria-haspopup="listbox"
+                  aria-controls="country-listbox"
+                  aria-autocomplete="list"
+                  aria-activedescendant={countryOpen ? `country-opt-${countryActiveIdx}` : undefined}
+                />
 
-  <div className="country-combobox">
-    <input
-      className="input country-input"
-      value={countryQuery}
-      placeholder={COPY.countryPlaceholder}
-      onChange={(e) => {
-        const v = e.target.value;
-        setCountryQuery(v);
-        setCountry(normalizeCountryInput(v)); // keep value in sync (user can type a custom country)
-        setCountryOpen(true);
-        setCountryActiveIdx(0);
-      }}
-      onFocus={() => {
-        setCountryOpen(true);
-        setCountryActiveIdx(0);
-      }}
-      onKeyDown={onCountryKeyDown}
-      role="combobox"
-      aria-expanded={countryOpen}
-      aria-haspopup="listbox"
-      aria-controls="country-listbox"
-      aria-autocomplete="list"
-      aria-activedescendant={countryOpen ? `country-opt-${countryActiveIdx}` : undefined}
-    />
+                <button
+                  type="button"
+                  className="btn btn-quiet country-toggle"
+                  onClick={() => setCountryOpen((v) => !v)}
+                  aria-label={isAr ? "فتح قائمة الدول" : "Open countries"}
+                >
+                  ▾
+                </button>
 
-    <button
-      type="button"
-      className="btn btn-quiet country-toggle"
-      onClick={() => setCountryOpen((v) => !v)}
-      aria-label={isAr ? "فتح قائمة الدول" : "Open countries"}
-    >
-      ▾
-    </button>
+                {countryOpen ? (
+                  <div className="country-popover" role="listbox" id="country-listbox">
+                    {countryOptions.length === 0 ? (
+                      <div className="country-empty muted">{isAr ? "لا نتائج" : "No results"}</div>
+                    ) : (
+                      countryOptions.map((opt, idx) => (
+                        <button
+                          key={opt.code + opt.label}
+                          id={`country-opt-${idx}`}
+                          type="button"
+                          role="option"
+                          aria-selected={idx === countryActiveIdx}
+                          className={"country-option" + (idx === countryActiveIdx ? " is-active" : "")}
+                          onMouseEnter={() => setCountryActiveIdx(idx)}
+                          onClick={() => chooseCountry(opt.label, opt.code)}
+                        >
+                          <span>{opt.label}</span>
+                          <span className="muted" style={{ fontSize: ".82rem" }}>{opt.code}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            </div>
 
-    {countryOpen ? (
-      <div className="country-popover" role="listbox" id="country-listbox">
-        {countryOptions.length === 0 ? (
-          <div className="country-empty muted">{isAr ? "لا نتائج" : "No results"}</div>
-        ) : (
-          countryOptions.map((opt, idx) => (
-            <button
-              key={opt.code + opt.label}
-              id={`country-opt-${idx}`}
-              type="button"
-              role="option"
-              aria-selected={idx === countryActiveIdx}
-              className={"country-option" + (idx === countryActiveIdx ? " is-active" : "")}
-              onMouseEnter={() => setCountryActiveIdx(idx)}
-              onClick={() => chooseCountry(opt.label, opt.code)}
-            >
-              <span>{opt.label}</span>
-              <span className="muted" style={{ fontSize: ".82rem" }}>
-                {opt.code}
-              </span>
-            </button>
-          ))
-        )}
-      </div>
-    ) : null}
-  </div>
-</div>
             <div className="field" style={{ gridColumn: "1 / -1" }}>
               <label className="field-label">{COPY.address}</label>
               <input className="input" value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} />
@@ -637,12 +630,9 @@ export default function AccountClient({ locale }: { locale: string }) {
           </div>
         </div>
 
-        {/* Orders panel */}
         <div className="card account-panel">
           {orders.length === 0 ? (
-            <p className="muted" style={{ margin: 0 }}>
-              {COPY.emptyOrders}
-            </p>
+            <p className="muted" style={{ margin: 0 }}>{COPY.emptyOrders}</p>
           ) : (
             <div className="table-wrap">
               <table className="table">
@@ -671,29 +661,22 @@ export default function AccountClient({ locale }: { locale: string }) {
 
                     return (
                       <tr key={o.id}>
-                        <td data-label={COPY.id}>
-                          <strong>#{o.id}</strong>
-                        </td>
-
+                        <td data-label={COPY.id}><strong>#{o.id}</strong></td>
                         <td data-label={COPY.created}>
                           <span className="muted">{new Date(o.created_at).toLocaleString()}</span>
                         </td>
-
                         <td data-label={COPY.status}>
                           <span className={chipClass(status)}>
                             <span className="chip-dot" />
                             {status}
                           </span>
                         </td>
-
                         <td data-label={COPY.amount}>
                           <strong>{Number.isFinite(total) ? total.toFixed(2) : "0.00"} JOD</strong>
                         </td>
-
                         <td data-label={COPY.promo}>
                           <span className="muted">{promoText}</span>
                         </td>
-
                         <td data-label={COPY.none}>
                           <div className="order-actions">
                             <a className="btn btn-quiet" href={`/${locale}/account/orders/${o.id}`}>
