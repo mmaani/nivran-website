@@ -164,6 +164,12 @@ export default function AccountClient({ locale }: { locale: string }) {
       created: isAr ? "التاريخ" : "Created",
       id: isAr ? "رقم" : "ID",
       promo: isAr ? "خصم" : "Discount",
+      accountTitle: isAr ? "الحساب" : "Account",
+      sendVerification: isAr ? "تحقق من البريد" : "Verify email",
+      loggingOut: isAr ? "جارٍ تسجيل الخروج..." : "Logging out...",
+      logout: isAr ? "تسجيل الخروج" : "Logout",
+      reorderLoading: isAr ? "جارٍ التحضير..." : "Preparing...",
+      verifySending: isAr ? "جارٍ الإرسال..." : "Sending...",
     }),
     [isAr]
   );
@@ -184,6 +190,7 @@ export default function AccountClient({ locale }: { locale: string }) {
   const [reorderOpen, setReorderOpen] = useState(false);
   const [reorderBusy, setReorderBusy] = useState(false);
   const [reorderOrderId, setReorderOrderId] = useState<number | null>(null);
+  const [authBusy, setAuthBusy] = useState<"verify" | "logout" | null>(null);
 
   // Country combobox
   const countryWrapRef = useRef<HTMLDivElement | null>(null);
@@ -345,7 +352,7 @@ export default function AccountClient({ locale }: { locale: string }) {
     }
   }
 
-  async function openReorder(orderId: number) {
+  function openReorder(orderId: number) {
     setReorderOrderId(orderId);
     setReorderOpen(true);
     setMsg(null);
@@ -384,18 +391,52 @@ export default function AccountClient({ locale }: { locale: string }) {
         return;
       }
 
-      try {
-        sessionStorage.setItem("nivran_reorder_payload_v1", JSON.stringify({ items: mapped, mode }));
-      } catch {
-        // ignore
-      }
-
+      sessionStorage.setItem("nivran_reorder_payload_v1", JSON.stringify({ items: mapped, mode }));
       window.location.href = `/${locale}/cart?reorder=1`;
     } catch {
       setMsg(COPY.error);
     } finally {
       setReorderBusy(false);
       setReorderOpen(false);
+      setReorderOrderId(null);
+    }
+  }
+
+  async function startVerification() {
+    if (!profile || verified || authBusy) return;
+    setAuthBusy("verify");
+    setMsg(null);
+
+    try {
+      const res = await fetch("/api/auth/verify/start", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ locale }),
+      });
+      const data: unknown = await readJsonSafe(res);
+      if (!res.ok || !data || typeof data !== "object" || (data as Record<string, unknown>).ok !== true) {
+        setMsg(COPY.error);
+        return;
+      }
+      window.location.href = `/${locale}/account/verify?email=${encodeURIComponent(profile.email)}`;
+    } catch {
+      setMsg(COPY.error);
+    } finally {
+      setAuthBusy(null);
+    }
+  }
+
+  async function logout() {
+    if (authBusy) return;
+    setAuthBusy("logout");
+    setMsg(null);
+
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      window.location.href = `/${locale}/account/login`;
+    } catch {
+      setMsg(COPY.error);
+      setAuthBusy(null);
     }
   }
 
@@ -474,10 +515,26 @@ export default function AccountClient({ locale }: { locale: string }) {
       <div className="account-grid account-grid-stack">
         {/* Profile panel */}
         <div className="card card-soft account-panel">
-          <div className="card-head">
-            <span className={"badge " + (verified ? "badge-verified" : "")}>{verified ? COPY.verified : COPY.unverified}</span>
-            {msg ? <span className="muted">{msg}</span> : <span className="muted" />}
+          <div className="account-head">
+            <div>
+              <h1 className="account-title">{COPY.accountTitle}</h1>
+              <p className="account-subtitle" style={{ marginBottom: 0 }}>
+                <span className={"badge " + (verified ? "badge-verified" : "")}>{verified ? COPY.verified : COPY.unverified}</span>
+              </p>
+            </div>
+            <div className="account-actions">
+              {!verified ? (
+                <button className="btn btn-quiet" onClick={startVerification} disabled={authBusy !== null}>
+                  {authBusy === "verify" ? COPY.verifySending : COPY.sendVerification}
+                </button>
+              ) : null}
+              <button className="btn" onClick={logout} disabled={authBusy !== null}>
+                {authBusy === "logout" ? COPY.loggingOut : COPY.logout}
+              </button>
+            </div>
           </div>
+
+          {msg ? <p className="muted" style={{ marginTop: 0 }}>{msg}</p> : null}
 
           <div className="field-grid">
             <div className="field">
@@ -644,8 +701,8 @@ export default function AccountClient({ locale }: { locale: string }) {
                             <a className="btn btn-quiet" href={`/${locale}/account/orders/${o.id}`}>
                               {COPY.details}
                             </a>
-                            <button className="btn primary" onClick={() => openReorder(o.id)}>
-                              {COPY.reorder}
+                            <button className="btn primary" onClick={() => openReorder(o.id)} disabled={reorderBusy}>
+                              {reorderBusy && reorderOrderId === o.id ? COPY.reorderLoading : COPY.reorder}
                             </button>
                           </div>
                         </td>
@@ -660,7 +717,7 @@ export default function AccountClient({ locale }: { locale: string }) {
       </div>
 
       {reorderOpen ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true">
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={COPY.reorderTitle}>
           <div className="modal">
             <h3>{COPY.reorderTitle}</h3>
             <p className="muted">{COPY.reorderBody}</p>
