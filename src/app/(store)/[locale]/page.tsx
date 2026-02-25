@@ -28,6 +28,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
   const localizedBenefits = (benefits[locale] || []) as BenefitItem[];
   const localizedTestimonials = (testimonials[locale] || []) as TestimonialItem[];
   const productList: Product[] = products || [];
+  const heroNotes = (featuredProduct.notes?.[locale] || []).slice(0, 6);
   const categoryLabelMap: Record<string, Record<Locale, string>> =
     categoryLabels || fallbackCategoryLabels;
 
@@ -47,6 +48,9 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
       categories: "Categories",
       catalog: "Browse catalog",
       perfumeFocus: "Perfume focus",
+      trail: "Scent trail",
+      placeholderTitle: "Banner space reserved",
+      placeholderBody: "We left a premium block here so your upcoming campaign banner can drop in cleanly.",
     },
     ar: {
       hero: "تجربة تسوق عطور أنيقة بطابع فاخر وسهولة محلية.",
@@ -63,6 +67,9 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
       categories: "الفئات",
       catalog: "تصفح المنتجات",
       perfumeFocus: "تركيزنا على العطور",
+      trail: "أثر العطر",
+      placeholderTitle: "مساحة مخصصة للبنر",
+      placeholderBody: "تركنا هذا الموضع مجهزاً بشكل فاخر حتى تضيف بنر الحملة مباشرة عند اكتمال التصميم.",
     },
   }[locale];
 
@@ -72,10 +79,22 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
     <div>
       <section className="hero-shell">
         <div className="hero-grid">
-          <article className="hero-card">
+          <article className="hero-card hero-card-dynamic">
+            <div className="hero-ambient" aria-hidden>
+              <span className="hero-orb orb-a" />
+              <span className="hero-orb orb-b" />
+              <span className="hero-orb orb-c" />
+            </div>
             <span className="kicker">{isAr ? "دار عطور أردنية" : "Jordanian perfume house"}</span>
             <h1 className="title">{t.hero}</h1>
             <p className="lead">{t.sub}</p>
+            <div className="hero-marquee" aria-label={t.trail}>
+              <div className="hero-marquee-track">
+                {[...heroNotes, ...heroNotes].map((note, idx) => (
+                  <span className="badge" key={`${note}-${idx}`}>{note}</span>
+                ))}
+              </div>
+            </div>
             <div className="cta-row">
               <a className="btn primary" href={`/${locale}/product/${featuredProduct.slug}`}>{t.explore}</a>
               <a className="btn" href={`/${locale}/checkout`}>{t.checkout}</a>
@@ -102,6 +121,13 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
       </section>
 
       <section className="section">
+        <article className="panel banner-placeholder">
+          <p className="kicker" style={{ marginBottom: ".65rem" }}>{t.placeholderTitle}</p>
+          <p className="muted" style={{ margin: 0 }}>{t.placeholderBody}</p>
+        </article>
+      </section>
+
+      <section className="section">
         <h2 className="section-title">{t.categories}</h2>
         <p className="muted" style={{ marginTop: 0 }}>{mainProductMessage[locale]}</p>
         <div className="grid-3">
@@ -123,7 +149,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
         <h2 className="section-title">{t.why}</h2>
         <div className="grid-3">
           {localizedBenefits.map((item) => (
-            <article key={item.title} className="panel">
+            <article key={item.title} className="panel lift-panel">
               <h3 style={{ marginTop: 0 }}>{item.title}</h3>
               <p style={{ marginBottom: 0 }} className="muted">{item.body}</p>
             </article>
