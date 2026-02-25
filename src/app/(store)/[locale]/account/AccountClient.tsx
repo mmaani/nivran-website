@@ -358,12 +358,10 @@ export default function AccountClient({ locale }: { locale: string }) {
     setMsg(null);
   }
 
-  async function applyReorder(mode: "replace" | "add") {
-    if (!reorderOrderId) return;
-
-    setReorderBusy(true);
+  async function applyReorder(orderId: number, mode: "replace" | "add") {
+    setReorderBusyOrderId(orderId);
     try {
-      const res = await fetch(`/api/orders?id=${reorderOrderId}&includeItems=1`, { cache: "no-store" });
+      const res = await fetch(`/api/orders?id=${orderId}&includeItems=1`, { cache: "no-store" });
       const data: unknown = await readJsonSafe(res);
 
       if (!res.ok || !data || typeof data !== "object" || (data as Record<string, unknown>).ok !== true) {
