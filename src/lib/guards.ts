@@ -1,37 +1,21 @@
-// src/lib/guards.ts
+import { readSalesFromRequest, verifyAdminFromRequest } from "@/lib/adminSession";
+
 export type AdminAuth =
-  | { ok: true }
+  | { ok: true; role: "admin" }
   | { ok: false; status: number; error: string };
 
-function readCookie(cookieHeader: string, name: string) {
-  const parts = cookieHeader.split(";").map((p) => p.trim());
-  for (const p of parts) {
-    if (p.toLowerCase().startsWith(name.toLowerCase() + "=")) {
-      return decodeURIComponent(p.slice(name.length + 1));
-    }
-  }
-  return "";
-}
+export type AdminOrSalesAuth =
+  | { ok: true; role: "admin" | "sales"; staffId: number | null; username: string | null }
+  | { ok: false; status: number; error: string };
 
 export function requireAdmin(req: Request): AdminAuth {
-  const expected = (process.env.ADMIN_TOKEN || "").trim();
-  if (!expected) {
-    return { ok: false, status: 500, error: "Server misconfigured: ADMIN_TOKEN missing" };
-  }
+  if (verifyAdminFromRequest(req)) return { ok: true, role: "admin" };
+  return { ok: false, status: 401, error: "Unauthorized" };
+}
 
-  const headerToken = (req.headers.get("x-admin-token") || "").trim();
-  const authHeader = (req.headers.get("authorization") || "").trim();
-  const bearer = authHeader.toLowerCase().startsWith("bearer ") ? authHeader.slice(7).trim() : "";
-  const cookieHeader = req.headers.get("cookie") || "";
-  const cookieToken =
-    readCookie(cookieHeader, "admin_token") ||
-    readCookie(cookieHeader, "nivran_admin_token") ||
-    readCookie(cookieHeader, "admin_token_client");
-
-  const got = headerToken || bearer || cookieToken;
-
-  if (!got || got !== expected) {
-    return { ok: false, status: 401, error: "Unauthorized" };
-  }
-  return { ok: true };
+export function requireAdminOrSales(req: Request): AdminOrSalesAuth {
+  if (verifyAdminFromRequest(req)) return { ok: true, role: "admin", staffId: null, username: null };
+  const sales = readSalesFromRequest(req);
+  if (sales) return { ok: true, role: "sales", staffId: sales.staffId, username: sales.username };
+  return { ok: false, status: 401, error: "Unauthorized" };
 }
