@@ -26,6 +26,7 @@ const ROLE_LABELS: Record<string, { en: string; ar: string }> = {
   admin: { en: "Admin", ar: "مدير" },
   ops: { en: "Operations", ar: "عمليات" },
   staff: { en: "Staff", ar: "موظف" },
+  sales: { en: "Sales", ar: "مبيعات" },
 };
 
 function savedMessage(saved: string, lang: "en" | "ar"): string {
@@ -88,7 +89,7 @@ export default async function AdminStaffPage({ searchParams }: { searchParams?: 
           statsTotal: "إجمالي المستخدمين",
           statsActive: "نشط",
           statsInactive: "غير نشط",
-          statsAdmins: "مدراء/عمليات",
+          statsAdmins: "مدراء/عمليات/مبيعات",
         }
       : {
           title: "Staff Management",
@@ -120,7 +121,7 @@ export default async function AdminStaffPage({ searchParams }: { searchParams?: 
           statsTotal: "Total users",
           statsActive: "Active",
           statsInactive: "Inactive",
-          statsAdmins: "Admin/Ops",
+          statsAdmins: "Admin/Ops/Sales",
         };
 
   const { rows } = await db.query<StaffRow>(
@@ -148,7 +149,7 @@ export default async function AdminStaffPage({ searchParams }: { searchParams?: 
     inactive: rows.filter((row) => !row.is_active).length,
     admins: rows.filter((row) => {
       const role = String(row.role || "").toLowerCase();
-      return role === "admin" || role === "ops";
+      return role === "admin" || role === "ops" || role === "sales";
     }).length,
   };
 
@@ -188,6 +189,7 @@ export default async function AdminStaffPage({ searchParams }: { searchParams?: 
             <label style={{ fontSize: 13, opacity: 0.8 }}>{L.role}</label>
             <select className="admin-select" name="role" defaultValue="staff">
               <option value="staff">staff</option>
+              <option value="sales">sales</option>
               <option value="ops">ops</option>
               <option value="admin">admin</option>
             </select>
@@ -258,6 +260,7 @@ export default async function AdminStaffPage({ searchParams }: { searchParams?: 
                         <input className="admin-input" name="full_name" defaultValue={row.full_name || ""} placeholder={L.fullName} />
                         <select className="admin-select" name="role" defaultValue={roleKey}>
                           <option value="staff">staff</option>
+                          <option value="sales">sales</option>
                           <option value="ops">ops</option>
                           <option value="admin">admin</option>
                         </select>

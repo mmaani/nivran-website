@@ -6,7 +6,7 @@ import { listStaff, upsertStaff } from "@/lib/identity";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Role = "admin" | "ops" | "staff";
+type Role = "admin" | "ops" | "staff" | "sales";
 type StaffAction = "create" | "update" | "delete" | "reset_password";
 
 function isHtmlRequest(req: Request): boolean {
@@ -37,6 +37,7 @@ function parseRole(raw: string): Role {
   const v = raw.trim().toLowerCase();
   if (v === "admin") return "admin";
   if (v === "ops") return "ops";
+  if (v === "sales") return "sales";
   return "staff";
 }
 
