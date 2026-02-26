@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/guards";
+import { db } from "@/lib/db";
 import { listStaff, upsertStaff } from "@/lib/identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type Role = "admin" | "ops" | "staff";
+type StaffAction = "create" | "update" | "delete" | "reset_password";
 
 function isHtmlRequest(req: Request): boolean {
   return (req.headers.get("accept") || "").includes("text/html");
@@ -43,9 +45,26 @@ function parseCheckbox(form: FormData, key: string): boolean {
   return v === "on" || v === "true" || v === "1" || v === "yes";
 }
 
-function isValidUsername(u: string): boolean {
-  // allow email-ish usernames or simple handles
-  return u.length >= 3 && u.length <= 200;
+function isValidUsername(username: string): boolean {
+  return username.length >= 3 && username.length <= 200;
+}
+
+function parseStaffAction(value: string): StaffAction {
+  const v = value.trim().toLowerCase();
+  if (v === "update") return "update";
+  if (v === "delete") return "delete";
+  if (v === "reset_password") return "reset_password";
+  return "create";
+}
+
+function parseId(raw: string): number | null {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.trunc(n);
+}
+
+async function deleteStaffUser(staffId: number): Promise<void> {
+  await db.query(`delete from staff_users where id=$1`, [staffId]);
 }
 
 export async function GET(req: Request) {
@@ -65,21 +84,45 @@ export async function POST(req: Request) {
   if (!auth.ok) return unauthorized(req, auth.status, auth.error);
 
   const form = await req.formData();
+  const action = parseStaffAction(formText(form, "action") || "create");
 
-  // compatible with existing UI field name="email"
   const username = (formText(form, "username") || formText(form, "email")).toLowerCase();
   const full_name = formText(form, "full_name") || null;
   const role = parseRole(formText(form, "role") || "staff");
   const password = formText(form, "password") || undefined;
   const is_active = parseCheckbox(form, "is_active");
+  const staffId = parseId(formText(form, "id"));
+
+  if (action === "delete") {
+    if (!staffId) return badRequest(req, "Missing staff id.");
+    await deleteStaffUser(staffId);
+    if (isHtmlRequest(req)) return NextResponse.redirect(new URL("/admin/staff?saved=deleted", req.url));
+    return NextResponse.json({ ok: true, action: "delete" });
+  }
+
+  if (action === "reset_password") {
+    if (!staffId) return badRequest(req, "Missing staff id.");
+    if (!password || password.length < 8) return badRequest(req, "Password must be at least 8 characters.");
+
+    await upsertStaff({ id: staffId, username, full_name, role, password, is_active });
+    if (isHtmlRequest(req)) return NextResponse.redirect(new URL("/admin/staff?saved=password", req.url));
+    return NextResponse.json({ ok: true, action: "reset_password" });
+  }
 
   if (!isValidUsername(username)) return badRequest(req, "Invalid username/email.");
-  if (!password) return badRequest(req, "Password is required.");
+
+  if (action === "create" && !password) {
+    return badRequest(req, "Password is required.");
+  }
+
+  if (action === "update") {
+    if (!staffId) return badRequest(req, "Missing staff id.");
+    await upsertStaff({ id: staffId, username, full_name, role, password, is_active });
+    if (isHtmlRequest(req)) return NextResponse.redirect(new URL("/admin/staff?saved=updated", req.url));
+    return NextResponse.json({ ok: true, action: "update" });
+  }
 
   await upsertStaff({ username, full_name, role, password, is_active });
-
-  if (isHtmlRequest(req)) {
-    return NextResponse.redirect(new URL("/admin/staff?saved=1", req.url));
-  }
-  return NextResponse.json({ ok: true });
+  if (isHtmlRequest(req)) return NextResponse.redirect(new URL("/admin/staff?saved=created", req.url));
+  return NextResponse.json({ ok: true, action: "create" });
 }
