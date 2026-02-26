@@ -25,5 +25,9 @@ export async function POST(req: Request) {
   };
   res.cookies.set("admin_token", token, opts);
   res.cookies.set("nivran_admin_token", token, opts);
+  res.cookies.set("nivran_admin_role", "", { ...opts, maxAge: 0 });
+  res.cookies.set("nivran_staff_id", "", { ...opts, maxAge: 0 });
+  res.cookies.set("nivran_staff_user", "", { ...opts, maxAge: 0 });
+  res.cookies.set("nivran_staff_sig", "", { ...opts, maxAge: 0 });
   return res;
 }

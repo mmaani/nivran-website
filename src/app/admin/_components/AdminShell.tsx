@@ -16,16 +16,18 @@ function T({ en, ar }: { en: string; ar: string }) {
 }
 
 export default function AdminShell({
-  authed,
+  role,
   initialLang,
   children,
 }: {
-  authed: boolean;
+  role: "admin" | "sales" | null;
   initialLang: "en" | "ar";
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
   const isLoginRoute = pathname === "/admin/login" || pathname.startsWith("/admin/login?");
+  const authed = role !== null;
+  const isSales = role === "sales";
   const router = useRouter();
   const [lang, setLang] = useState<"en" | "ar">(initialLang);
   const [savingLang, setSavingLang] = useState(false);
@@ -44,7 +46,9 @@ export default function AdminShell({
   }, [lang]);
 
   const nav = useMemo(
-    () => [
+    () => (isSales ? [
+      { href: "/admin/sales", en: "Sales", ar: "المبيعات", icon: "◈" },
+    ] : [
       { href: "/admin", en: "Dashboard", ar: "لوحة التحكم", icon: "◈" },
       { href: "/admin/orders", en: "Orders", ar: "الطلبات", icon: "◎" },
       { href: "/admin/catalog", en: "Catalog", ar: "المنتجات", icon: "◇" },
@@ -52,8 +56,9 @@ export default function AdminShell({
       { href: "/admin/customers", en: "Customers", ar: "العملاء", icon: "◉" },
       { href: "/admin/staff", en: "Staff", ar: "الموظفون", icon: "◌" },
       { href: "/admin/inventory", en: "Inventory", ar: "المخزون", icon: "▣" },
-    ],
-    []
+      { href: "/admin/sales", en: "Sales", ar: "المبيعات", icon: "✦" },
+    ]),
+    [isSales]
   );
 
   const pageMeta = useMemo(() => {
@@ -156,7 +161,7 @@ export default function AdminShell({
         <div className="admin-topbar-inner">
           <div className="admin-topbar-main">
             <div className="admin-brand">
-              <Link className="admin-logo" href={authed ? "/admin" : "/admin/login"}>
+              <Link className="admin-logo" href={authed ? (isSales ? "/admin/sales" : "/admin") : "/admin/login"}>
                 <Image src="/brand/logo.svg" alt="NIVRAN" width={34} height={34} priority />
                 <span>NIVRAN</span>
               </Link>
