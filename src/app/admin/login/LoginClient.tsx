@@ -15,11 +15,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function useAdminLang(): [Lang, (next: Lang) => Promise<void>] {
   const [lang, setLang] = useState<Lang>("en");
   const pathname = usePathname();
-
-  React.useEffect(() => {
-    setLang(readAdminLangCookie());
-  }, []);
-
+  React.useEffect(() => setLang(readAdminLangCookie()), []);
   async function updateLang(next: Lang) {
     setLang(next);
     await fetch("/api/admin/lang", {
@@ -30,7 +26,6 @@ function useAdminLang(): [Lang, (next: Lang) => Promise<void>] {
       cache: "no-store",
     }).catch(() => null);
   }
-
   return [lang, updateLang];
 }
 
