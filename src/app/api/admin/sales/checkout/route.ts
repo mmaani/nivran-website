@@ -55,7 +55,7 @@ export async function POST(req: Request) {
   const variantIds = Array.from(
     new Set(
       body.items
-        .map((line) => parseVariantId(line.variantId))
+        .flatMap((line) => [parseVariantId(line.variantId), parseVariantId(line.productId)])
         .filter((v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0)
     )
   );
@@ -109,15 +109,33 @@ export async function POST(req: Request) {
 
     for (const item of aggregated.values()) {
       const qty = normalizeQty(item.qty);
-      const productId = item.productId;
-      const product = productMap.get(productId);
+      let productId = item.productId;
+      const variantId = parseVariantId(item.variantId);
+
+      let product = productMap.get(productId) || null;
+      let variant = variantId ? variantMap.get(variantId) || null : null;
+
+      // Backward compatibility: some older clients accidentally sent a variant id as productId.
+      if (!product) {
+        const inferredVariant = variantMap.get(productId) || null;
+        if (inferredVariant) {
+          variant = inferredVariant;
+          productId = inferredVariant.product_id;
+          product = productMap.get(productId) || null;
+        }
+      }
+
+      // If product is still missing but variant is valid, infer product from that variant.
+      if (!product && variant) {
+        productId = variant.product_id;
+        product = productMap.get(productId) || null;
+      }
+
       if (!product) {
         if (productId > 0) missingProductIds.add(productId);
         continue;
       }
 
-      const variantId = parseVariantId(item.variantId);
-      const variant = variantId ? variantMap.get(variantId) || null : null;
       if (variant && (!variant.is_active || variant.product_id !== product.id)) {
         return {
           ok: false as const,

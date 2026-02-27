@@ -21,7 +21,7 @@ type Product = {
   variants: ProductVariant[];
 };
 
-type Promo = { id: number; code: string | null; title_en: string | null; discount_type: string; discount_value: string };
+type Promo = { id: number; code: string | null; title_en: string | null; title_ar: string | null; discount_type: string; discount_value: string };
 
 type CartLine = { productId: number; variantId: number | null; qty: number };
 
@@ -140,7 +140,7 @@ export default function SalesClient() {
           if (!product) return null;
           const variant = line.variantId ? product.variants?.find((entry) => entry.id === line.variantId) || null : null;
           const unitPrice = Number(variant?.price_jod ?? product.price_jod);
-          const variantLabel = variant ? `${variant.label}${variant.size_ml ? ` (${variant.size_ml}ml)` : ""}` : "Base";
+          const variantLabel = variant ? `${variant.label}${variant.size_ml ? ` (${variant.size_ml}ml)` : ""}` : isAr ? "أساسي" : "Base";
 
           return {
             ...line,
@@ -153,7 +153,7 @@ export default function SalesClient() {
           };
         })
         .filter((row): row is NonNullable<typeof row> => row !== null),
-    [cart, productById]
+    [cart, productById, isAr]
   );
 
   const itemCount = useMemo(() => cart.reduce((sum, line) => sum + line.qty, 0), [cart]);
@@ -179,6 +179,22 @@ export default function SalesClient() {
     setCart([]);
   }
 
+
+
+  const paymentLabel = (value?: string | null) => {
+    const normalized = String(value || "").toUpperCase();
+    if (normalized === "CARD_POS") return isAr ? "بطاقة نقطة بيع" : "Card POS";
+    if (normalized === "CARD_ONLINE") return isAr ? "بطاقة أونلاين" : "Card Online";
+    if (normalized === "CASH") return isAr ? "نقدًا" : "Cash";
+    return value || "—";
+  };
+
+  const statusLabel = (value?: string | null) => {
+    const normalized = String(value || "").toUpperCase();
+    if (normalized === "PAID") return isAr ? "مدفوع" : "Paid";
+    if (normalized === "BACKORDER") return isAr ? "طلب مؤجل" : "Backorder";
+    return value || "—";
+  };
   async function checkout() {
     setLoading(true);
     setMsg("");
@@ -253,8 +269,16 @@ export default function SalesClient() {
       }
 
       const ignored = Array.isArray(data.ignoredProductIds) ? data.ignoredProductIds.filter((id) => Number.isFinite(id) && id > 0) : [];
-      const ignoredLabel = ignored.length ? ` (ignored unavailable products: ${ignored.join(", ")})` : "";
-      const matchedLabel = data.customerMatched ? " (existing customer profile updated)" : "";
+      const ignoredLabel = ignored.length
+        ? isAr
+          ? ` (تم تجاهل منتجات غير متاحة: ${ignored.join(", ")})`
+          : ` (ignored unavailable products: ${ignored.join(", ")})`
+        : "";
+      const matchedLabel = data.customerMatched
+        ? isAr
+          ? " (تم تحديث ملف عميل موجود)"
+          : " (existing customer profile updated)"
+        : "";
       const warningLabel = data.warning ? ` • ${data.warning}` : "";
       setMsg(
         isAr
@@ -303,8 +327,8 @@ export default function SalesClient() {
               <div style={{ flex: 1 }}>
                 <div><b>{product.name_en}</b> <span style={{ opacity: 0.6 }}>({product.slug})</span></div>
                 <div style={{ fontSize: 12, opacity: 0.8 }}>
-                  {money(Number(product.price_jod))} • Stock {product.inventory_qty}
-                  {product.inventory_qty <= 5 ? <b style={{ marginInlineStart: 8, color: "#8b5e1a" }}>Low stock</b> : null}
+                  {money(Number(product.price_jod))} • {isAr ? "المخزون" : "Stock"} {product.inventory_qty}
+                  {product.inventory_qty <= 5 ? <b style={{ marginInlineStart: 8, color: "#8b5e1a" }}>{isAr ? "مخزون منخفض" : "Low stock"}</b> : null}
                 </div>
                 {product.variants?.length ? (
                   <select
@@ -313,7 +337,7 @@ export default function SalesClient() {
                     onChange={(event) => setVariantSelection((prev) => ({ ...prev, [product.id]: event.target.value ? Number(event.target.value) : null }))}
                     style={{ marginTop: 6, maxWidth: 320 }}
                   >
-                    <option value="">Base product — {money(Number(product.price_jod))}</option>
+                    <option value="">{isAr ? "المنتج الأساسي" : "Base product"} — {money(Number(product.price_jod))}</option>
                     {product.variants.map((variant) => (
                       <option key={variant.id} value={variant.id}>
                         {variant.label}{variant.size_ml ? ` (${variant.size_ml}ml)` : ""} — {money(Number(variant.price_jod))}
@@ -322,7 +346,7 @@ export default function SalesClient() {
                   </select>
                 ) : null}
               </div>
-              <button className="btn" onClick={() => add(product.id)}>Add</button>
+              <button className="btn" onClick={() => add(product.id)}>{isAr ? "إضافة" : "Add"}</button>
             </div>
           ))}
         </div>
@@ -334,9 +358,9 @@ export default function SalesClient() {
         {cartRows.map((row) => (
           <div key={row.key} className="admin-row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
             <div style={{ flex: 1 }}>
-              <b>{row.product.name_en}</b>
+              <b>{isAr ? row.product.name_ar || row.product.name_en : row.product.name_en}</b>
               <div style={{ fontSize: 12, opacity: 0.8 }}>{row.variantLabel}</div>
-              <div style={{ fontSize: 12, opacity: 0.8 }}>{money(row.unitPrice)} each</div>
+              <div style={{ fontSize: 12, opacity: 0.8 }}>{money(row.unitPrice)} {isAr ? "لكل قطعة" : "each"}</div>
             </div>
             <div className="admin-row" style={{ gap: 6 }}>
               <button className="btn" onClick={() => updateQty(row.productId, row.variantId, row.qty - 1)}>-</button>
@@ -378,7 +402,7 @@ export default function SalesClient() {
           </label>
           {createAccount ? <input className="admin-input" type="password" placeholder={isAr ? "كلمة مرور الحساب" : "Account password"} value={accountPassword} onChange={(event) => setAccountPassword(event.target.value)} /> : null}
         </div>
-        <datalist id="promo-list">{promos.map((promo) => (<option key={promo.id} value={promo.code || ""}>{promo.title_en || "Promotion"}</option>))}</datalist>
+        <datalist id="promo-list">{promos.map((promo) => (<option key={promo.id} value={promo.code || ""}>{isAr ? (promo.title_ar || promo.title_en || "عرض") : (promo.title_en || promo.title_ar || "Promotion")}</option>))}</datalist>
 
         <div className="admin-row" style={{ justifyContent: "space-between", marginTop: 12 }}>
           <b>{isAr ? "الإجمالي" : "Amount"}</b>
@@ -427,14 +451,14 @@ export default function SalesClient() {
               {orders.map((order) => (
                 <tr key={order.id}>
                   <td>#{order.id}</td>
-                  <td>{new Date(order.created_at).toLocaleString("en-GB")}</td>
+                  <td>{new Date(order.created_at).toLocaleString(isAr ? "ar-JO" : "en-GB")}</td>
                   <td>{order.customer_name || "—"}</td>
                   <td>{order.customer_email || "—"}</td>
                   <td>{order.customer_phone || "—"}</td>
-                  <td>{order.payment_method || "—"}</td>
+                  <td>{paymentLabel(order.payment_method)}</td>
                   <td>{order.item_lines ?? 0}</td>
                   <td>{order.item_qty_total ?? 0}</td>
-                  <td>{order.status || "—"}</td>
+                  <td>{statusLabel(order.status)}</td>
                   <td style={{ textAlign: "right" }}>{money(Number(order.total_jod || 0))}</td>
                 </tr>
               ))}
