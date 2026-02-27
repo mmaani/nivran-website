@@ -484,7 +484,12 @@ export default function AccountClient({ locale }: { locale: string }) {
 
       sessionStorage.setItem("nivran_reorder_payload_v1", JSON.stringify({ items: mapped, mode }));
       setMsg(COPY.reorderSuccess);
-      window.location.href = `/${locale}/cart?reorder=1`;
+      const qs = new URLSearchParams({
+        reorder: "1",
+        orderId: String(reorderOrderId),
+        mode,
+      });
+      window.location.href = `/${locale}/cart?${qs.toString()}`;
     } catch {
       setMsg(COPY.error);
     } finally {
