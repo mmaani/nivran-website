@@ -1,13 +1,12 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { normalizeCartItems, type CartItem } from "@/lib/cartStore";
+import { clearLocalCart, mergeCartSum, normalizeCartItems, readLocalCart, writeLocalCart, type CartItem } from "@/lib/cartStore";
 
 type Locale = "en" | "ar";
 
 type JsonRecord = Record<string, unknown>;
 
-const CART_KEY = "nivran_cart_v1";
 const REORDER_KEY = "nivran_reorder_payload_v1";
 
 type ReorderPayload = {
@@ -57,42 +56,12 @@ function readReorderPayload(): ReorderPayload | null {
   }
 }
 
-function mergeCartItems(current: CartItem[], incoming: CartItem[]): CartItem[] {
-  const map = new Map<string, CartItem>();
-  for (const item of current) {
-    map.set(buildKey(item.slug, item.variantId), { ...item });
-  }
-  for (const item of incoming) {
-    const key = buildKey(item.slug, item.variantId);
-    const existing = map.get(key);
-    if (existing) {
-      map.set(key, {
-        ...existing,
-        qty: Math.max(1, Math.min(99, existing.qty + item.qty)),
-      });
-    } else {
-      map.set(key, item);
-    }
-  }
-  return Array.from(map.values());
-}
-
 function readCart(): CartItem[] {
-  try {
-    const raw = localStorage.getItem(CART_KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    return normalizeCartItems(parsed);
-  } catch {
-    return [];
-  }
+  return normalizeCartItems(readLocalCart());
 }
 
 function writeCart(items: CartItem[]) {
-  try {
-    localStorage.setItem(CART_KEY, JSON.stringify(items));
-    window.dispatchEvent(new Event("nivran_cart_updated"));
-  } catch {}
+  writeLocalCart(normalizeCartItems(items));
 }
 
 async function bestEffortSync(items: CartItem[]) {
@@ -152,7 +121,7 @@ export default function CartClient({ locale }: { locale: Locale }) {
     const reorderPayload = readReorderPayload();
 
     if (reorderPayload) {
-      const nextItems = reorderPayload.mode === "replace" ? reorderPayload.items : mergeCartItems(current, reorderPayload.items);
+      const nextItems = reorderPayload.mode === "replace" ? reorderPayload.items : mergeCartSum(current, reorderPayload.items);
       writeCart(nextItems);
       bestEffortSync(nextItems);
       setItems(nextItems);
@@ -332,7 +301,9 @@ export default function CartClient({ locale }: { locale: Locale }) {
   async function clear() {
     setClearing(true);
     try {
-      setAndSync([]);
+      clearLocalCart();
+      setItems([]);
+      await bestEffortSync([]);
       // Also clear server cart if logged in
       await fetch("/api/cart/sync", {
         method: "POST",
