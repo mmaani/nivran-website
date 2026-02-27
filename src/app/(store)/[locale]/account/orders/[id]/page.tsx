@@ -9,10 +9,17 @@ type OrderItemRow = {
   id: number;
   order_id: number;
   variant_id: number;
+  product_slug?: string | null;
   qty: number;
   unit_price_jod: string;
   line_total_jod: string;
   lot_code: string | null;
+};
+
+type LegacyOrderItem = {
+  slug: string;
+  qty: number;
+  variantId: number | null;
 };
 
 type OrderRow = {
@@ -44,8 +51,54 @@ async function readJsonSafe(res: Response): Promise<unknown> {
   try {
     return await res.json();
   } catch {
-    return null;
+    try {
+      const txt = await res.text();
+      return txt ? { error: txt } : null;
+    } catch {
+      return null;
+    }
   }
+}
+
+function parseLegacyItems(input: unknown): LegacyOrderItem[] {
+  if (!Array.isArray(input)) return [];
+
+  return input
+    .map((entry) => {
+      if (!isObject(entry)) return null;
+      const slugRaw =
+        typeof entry.slug === "string"
+          ? entry.slug
+          : typeof entry.product_slug === "string"
+            ? entry.product_slug
+            : typeof entry.productSlug === "string"
+              ? entry.productSlug
+              : "";
+      const slug = slugRaw.trim();
+      if (!slug) return null;
+
+      const qtyRaw = typeof entry.qty === "number" ? entry.qty : Number(entry.qty);
+      const qty = Number.isFinite(qtyRaw) ? Math.max(1, Math.min(99, Math.trunc(qtyRaw))) : 1;
+
+      const variantRaw =
+        typeof entry.variant_id === "number"
+          ? entry.variant_id
+          : typeof entry.variantId === "number"
+            ? entry.variantId
+            : Number(entry.variant_id ?? entry.variantId);
+      const variantId = Number.isFinite(variantRaw) && variantRaw > 0 ? Math.trunc(variantRaw) : null;
+
+      return { slug, qty, variantId };
+    })
+    .filter((v): v is LegacyOrderItem => v !== null);
+}
+
+function mapOrderError(errorCode: string, isAr: boolean): string {
+  if (errorCode === "UNAUTHORIZED") return isAr ? "يجب تسجيل الدخول لعرض الطلب." : "Please login to view this order.";
+  if (errorCode === "NOT_FOUND") return isAr ? "الطلب غير موجود أو لا يخص حسابك." : "Order not found or not linked to your account.";
+  if (errorCode === "INVALID_ORDER_ID") return isAr ? "معرّف الطلب غير صالح." : "Invalid order id.";
+  if (errorCode === "SERVER_ERROR") return isAr ? "خطأ في الخادم أثناء تحميل الطلب." : "Server error while loading order.";
+  return isAr ? "تعذر عرض الطلب حالياً." : "Could not display this order right now.";
 }
 
 export default function OrderDetailsPage() {
@@ -85,12 +138,7 @@ export default function OrderDetailsPage() {
       if (cancelled) return;
 
       if (!res.ok || !isObject(data) || data.ok !== true || !isObject(data.order)) {
-        const msg =
-          isObject(data) && typeof data.error === "string"
-            ? data.error
-            : res.status === 401
-              ? "UNAUTHORIZED"
-              : "UNKNOWN";
+        const msg = isObject(data) && typeof data.error === "string" ? data.error : res.status === 401 ? "UNAUTHORIZED" : "SERVER_ERROR";
         setErr(msg);
         setLoading(false);
         return;
@@ -134,6 +182,11 @@ export default function OrderDetailsPage() {
   const unitLabel = isAr ? "سعر الوحدة" : "Unit price";
   const lineTotalLabel = isAr ? "الإجمالي" : "Line total";
   const lotLabel = isAr ? "رقم التشغيلة" : "Lot";
+  const slugLabel = isAr ? "المنتج" : "Product";
+
+  const normalizedItems = Array.isArray(order?.line_items) ? order.line_items : [];
+  const legacyItems = parseLegacyItems(order?.items);
+  const displayError = mapOrderError(err || "", isAr);
 
   return (
     <div dir={dir} style={{ padding: "1.2rem 0", maxWidth: 980, margin: "0 auto" }}>
@@ -161,7 +214,7 @@ export default function OrderDetailsPage() {
 
         {!loading && err ? (
           <p className="muted" style={{ marginTop: 10, lineHeight: 1.6 }}>
-            {isAr ? "تعذر عرض الطلب." : "Could not display this order."}{" "}
+            {displayError}{" "}
             <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>{err}</span>
           </p>
         ) : null}
@@ -234,7 +287,7 @@ export default function OrderDetailsPage() {
               </div>
             </div>
 
-            {Array.isArray(order.line_items) && order.line_items.length ? (
+            {normalizedItems.length ? (
               <div className="panel" style={{ padding: 14 }}>
                 <h3 style={{ marginTop: 0 }}>{itemsTitle}</h3>
 
@@ -250,13 +303,39 @@ export default function OrderDetailsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {order.line_items.map((li) => (
+                      {normalizedItems.map((li) => (
                         <tr key={li.id}>
-                          <td>{li.variant_id}</td>
+                          <td>{li.product_slug ?? li.variant_id}</td>
                           <td>{li.qty}</td>
                           <td>{li.unit_price_jod} JOD</td>
                           <td>{li.line_total_jod} JOD</td>
                           <td>{li.lot_code ?? "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
+
+            {!normalizedItems.length && legacyItems.length ? (
+              <div className="panel" style={{ padding: 14 }}>
+                <h3 style={{ marginTop: 0 }}>{itemsTitle}</h3>
+                <div style={{ overflowX: "auto" }}>
+                  <table className="table" style={{ minWidth: 720 }}>
+                    <thead>
+                      <tr>
+                        <th>{slugLabel}</th>
+                        <th>{qtyLabel}</th>
+                        <th>{variantLabel}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {legacyItems.map((li) => (
+                        <tr key={`${li.slug}:${li.variantId ?? "base"}`}>
+                          <td>{li.slug}</td>
+                          <td>{li.qty}</td>
+                          <td>{li.variantId ?? "—"}</td>
                         </tr>
                       ))}
                     </tbody>
