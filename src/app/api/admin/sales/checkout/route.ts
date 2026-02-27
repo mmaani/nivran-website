@@ -119,7 +119,13 @@ export async function POST(req: Request) {
       const variantId = parseVariantId(item.variantId);
       const variant = variantId ? variantMap.get(variantId) || null : null;
       if (variant && (!variant.is_active || variant.product_id !== product.id)) {
-        return { ok: false as const, status: 400, error: `Invalid variant selection for product ${product.id}` };
+        return {
+          ok: false as const,
+          status: 400,
+          error: `Invalid variant selection for product ${product.id}`,
+          missingProductIds: [] as number[],
+          staleCart: false,
+        };
       }
 
       const unit = variant ? Number(variant.price_jod) : Number(product.price_jod);
@@ -146,7 +152,13 @@ export async function POST(req: Request) {
 
     if (lines.length === 0) {
       const missing = Array.from(missingProductIds).join(", ") || "unknown";
-      return { ok: false as const, status: 400, error: `No valid items found for checkout. Missing products: ${missing}` };
+      return {
+        ok: false as const,
+        status: 409,
+        error: `No valid items found for checkout. Missing products: ${missing}`,
+        missingProductIds: Array.from(missingProductIds),
+        staleCart: true,
+      };
     }
 
     const subtotal = round2(lines.reduce((sum, line) => sum + line.line_total_jod, 0));
@@ -156,7 +168,15 @@ export async function POST(req: Request) {
     let promotionId: number | null = null;
     if (promoCode) {
       const promo = await evaluatePromoCodeForLines(trx as unknown as DbExecutor, promoCode, lines, subtotal);
-      if (!promo.ok) return { ok: false as const, status: 400, error: promo.error };
+      if (!promo.ok) {
+        return {
+          ok: false as const,
+          status: 400,
+          error: promo.error,
+          missingProductIds: [] as number[],
+          staleCart: false,
+        };
+      }
       discountJod = round2(promo.discountJod);
       promotionId = promo.promotionId;
     }
@@ -182,7 +202,15 @@ export async function POST(req: Request) {
       );
     } else if (body.createAccount) {
       const password = String(body.accountPassword || "").trim();
-      if (!password) return { ok: false as const, status: 400, error: "Account password required" };
+      if (!password) {
+        return {
+          ok: false as const,
+          status: 400,
+          error: "Account password required",
+          missingProductIds: [] as number[],
+          staleCart: false,
+        };
+      }
       const passwordHash = await hashPassword(password);
       const created = await trx.query<{ id: number }>(
         `insert into customers (email, password_hash, full_name, phone, address_line1, city, country, is_active)
@@ -248,7 +276,15 @@ export async function POST(req: Request) {
     );
 
     const orderId = inserted.rows[0]?.id;
-    if (!orderId) return { ok: false as const, status: 500, error: "Failed to create order" };
+    if (!orderId) {
+      return {
+        ok: false as const,
+        status: 500,
+        error: "Failed to create order",
+        missingProductIds: [] as number[],
+        staleCart: false,
+      };
+    }
 
     for (const line of lines) {
       if (line.fulfilled_qty > 0) {
@@ -275,6 +311,7 @@ export async function POST(req: Request) {
       totalJod: total,
       statusCode: status,
       ignoredProductIds: Array.from(missingProductIds),
+      missingProductIds: Array.from(missingProductIds),
       customerMatched,
       warning:
         missingProductIds.size > 0

@@ -204,10 +204,22 @@ export default function SalesClient() {
         statusCode?: string;
         error?: string;
         ignoredProductIds?: number[];
+        missingProductIds?: number[];
         warning?: string | null;
         customerMatched?: boolean;
+        staleCart?: boolean;
       };
-      if (!res.ok || !data.ok) throw new Error(data.error || "Checkout failed");
+      if (!res.ok || !data.ok) {
+        if (Array.isArray(data.missingProductIds) && data.missingProductIds.length > 0) {
+          const missing = data.missingProductIds.filter((id) => Number.isFinite(id) && id > 0);
+          if (missing.length > 0) {
+            setCart((prev) => prev.filter((line) => !missing.includes(line.productId)));
+            await load();
+            throw new Error(`Some products are no longer available (${missing.join(", ")}). They were removed from your cart. Please confirm again.`);
+          }
+        }
+        throw new Error(data.error || "Checkout failed");
+      }
 
       const ignored = Array.isArray(data.ignoredProductIds) ? data.ignoredProductIds.filter((id) => Number.isFinite(id) && id > 0) : [];
       const ignoredLabel = ignored.length ? ` (ignored unavailable products: ${ignored.join(", ")})` : "";
@@ -337,7 +349,7 @@ export default function SalesClient() {
           <b>Amount</b>
           <b>{money(subtotal)}</b>
         </div>
-        <button className="btn btn-primary" onClick={checkout} disabled={loading || cart.length === 0} style={{ marginTop: 8 }}>
+        <button className="btn btn-primary" onClick={checkout} disabled={loading || cartRows.length === 0} style={{ marginTop: 8 }}>
           {loading ? "Processing..." : "Confirm Sale"}
         </button>
         {msg ? <p className="admin-muted" style={{ marginTop: 10 }}>{msg}</p> : null}
@@ -396,3 +408,13 @@ export default function SalesClient() {
     </div>
   );
 }
+    const staleIds = cart
+      .filter((line) => !productById.has(line.productId))
+      .map((line) => line.productId)
+      .filter((id, idx, arr) => arr.indexOf(id) === idx);
+    if (staleIds.length > 0) {
+      setCart((prev) => prev.filter((line) => !staleIds.includes(line.productId)));
+      setMsg(`Some items were removed because they are no longer available: ${staleIds.join(", ")}. Please review cart and confirm again.`);
+      setLoading(false);
+      return;
+    }
