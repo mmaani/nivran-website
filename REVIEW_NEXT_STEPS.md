@@ -1,6 +1,6 @@
 # Review next steps (status)
 
-## Completed in latest batch ✅
+## Completed in latest batches ✅
 
 1. **Inactive buy-now protection**
    - `product-by-slug` rejects inactive products as `404`.
@@ -10,16 +10,21 @@
    - Catalog read routes use `ensureCatalogTablesSafe()` and return explicit fallback/degraded response payloads.
 
 3. **Shipping default consistency**
-   - Shipping default source is unified through shared shipping helpers/constants used by both shipping config and order creation flow.
+   - Shipping defaults are sourced from shared shipping helpers/constants used by both shipping config and order creation flow.
 
-4. **Regression contract coverage added**
-   - Added `check:buy-now-inactive-contract` and included it in `ci:guard`.
+4. **Regression contract coverage**
+   - Added and enforced via `ci:guard`:
+     - `check:buy-now-inactive-contract`
+     - `check:orders-create-contract`
+     - `check:reorder-cart-contract`
 
-5. **Lint hygiene**
-   - Removed unused `onDocKeyDown` handler in admin shell.
+5. **Optional hardening batch completed**
+   - Added automated monitor smoke script: `pnpm monitor:critical-endpoints`.
+   - Removed admin-shell lint debt (unused keydown handler).
 
-## Remaining suggestions (optional)
+## Current pending items
 
-- Add runtime integration tests around `/api/orders` create path using a mock DB adapter.
-- Add end-to-end test for account reorder -> cart (`add` and `replace`) in CI.
-- Add synthetic monitoring for `/api/catalog/product-by-slug` and `/api/orders` health.
+- No blocking functional tasks currently tracked.
+- Optional future improvements:
+  - wire `monitor:critical-endpoints` into external scheduler/cron for periodic alerts.
+  - add true DB-mocked integration tests once a dedicated test harness is introduced.
