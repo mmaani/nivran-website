@@ -53,6 +53,7 @@ export default function SalesClient() {
   const [variantSelection, setVariantSelection] = useState<Record<number, number | null>>({});
   const [query, setQuery] = useState("");
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
+  const [sortMode, setSortMode] = useState<"recent" | "name" | "stock-asc" | "stock-desc">("recent");
   const [promoCode, setPromoCode] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -94,13 +95,25 @@ export default function SalesClient() {
 
   const visibleProducts = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return products.filter((product) => {
+    const filtered = products.filter((product) => {
       if (showLowStockOnly && product.inventory_qty > 5) return false;
       if (!q) return true;
       const hay = `${product.name_en} ${product.name_ar} ${product.slug}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [products, query, showLowStockOnly]);
+
+    if (sortMode === "name") {
+      return [...filtered].sort((a, b) => a.name_en.localeCompare(b.name_en));
+    }
+    if (sortMode === "stock-asc") {
+      return [...filtered].sort((a, b) => a.inventory_qty - b.inventory_qty);
+    }
+    if (sortMode === "stock-desc") {
+      return [...filtered].sort((a, b) => b.inventory_qty - a.inventory_qty);
+    }
+
+    return filtered;
+  }, [products, query, showLowStockOnly, sortMode]);
 
   const cartRows = useMemo(
     () =>
@@ -180,12 +193,22 @@ export default function SalesClient() {
         }),
       });
 
-      const data = (await res.json()) as { ok: boolean; orderId?: number; statusCode?: string; error?: string; ignoredProductIds?: number[] };
+      const data = (await res.json()) as {
+        ok: boolean;
+        orderId?: number;
+        statusCode?: string;
+        error?: string;
+        ignoredProductIds?: number[];
+        warning?: string | null;
+        customerMatched?: boolean;
+      };
       if (!res.ok || !data.ok) throw new Error(data.error || "Checkout failed");
 
       const ignored = Array.isArray(data.ignoredProductIds) ? data.ignoredProductIds.filter((id) => Number.isFinite(id) && id > 0) : [];
       const ignoredLabel = ignored.length ? ` (ignored unavailable products: ${ignored.join(", ")})` : "";
-      setMsg(`Sale completed. Order #${data.orderId || ""}${data.statusCode === "BACKORDER" ? " (Backorder created)" : ""}${ignoredLabel}`);
+      const matchedLabel = data.customerMatched ? " (existing customer profile updated)" : "";
+      const warningLabel = data.warning ? ` • ${data.warning}` : "";
+      setMsg(`Sale completed. Order #${data.orderId || ""}${data.statusCode === "BACKORDER" ? " (Backorder created)" : ""}${ignoredLabel}${matchedLabel}${warningLabel}`);
       setCart([]);
       setPromoCode("");
       await load();
@@ -211,6 +234,12 @@ export default function SalesClient() {
         <h3>Products</h3>
         <div className="admin-row" style={{ gap: 8, marginBottom: 10 }}>
           <input className="admin-input" placeholder="Search product / slug" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <select className="admin-select" value={sortMode} onChange={(event) => setSortMode(event.target.value as typeof sortMode)}>
+            <option value="recent">Recently updated</option>
+            <option value="name">Name (A-Z)</option>
+            <option value="stock-asc">Stock (low → high)</option>
+            <option value="stock-desc">Stock (high → low)</option>
+          </select>
           <label className="admin-row" style={{ gap: 6, whiteSpace: "nowrap" }}>
             <input type="checkbox" checked={showLowStockOnly} onChange={(event) => setShowLowStockOnly(event.target.checked)} />
             Low stock only (≤5)
@@ -221,7 +250,10 @@ export default function SalesClient() {
             <div key={product.id} className="admin-row" style={{ justifyContent: "space-between", borderBottom: "1px solid rgba(0,0,0,.08)", paddingBottom: 8 }}>
               <div style={{ flex: 1 }}>
                 <div><b>{product.name_en}</b> <span style={{ opacity: 0.6 }}>({product.slug})</span></div>
-                <div style={{ fontSize: 12, opacity: 0.8 }}>{money(Number(product.price_jod))} • Stock {product.inventory_qty}</div>
+                <div style={{ fontSize: 12, opacity: 0.8 }}>
+                  {money(Number(product.price_jod))} • Stock {product.inventory_qty}
+                  {product.inventory_qty <= 5 ? <b style={{ marginInlineStart: 8, color: "#8b5e1a" }}>Low stock</b> : null}
+                </div>
                 {product.variants?.length ? (
                   <select
                     className="admin-select"
@@ -229,6 +261,7 @@ export default function SalesClient() {
                     onChange={(event) => setVariantSelection((prev) => ({ ...prev, [product.id]: event.target.value ? Number(event.target.value) : null }))}
                     style={{ marginTop: 6, maxWidth: 320 }}
                   >
+                    <option value="">Base product — {money(Number(product.price_jod))}</option>
                     {product.variants.map((variant) => (
                       <option key={variant.id} value={variant.id}>
                         {variant.label}{variant.size_ml ? ` (${variant.size_ml}ml)` : ""} — {money(Number(variant.price_jod))}

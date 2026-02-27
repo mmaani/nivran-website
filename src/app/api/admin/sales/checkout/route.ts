@@ -27,6 +27,12 @@ function parseVariantId(value: unknown): number | null {
   return Math.trunc(n);
 }
 
+function normalizeQty(value: unknown): number {
+  const parsed = Math.trunc(Number(value || 0));
+  if (!Number.isFinite(parsed) || parsed <= 0) return 1;
+  return Math.min(parsed, 999);
+}
+
 export async function POST(req: Request) {
   const auth = requireAdminOrSales(req);
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
@@ -77,6 +83,18 @@ export async function POST(req: Request) {
     const variantMap = new Map(variantRes.rows.map((row) => [row.id, row]));
 
     const missingProductIds = new Set<number>();
+    const aggregated = new Map<string, { productId: number; variantId: number | null; qty: number }>();
+
+    for (const item of body.items) {
+      const productId = Math.trunc(Number(item.productId || 0));
+      const variantId = parseVariantId(item.variantId);
+      if (!Number.isFinite(productId) || productId <= 0) continue;
+      const key = `${productId}:${variantId ?? "base"}`;
+      const prev = aggregated.get(key);
+      const nextQty = normalizeQty(item.qty) + (prev?.qty || 0);
+      aggregated.set(key, { productId, variantId, qty: Math.min(nextQty, 999) });
+    }
+
     const lines: Array<
       PricedOrderLine & {
         product_id: number;
@@ -89,9 +107,9 @@ export async function POST(req: Request) {
       }
     > = [];
 
-    for (const item of body.items) {
-      const qty = Math.max(1, Math.trunc(Number(item.qty || 0)));
-      const productId = Math.trunc(Number(item.productId || 0));
+    for (const item of aggregated.values()) {
+      const qty = normalizeQty(item.qty);
+      const productId = item.productId;
       const product = productMap.get(productId);
       if (!product) {
         if (productId > 0) missingProductIds.add(productId);
@@ -144,12 +162,14 @@ export async function POST(req: Request) {
     }
 
     let customerId: number | null = null;
+    let customerMatched = false;
     const existingCustomer = await trx
       .query<{ id: number }>(`select id from customers where lower(email)=lower($1) limit 1`, [customerEmail])
       .catch(() => ({ rows: [] as Array<{ id: number }> }));
 
     if (existingCustomer.rows[0]?.id) {
       customerId = existingCustomer.rows[0].id;
+      customerMatched = true;
       await trx.query(
         `update customers
             set full_name = coalesce(nullif($1,''), full_name),
@@ -255,6 +275,11 @@ export async function POST(req: Request) {
       totalJod: total,
       statusCode: status,
       ignoredProductIds: Array.from(missingProductIds),
+      customerMatched,
+      warning:
+        missingProductIds.size > 0
+          ? `Some products were unavailable and skipped: ${Array.from(missingProductIds).join(", ")}`
+          : null,
     };
   });
 
