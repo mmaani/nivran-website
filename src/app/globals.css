@@ -1437,6 +1437,34 @@ input:disabled{
   border-color: rgba(20,20,20,.14);
 }
 
+
+.orders-overview{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.overview-item{
+  border: 1px solid rgba(20,20,20,.09);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255,255,255,.94), rgba(251,248,243,.88));
+  padding: 10px 12px;
+  display:grid;
+  gap: 4px;
+}
+
+.overview-item strong{
+  font-size: 1.05rem;
+  letter-spacing: .01em;
+}
+
+@media (max-width: 760px){
+  .orders-overview{
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ===== Orders table (desktop) + cards (mobile) ===== */
 .table-wrap{
   overflow-x:auto;

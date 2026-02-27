@@ -28,6 +28,7 @@ type OrderItemRow = {
   id: number;
   order_id: number;
   variant_id: number;
+  product_slug: string | null;
   qty: number;
   unit_price_jod: string;
   line_total_jod: string;
@@ -146,13 +147,16 @@ export async function GET(req: Request) {
 
     if (hasOrderItemsNormalized) {
       const ir = await db.query<OrderItemRow>(
-        `select id, order_id, variant_id, qty,
+        `select oi.id, oi.order_id, oi.variant_id,
+                v.product_slug,
+                oi.qty,
                 unit_price_jod::text as unit_price_jod,
                 line_total_jod::text as line_total_jod,
-                lot_code
-           from order_items
-          where order_id=$1
-          order by id asc`,
+                oi.lot_code
+           from order_items oi
+      left join variants v on v.id = oi.variant_id
+          where oi.order_id=$1
+          order by oi.id asc`,
         [orderId]
       );
       return Response.json({ ok: true, order: { ...order, line_items: ir.rows } });
@@ -186,13 +190,16 @@ export async function GET(req: Request) {
     for (const row of r.rows) {
       if (hasOrderItemsNormalized) {
         const ir = await db.query<OrderItemRow>(
-          `select id, order_id, variant_id, qty,
+          `select oi.id, oi.order_id, oi.variant_id,
+                  v.product_slug,
+                  oi.qty,
                   unit_price_jod::text as unit_price_jod,
                   line_total_jod::text as line_total_jod,
-                  lot_code
-             from order_items
-            where order_id=$1
-            order by id asc`,
+                  oi.lot_code
+             from order_items oi
+        left join variants v on v.id = oi.variant_id
+            where oi.order_id=$1
+            order by oi.id asc`,
           [row.id]
         );
         enriched.push({ ...row, line_items: ir.rows });
