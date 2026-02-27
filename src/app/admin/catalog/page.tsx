@@ -1015,7 +1015,9 @@ export default async function AdminCatalogPage({
                               <input type="hidden" name="return_to" value={returnTo} />
                               <input type="hidden" name="action" value="delete" />
                               <input type="hidden" name="id" value={p.id} />
-                              <button className={UI.btn} type="submit">{L.del}</button>
+                              <button className={UI.btn} type="submit" onClick={(e) => {
+                                if (!confirm(isAr ? "هل تريد حذف هذا المنتج؟" : "Delete this product?")) e.preventDefault();
+                              }}>{L.del}</button>
                             </form>
                           </div>
 
