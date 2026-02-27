@@ -9,17 +9,14 @@ function normalizeDatabaseUrl(connectionString: string): string {
 
     const sslmode = (url.searchParams.get("sslmode") || "").toLowerCase();
     if (!sslmode) {
-      url.searchParams.set("sslmode", "require");
+      url.searchParams.set("sslmode", "verify-full");
+    } else if (sslmode === "prefer" || sslmode === "require" || sslmode === "verify-ca") {
+      // Keep current strong behavior and silence pg v9 compatibility warning.
+      url.searchParams.set("sslmode", "verify-full");
     }
 
-    // Silence pg/pg-connection-string compatibility warning while keeping current behavior.
-    if (!url.searchParams.get("uselibpqcompat")) {
-      url.searchParams.set("uselibpqcompat", "true");
-    }
-
-    // Node postgres does not understand sslrootcert=system as a cert path.
-    if ((url.searchParams.get("sslrootcert") || "").toLowerCase() === "system") {
-      url.searchParams.delete("sslrootcert");
+    if (url.searchParams.get("sslmode") === "verify-full" && !url.searchParams.get("sslrootcert")) {
+      url.searchParams.set("sslrootcert", "system");
     }
 
     return url.toString();
