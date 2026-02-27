@@ -227,8 +227,7 @@ export default function AccountClient({ locale }: { locale: string }) {
   const [reorderOrderId, setReorderOrderId] = useState<number | null>(null);
   const [reorderMode, setReorderMode] = useState<ReorderMode>("add");
   const [authBusy, setAuthBusy] = useState<"verify" | "logout" | null>(null);
-
-  // Country combobox
+    // Country combobox
   const countryWrapRef = useRef<HTMLDivElement | null>(null);
   const [countryOpen, setCountryOpen] = useState(false);
   const [countryQuery, setCountryQuery] = useState("");
@@ -457,8 +456,7 @@ export default function AccountClient({ locale }: { locale: string }) {
     setReorderOrderId(null);
     setReorderMode("add");
   }
-
-  async function applyReorder(mode: ReorderMode) {
+    async function applyReorder(mode: ReorderMode) {
     if (!reorderOrderId) return;
 
     setReorderBusy(true);
@@ -688,8 +686,7 @@ export default function AccountClient({ locale }: { locale: string }) {
               <label className="field-label">{COPY.email}</label>
               <input className="input" value={profile.email} readOnly />
             </div>
-
-            <div className="field">
+                        <div className="field">
               <label className="field-label">{COPY.phone}</label>
               <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" />
             </div>
