@@ -28,6 +28,7 @@ type OrderItemRow = {
   id: number;
   order_id: number;
   variant_id: number;
+  product_slug: string | null;
   qty: number;
   unit_price_jod: string;
   line_total_jod: string;
@@ -97,6 +98,25 @@ export async function GET(req: Request) {
 
   const hasOrderItemsJsonb = await hasColumn("order_items", "items");
   const hasOrderItemsNormalized = await hasColumn("order_items", "variant_id");
+  const hasOrderItemsProductSlug = await hasColumn("order_items", "product_slug");
+  const hasLegacyVariantsProductSlug = await hasColumn("variants", "product_slug");
+  const hasProductVariantsProductId = await hasColumn("product_variants", "product_id");
+  const hasProductsSlug = await hasColumn("products", "slug");
+
+  const canJoinLegacyVariants = hasLegacyVariantsProductSlug;
+  const canJoinProductCatalog = hasProductVariantsProductId && hasProductsSlug;
+
+  const orderItemsSlugExpr = hasOrderItemsProductSlug
+    ? "coalesce(oi.product_slug::text, null::text)"
+    : canJoinLegacyVariants && canJoinProductCatalog
+      ? "coalesce(v.product_slug::text, p.slug::text)"
+      : canJoinLegacyVariants
+        ? "v.product_slug::text"
+        : canJoinProductCatalog
+          ? "p.slug::text"
+          : "null::text";
+
+  const orderItemsJoinSql = `${canJoinLegacyVariants ? "left join variants v on v.id = oi.variant_id" : ""}\n            ${canJoinProductCatalog ? "left join product_variants pv on pv.id = oi.variant_id left join products p on p.id = pv.product_id" : ""}`;
 
   const freeShippingThresholdJod = readFreeShippingThresholdJod();
   void freeShippingThresholdJod;
@@ -146,13 +166,16 @@ export async function GET(req: Request) {
 
     if (hasOrderItemsNormalized) {
       const ir = await db.query<OrderItemRow>(
-        `select id, order_id, variant_id, qty,
+        `select oi.id, oi.order_id, oi.variant_id,
+                ${orderItemsSlugExpr} as product_slug,
+                oi.qty,
                 unit_price_jod::text as unit_price_jod,
                 line_total_jod::text as line_total_jod,
-                lot_code
-           from order_items
-          where order_id=$1
-          order by id asc`,
+                oi.lot_code
+           from order_items oi
+           ${orderItemsJoinSql}
+          where oi.order_id=$1
+          order by oi.id asc`,
         [orderId]
       );
       return Response.json({ ok: true, order: { ...order, line_items: ir.rows } });
@@ -186,13 +209,16 @@ export async function GET(req: Request) {
     for (const row of r.rows) {
       if (hasOrderItemsNormalized) {
         const ir = await db.query<OrderItemRow>(
-          `select id, order_id, variant_id, qty,
+          `select oi.id, oi.order_id, oi.variant_id,
+                  ${orderItemsSlugExpr} as product_slug,
+                  oi.qty,
                   unit_price_jod::text as unit_price_jod,
                   line_total_jod::text as line_total_jod,
-                  lot_code
-             from order_items
-            where order_id=$1
-            order by id asc`,
+                  oi.lot_code
+             from order_items oi
+             ${orderItemsJoinSql}
+            where oi.order_id=$1
+            order by oi.id asc`,
           [row.id]
         );
         enriched.push({ ...row, line_items: ir.rows });

@@ -33,6 +33,7 @@ type OrderListRow = {
 };
 
 type OrderItemLine = {
+  id?: number;
   qty?: number;
   variant_id?: number;
   variantId?: number;
@@ -41,7 +42,14 @@ type OrderItemLine = {
   slug?: string | null;
 };
 
+type OrderInsight = {
+  totalOrders: number;
+  totalSpent: number;
+  lastOrderAt: string | null;
+};
+
 type CartReorderItem = { slug: string; qty: number; variantId: number | null };
+type ReorderMode = "replace" | "add";
 
 function toInt(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) return Math.trunc(value);
@@ -154,9 +162,13 @@ export default function AccountClient({ locale }: { locale: string }) {
       reorder: isAr ? "إعادة الطلب" : "Re-order",
       reorderTitle: isAr ? "إعادة الطلب" : "Re-order",
       reorderBody: isAr ? "اختر طريقة إضافة المنتجات إلى السلة." : "Choose how you want to add these items to your cart.",
+      reorderHint: isAr ? "يمكنك دمج الطلب مع سلتك الحالية أو البدء من جديد." : "You can merge this order with your current cart or start with a new cart.",
       startFresh: isAr ? "ابدأ بسلة جديدة" : "Start fresh",
+      startFreshDesc: isAr ? "حذف العناصر الحالية وإضافة عناصر هذا الطلب فقط." : "Clear current cart and add only this order items.",
       addToCart: isAr ? "أضف إلى السلة الحالية" : "Add to existing cart",
+      addToCartDesc: isAr ? "الاحتفاظ بعناصر السلة الحالية وإضافة هذا الطلب فوقها." : "Keep current cart items and add this order on top.",
       cancel: isAr ? "إلغاء" : "Cancel",
+      selectedOrder: isAr ? "الطلب المحدد" : "Selected order",
 
       emptyOrders: isAr ? "لا توجد طلبات بعد." : "No orders yet.",
       amount: isAr ? "المبلغ" : "Amount",
@@ -169,6 +181,14 @@ export default function AccountClient({ locale }: { locale: string }) {
       loggingOut: isAr ? "جارٍ تسجيل الخروج..." : "Logging out...",
       logout: isAr ? "تسجيل الخروج" : "Logout",
       reorderLoading: isAr ? "جارٍ التحضير..." : "Preparing...",
+      reorderSuccess: isAr ? "تم تجهيز الطلب. يتم تحويلك للسلة..." : "Order prepared. Redirecting to your cart...",
+      reorderNoItems: isAr ? "لا يمكن إعادة الطلب لهذا الطلب حالياً." : "We couldn't rebuild this order yet.",
+      close: isAr ? "إغلاق" : "Close",
+      overviewOrders: isAr ? "إجمالي الطلبات" : "Total orders",
+      overviewSpent: isAr ? "إجمالي الإنفاق" : "Total spent",
+      overviewLast: isAr ? "آخر طلب" : "Last order",
+      noDate: isAr ? "لا يوجد" : "N/A",
+      ordersTitle: isAr ? "طلباتك" : "Your Orders",
       verifySending: isAr ? "جارٍ الإرسال..." : "Sending...",
     }),
     [isAr]
@@ -191,6 +211,7 @@ export default function AccountClient({ locale }: { locale: string }) {
   const [reorderOpen, setReorderOpen] = useState(false);
   const [reorderBusy, setReorderBusy] = useState(false);
   const [reorderOrderId, setReorderOrderId] = useState<number | null>(null);
+  const [reorderMode, setReorderMode] = useState<ReorderMode>("add");
   const [authBusy, setAuthBusy] = useState<"verify" | "logout" | null>(null);
 
   // Country combobox
@@ -198,8 +219,43 @@ export default function AccountClient({ locale }: { locale: string }) {
   const [countryOpen, setCountryOpen] = useState(false);
   const [countryQuery, setCountryQuery] = useState("");
   const [countryActiveIdx, setCountryActiveIdx] = useState(0);
+  const reorderPrimaryRef = useRef<HTMLButtonElement | null>(null);
 
   const verified = useMemo(() => asBool(profile?.is_verified), [profile?.is_verified]);
+
+  const orderInsight = useMemo<OrderInsight>(() => {
+    if (!orders.length) return { totalOrders: 0, totalSpent: 0, lastOrderAt: null };
+
+    let totalSpent = 0;
+    let latestTime = 0;
+    let latestRaw: string | null = null;
+
+    for (const row of orders) {
+      const amount = Number(row.total_jod ?? row.amount_jod ?? 0);
+      if (Number.isFinite(amount)) totalSpent += amount;
+
+      const created = Date.parse(row.created_at);
+      if (Number.isFinite(created) && created > latestTime) {
+        latestTime = created;
+        latestRaw = row.created_at;
+      }
+    }
+
+    return {
+      totalOrders: orders.length,
+      totalSpent,
+      lastOrderAt: latestRaw,
+    };
+  }, [orders]);
+
+  const sortedOrders = useMemo(() => {
+    return [...orders].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  }, [orders]);
+
+  const selectedReorderOrder = useMemo(() => {
+    if (!reorderOrderId) return null;
+    return orders.find((item) => item.id === reorderOrderId) ?? null;
+  }, [orders, reorderOrderId]);
 
   const canSave = useMemo(() => {
     if (!fullName.trim()) return false;
@@ -308,6 +364,30 @@ export default function AccountClient({ locale }: { locale: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAr]);
 
+
+  useEffect(() => {
+    if (!reorderOpen) return;
+
+    const oldOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !reorderBusy) {
+        setReorderOpen(false);
+        setReorderOrderId(null);
+        setReorderMode("add");
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    window.setTimeout(() => reorderPrimaryRef.current?.focus(), 30);
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = oldOverflow;
+    };
+  }, [reorderBusy, reorderOpen]);
+
   async function saveProfile() {
     if (!canSave) return;
     if (!isDirty) return;
@@ -352,11 +432,19 @@ export default function AccountClient({ locale }: { locale: string }) {
 
   function openReorder(orderId: number) {
     setReorderOrderId(orderId);
+    setReorderMode("add");
     setReorderOpen(true);
     setMsg(null);
   }
 
-  async function applyReorder(mode: "replace" | "add") {
+  function closeReorder() {
+    if (reorderBusy) return;
+    setReorderOpen(false);
+    setReorderOrderId(null);
+    setReorderMode("add");
+  }
+
+  async function applyReorder(mode: ReorderMode) {
     if (!reorderOrderId) return;
 
     setReorderBusy(true);
@@ -370,9 +458,14 @@ export default function AccountClient({ locale }: { locale: string }) {
       }
 
       const orderObj = (data as Record<string, unknown>).order as Record<string, unknown> | undefined;
-      const linesUnknown = orderObj ? (orderObj.line_items as unknown) : null;
+      const normalizedLines = orderObj?.line_items;
+      const legacyLines = orderObj?.items;
 
-      const list = Array.isArray(linesUnknown) ? (linesUnknown as OrderItemLine[]) : [];
+      const list = Array.isArray(normalizedLines)
+        ? (normalizedLines as OrderItemLine[])
+        : Array.isArray(legacyLines)
+          ? (legacyLines as OrderItemLine[])
+          : [];
 
       const mapped: CartReorderItem[] = list
         .map((x) => {
@@ -385,18 +478,25 @@ export default function AccountClient({ locale }: { locale: string }) {
         .filter((x): x is CartReorderItem => Boolean(x));
 
       if (!mapped.length) {
-        setMsg(COPY.error);
+        setMsg(COPY.reorderNoItems);
         return;
       }
 
       sessionStorage.setItem("nivran_reorder_payload_v1", JSON.stringify({ items: mapped, mode }));
-      window.location.href = `/${locale}/cart?reorder=1`;
+      setMsg(COPY.reorderSuccess);
+      const qs = new URLSearchParams({
+        reorder: "1",
+        orderId: String(reorderOrderId),
+        mode,
+      });
+      window.location.href = `/${locale}/cart?${qs.toString()}`;
     } catch {
       setMsg(COPY.error);
     } finally {
       setReorderBusy(false);
       setReorderOpen(false);
       setReorderOrderId(null);
+      setReorderMode("add");
     }
   }
 
@@ -443,6 +543,17 @@ export default function AccountClient({ locale }: { locale: string }) {
     setCountry(v || (code ? code : ""));
     setCountryQuery(v);
     setCountryOpen(false);
+  }
+
+  function formatDate(raw: string | null): string {
+    if (!raw) return COPY.noDate;
+    const date = new Date(raw);
+    if (!Number.isFinite(date.getTime())) return COPY.noDate;
+    return date.toLocaleDateString(locale === "ar" ? "ar" : "en", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
   }
 
   function onCountryKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -528,7 +639,14 @@ export default function AccountClient({ locale }: { locale: string }) {
             </div>
           </div>
 
-          {msg ? <p className="muted" style={{ marginTop: 0 }}>{msg}</p> : null}
+          {msg ? (
+            <div className="account-feedback" role="status" aria-live="polite">
+              <p className="muted" style={{ margin: 0 }}>{msg}</p>
+              <button type="button" className="btn btn-quiet" onClick={() => setMsg(null)}>
+                {COPY.close}
+              </button>
+            </div>
+          ) : null}
 
           <div className="field-grid">
             <div className="field">
@@ -631,6 +749,21 @@ export default function AccountClient({ locale }: { locale: string }) {
         </div>
 
         <div className="card account-panel">
+          <div className="orders-overview" aria-label={COPY.ordersTitle}>
+            <div className="overview-item">
+              <span className="muted">{COPY.overviewOrders}</span>
+              <strong>{orderInsight.totalOrders}</strong>
+            </div>
+            <div className="overview-item">
+              <span className="muted">{COPY.overviewSpent}</span>
+              <strong>{orderInsight.totalSpent.toFixed(2)} JOD</strong>
+            </div>
+            <div className="overview-item">
+              <span className="muted">{COPY.overviewLast}</span>
+              <strong>{formatDate(orderInsight.lastOrderAt)}</strong>
+            </div>
+          </div>
+
           {orders.length === 0 ? (
             <p className="muted" style={{ margin: 0 }}>{COPY.emptyOrders}</p>
           ) : (
@@ -647,7 +780,7 @@ export default function AccountClient({ locale }: { locale: string }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {orders.map((o) => {
+                  {sortedOrders.map((o) => {
                     const status = String(o.status || "").toUpperCase();
                     const total = o.total_jod ? Number(o.total_jod) : Number(o.amount_jod || 0);
                     const discount = o.discount_jod ? Number(o.discount_jod) : 0;
@@ -698,19 +831,57 @@ export default function AccountClient({ locale }: { locale: string }) {
       </div>
 
       {reorderOpen ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={COPY.reorderTitle}>
-          <div className="modal">
-            <h3>{COPY.reorderTitle}</h3>
-            <p className="muted">{COPY.reorderBody}</p>
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={COPY.reorderTitle} onMouseDown={closeReorder}>
+          <div className="modal reorder-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="reorder-modal-head">
+              <div>
+                <h3>{COPY.reorderTitle}</h3>
+                <p className="muted">{COPY.reorderBody}</p>
+              </div>
+              <button className="btn btn-quiet" onClick={closeReorder} disabled={reorderBusy}>
+                {COPY.close}
+              </button>
+            </div>
+
+            {selectedReorderOrder ? (
+              <div className="reorder-selected-order">
+                <span className="muted">{COPY.selectedOrder}</span>
+                <strong>
+                  #{selectedReorderOrder.id} • {formatDate(selectedReorderOrder.created_at)} • {Number(selectedReorderOrder.total_jod ?? selectedReorderOrder.amount_jod ?? 0).toFixed(2)} JOD
+                </strong>
+              </div>
+            ) : null}
+
+            <p className="muted" style={{ marginTop: 0 }}>{COPY.reorderHint}</p>
+
+            <div className="reorder-choice-grid">
+              <button
+                className={"reorder-choice" + (reorderMode === "add" ? " is-selected" : "")}
+                onClick={() => setReorderMode("add")}
+                disabled={reorderBusy}
+                aria-pressed={reorderMode === "add"}
+              >
+                <strong>{COPY.addToCart}</strong>
+                <span className="muted">{COPY.addToCartDesc}</span>
+              </button>
+
+              <button
+                className={"reorder-choice" + (reorderMode === "replace" ? " is-selected" : "")}
+                onClick={() => setReorderMode("replace")}
+                disabled={reorderBusy}
+                aria-pressed={reorderMode === "replace"}
+              >
+                <strong>{COPY.startFresh}</strong>
+                <span className="muted">{COPY.startFreshDesc}</span>
+              </button>
+            </div>
+
             <div className="modal-actions">
-              <button className="btn btn-quiet" onClick={() => setReorderOpen(false)} disabled={reorderBusy}>
+              <button className="btn btn-quiet" onClick={closeReorder} disabled={reorderBusy}>
                 {COPY.cancel}
               </button>
-              <button className="btn btn-quiet" onClick={() => applyReorder("add")} disabled={reorderBusy}>
-                {COPY.addToCart}
-              </button>
-              <button className="btn primary" onClick={() => applyReorder("replace")} disabled={reorderBusy}>
-                {COPY.startFresh}
+              <button ref={reorderPrimaryRef} className="btn primary" onClick={() => applyReorder(reorderMode)} disabled={reorderBusy}>
+                {reorderBusy ? COPY.reorderLoading : reorderMode === "add" ? COPY.addToCart : COPY.startFresh}
               </button>
             </div>
           </div>
