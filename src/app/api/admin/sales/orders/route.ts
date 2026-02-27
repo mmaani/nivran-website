@@ -23,8 +23,10 @@ export async function GET(req: Request) {
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
 
   const url = new URL(req.url);
-  const limitRaw = Number(url.searchParams.get("limit") || "120");
-  const limit = Math.max(20, Math.min(400, Number.isFinite(limitRaw) ? Math.trunc(limitRaw) : 120));
+  const limitRaw = Number(url.searchParams.get("limit") || "10");
+  const limit = Math.max(5, Math.min(50, Number.isFinite(limitRaw) ? Math.trunc(limitRaw) : 10));
+  const offsetRaw = Number(url.searchParams.get("offset") || "0");
+  const offset = Math.max(0, Number.isFinite(offsetRaw) ? Math.trunc(offsetRaw) : 0);
   const statusFilter = String(url.searchParams.get("status") || "").trim().toUpperCase();
   const from = String(url.searchParams.get("from") || "").trim();
   const to = String(url.searchParams.get("to") || "").trim();
@@ -32,24 +34,13 @@ export async function GET(req: Request) {
   const fromIso = /^\d{4}-\d{2}-\d{2}$/.test(from) ? from : "";
   const toIso = /^\d{4}-\d{2}-\d{2}$/.test(to) ? to : "";
 
-  const auditMap = await db
-    .query<{ order_id: number }>(
-      `select distinct order_id
-         from sales_audit_logs
-        where action='CREATE_SALE'
-          and order_id is not null
-          ${auth.role === "sales" ? "and actor_staff_id=$1" : ""}
-        order by order_id desc
-        limit ${limit}`,
-      auth.role === "sales" ? [auth.staffId] : []
-    )
-    .catch(() => ({ rows: [] as Array<{ order_id: number }> }));
+  const params: Array<string | number | null> = [];
+  let where = `where l.action='CREATE_SALE' and l.order_id is not null`;
 
-  const ids = auditMap.rows.map((row) => row.order_id).filter((id) => Number.isFinite(id));
-  if (!ids.length) return NextResponse.json({ ok: true, orders: [] });
-
-  let where = "";
-  const params: Array<string | number[] | number | null> = [ids];
+  if (auth.role === "sales") {
+    params.push(auth.staffId ?? null);
+    where += ` and l.actor_staff_id = $${params.length}`;
+  }
 
   if (statusFilter) {
     params.push(statusFilter);
@@ -64,7 +55,12 @@ export async function GET(req: Request) {
     where += ` and o.created_at <= $${params.length}::timestamptz`;
   }
 
-  const orders = await db.query<SalesOrderRow>(
+  params.push(limit + 1);
+  const limitParam = `$${params.length}`;
+  params.push(offset);
+  const offsetParam = `$${params.length}`;
+
+  const result = await db.query<SalesOrderRow>(
     `select
        o.id,
        o.cart_id,
@@ -80,12 +76,25 @@ export async function GET(req: Request) {
            from jsonb_array_elements(coalesce(o.items, '[]'::jsonb)) as entry
        ), 0)::int as item_qty_total,
        o.created_at::text as created_at
-     from orders o
-     where o.id = any($1::bigint[])
-       ${where}
-     order by o.created_at desc`,
+     from sales_audit_logs l
+     join orders o on o.id = l.order_id
+     ${where}
+     order by l.created_at desc
+     limit ${limitParam} offset ${offsetParam}`,
     params
   );
 
-  return NextResponse.json({ ok: true, orders: orders.rows });
+  const hasMore = result.rows.length > limit;
+  const orders = hasMore ? result.rows.slice(0, limit) : result.rows;
+
+  return NextResponse.json({
+    ok: true,
+    orders,
+    pagination: {
+      limit,
+      offset,
+      hasMore,
+      nextOffset: hasMore ? offset + limit : null,
+    },
+  });
 }

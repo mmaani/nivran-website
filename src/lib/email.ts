@@ -80,7 +80,7 @@ function errToString(e: unknown): string {
 }
 
 async function sendWithRetry(args: {
-  kind: "verify_code" | "password_reset";
+  kind: "verify_code" | "password_reset" | "sales_welcome";
   to: string;
   subject: string;
   html: string;
@@ -209,5 +209,89 @@ export async function sendVerificationCodeEmail(to: string, code: string, locale
     to,
     subject,
     html: wrapEmailHtml(locale, inner),
+  });
+}
+
+
+export async function sendSalesWelcomeEmail(args: {
+  to: string;
+  customerName: string;
+  temporaryPassword: string;
+  items: Array<{ nameEn: string; nameAr?: string | null; qty: number; totalJod: number }>;
+  totalJod: number;
+  accountUrl?: string;
+}): Promise<void> {
+  const accountUrl = args.accountUrl || "https://www.nivran.com/en/account";
+  const safeName = escapeHtml(args.customerName || "there");
+  const safePassword = escapeHtml(args.temporaryPassword);
+  const rows = args.items
+    .map((item) => {
+      const nameEn = escapeHtml(item.nameEn || "Item");
+      const nameAr = escapeHtml(item.nameAr || "");
+      const qty = Math.max(1, Math.trunc(Number(item.qty || 1)));
+      const total = Number(item.totalJod || 0).toFixed(2);
+      return `<tr>
+        <td style="padding:10px 8px;border-bottom:1px solid rgba(0,0,0,.07);font-weight:700;color:#1b1b1b;">${nameEn}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid rgba(0,0,0,.07);color:#6f6a62;">${nameAr || "—"}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid rgba(0,0,0,.07);text-align:center;">${qty}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid rgba(0,0,0,.07);text-align:right;font-weight:700;">${total} JOD</td>
+      </tr>`;
+    })
+    .join("\n");
+
+  const html = wrapEmailHtml(
+    "en",
+    `
+    <p style="margin:0 0 10px;color:#1B1B1B;line-height:1.75;">Dear ${safeName},</p>
+    <p style="margin:0 0 12px;color:#1B1B1B;line-height:1.75;">Thank you for visiting NIVRAN. We created your customer account during your in-store purchase so you can track orders and reorder quickly.</p>
+
+    <div style="margin:14px 0;padding:14px;border-radius:12px;border:1px solid rgba(169,130,62,.35);background:#fffaf0;">
+      <div style="font-weight:800;color:#1b1b1b;margin-bottom:6px;">Your temporary password</div>
+      <div style="font-size:20px;font-weight:900;letter-spacing:.08em;color:#1b1b1b;">${safePassword}</div>
+      <div style="margin-top:8px;font-size:12px;color:#6f6a62;">For your security, please change this password after your first login.</div>
+    </div>
+
+    <div style="margin:14px 0;">
+      <a href="${escapeHtml(accountUrl)}" style="display:inline-block;background:#1B1B1B;color:#fff;text-decoration:none;padding:12px 16px;border-radius:12px;font-weight:700;">
+        Open My Account
+      </a>
+    </div>
+
+    <div style="margin:16px 0 8px;font-weight:800;color:#1b1b1b;">Items purchased</div>
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;border:1px solid rgba(0,0,0,.08);border-radius:12px;overflow:hidden;">
+      <thead>
+        <tr style="background:#f8f3ea;">
+          <th style="padding:10px 8px;text-align:left;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#6f6a62;">Item (EN)</th>
+          <th style="padding:10px 8px;text-align:left;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#6f6a62;">Item (AR)</th>
+          <th style="padding:10px 8px;text-align:center;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#6f6a62;">Qty</th>
+          <th style="padding:10px 8px;text-align:right;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#6f6a62;">Line total</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        <tr>
+          <td colspan="3" style="padding:12px 8px;text-align:right;font-weight:900;">Total</td>
+          <td style="padding:12px 8px;text-align:right;font-weight:900;">${Number(args.totalJod || 0).toFixed(2)} JOD</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <hr style="border:none;border-top:1px solid rgba(0,0,0,.08);margin:18px 0;" />
+
+    <div dir="rtl" style="text-align:right;">
+      <p style="margin:0 0 10px;color:#1B1B1B;line-height:1.9;">عميلنا العزيز ${safeName}،</p>
+      <p style="margin:0 0 12px;color:#1B1B1B;line-height:1.9;">شكرًا لزيارتك NIVRAN. تم إنشاء حسابك أثناء عملية الشراء داخل المتجر لتتمكن من متابعة الطلبات وإعادة الشراء بسهولة.</p>
+      <p style="margin:0 0 12px;color:#1B1B1B;line-height:1.9;">كلمة المرور المؤقتة الخاصة بك: <strong>${safePassword}</strong></p>
+      <p style="margin:0 0 12px;color:#6f6a62;line-height:1.9;">يرجى تغيير كلمة المرور بعد أول تسجيل دخول حفاظًا على أمان حسابك.</p>
+      <p style="margin:0;color:#6f6a62;line-height:1.9;">رابط الحساب: <a href="${escapeHtml(accountUrl)}">${escapeHtml(accountUrl)}</a></p>
+    </div>
+  `
+  );
+
+  await sendWithRetry({
+    kind: "sales_welcome",
+    to: args.to,
+    subject: "Welcome to NIVRAN — your account details / أهلاً بك في NIVRAN",
+    html,
   });
 }

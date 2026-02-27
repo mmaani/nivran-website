@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-export type EmailKind = "verify_code" | "password_reset";
+export type EmailKind = "verify_code" | "password_reset" | "sales_welcome";
 
 export async function ensureEmailLogTables(): Promise<void> {
   await db.query(`

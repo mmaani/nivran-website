@@ -4,6 +4,7 @@ import { db, type DbExecutor } from "@/lib/db";
 import { requireAdminOrSales } from "@/lib/guards";
 import { evaluatePromoCodeForLines, type PricedOrderLine } from "@/lib/promotions";
 import { hashPassword } from "@/lib/identity";
+import { sendSalesWelcomeEmail } from "@/lib/email";
 
 type CheckoutItem = { productId: number; qty: number; variantId?: number | null; productSlug?: string | null };
 type CheckoutBody = {
@@ -68,8 +69,8 @@ export async function POST(req: Request) {
   );
 
   const response = await db.withTransaction(async (trx) => {
-    const productsRes = await trx.query<{ id: number; slug: string; name_en: string; category_key: string | null; price_jod: string; inventory_qty: number }>(
-      `select id, slug, name_en, category_key, price_jod::text, inventory_qty
+    const productsRes = await trx.query<{ id: number; slug: string; name_en: string; name_ar: string | null; category_key: string | null; price_jod: string; inventory_qty: number }>(
+      `select id, slug, name_en, name_ar, category_key, price_jod::text, inventory_qty
          from products
         where id = any($1::bigint[])
         for update`,
@@ -77,13 +78,13 @@ export async function POST(req: Request) {
     );
 
     const fallbackBySlugRes = productSlugs.length
-      ? await trx.query<{ id: number; slug: string; name_en: string; category_key: string | null; price_jod: string; inventory_qty: number }>(
-          `select id, slug, name_en, category_key, price_jod::text, inventory_qty
+      ? await trx.query<{ id: number; slug: string; name_en: string; name_ar: string | null; category_key: string | null; price_jod: string; inventory_qty: number }>(
+          `select id, slug, name_en, name_ar, category_key, price_jod::text, inventory_qty
              from products
             where lower(slug) = any($1::text[])`,
           [productSlugs]
         )
-      : { rows: [] as Array<{ id: number; slug: string; name_en: string; category_key: string | null; price_jod: string; inventory_qty: number }> };
+      : { rows: [] as Array<{ id: number; slug: string; name_en: string; name_ar: string | null; category_key: string | null; price_jod: string; inventory_qty: number }> };
 
     const variantRes = variantIds.length
       ? await trx.query<{ id: number; product_id: number; label: string; size_ml: number | null; price_jod: string; is_active: boolean }>(
@@ -118,6 +119,8 @@ export async function POST(req: Request) {
         product_id: number;
         variant_id: number | null;
         variant_label: string | null;
+        name_en: string;
+        name_ar: string | null;
         unit_price_jod: number;
         requested_qty: number;
         fulfilled_qty: number;
@@ -133,7 +136,6 @@ export async function POST(req: Request) {
       let product = productMap.get(productId) || null;
       let variant = variantId ? variantMap.get(variantId) || null : null;
 
-      // Backward compatibility: some older clients accidentally sent a variant id as productId.
       if (!product) {
         const inferredVariant = variantMap.get(productId) || null;
         if (inferredVariant) {
@@ -143,7 +145,6 @@ export async function POST(req: Request) {
         }
       }
 
-      // If product is still missing but variant is valid, infer product from that variant.
       if (!product && variant) {
         productId = variant.product_id;
         product = productMap.get(productId) || null;
@@ -183,6 +184,8 @@ export async function POST(req: Request) {
         product_id: product.id,
         variant_id: variant?.id || null,
         variant_label: variantLabel,
+        name_en: product.name_en,
+        name_ar: product.name_ar || null,
         qty,
         requested_qty: qty,
         fulfilled_qty: fulfilledQty,
@@ -227,6 +230,9 @@ export async function POST(req: Request) {
 
     let customerId: number | null = null;
     let customerMatched = false;
+    let customerCreated = false;
+    let createdAccountPassword: string | null = null;
+
     const existingCustomer = await trx
       .query<{ id: number }>(`select id from customers where lower(email)=lower($1) limit 1`, [customerEmail])
       .catch(() => ({ rows: [] as Array<{ id: number }> }));
@@ -255,6 +261,7 @@ export async function POST(req: Request) {
           staleCart: false,
         };
       }
+
       const passwordHash = await hashPassword(password);
       const created = await trx.query<{ id: number }>(
         `insert into customers (email, password_hash, full_name, phone, address_line1, city, country, is_active)
@@ -263,6 +270,8 @@ export async function POST(req: Request) {
         [customerEmail, passwordHash, customerName || null, customerPhone || null, customerAddress || null, customerCity || null, customerCountry]
       );
       customerId = created.rows[0]?.id || null;
+      customerCreated = !!customerId;
+      createdAccountPassword = customerCreated ? password : null;
     }
 
     const hasBackorder = lines.some((line) => line.backorder_qty > 0);
@@ -358,13 +367,60 @@ export async function POST(req: Request) {
       ignoredProductIds: Array.from(missingProductIds),
       missingProductIds: Array.from(missingProductIds),
       customerMatched,
+      customerCreated,
+      createdAccountPassword,
+      createdAccountEmail: customerCreated ? customerEmail : null,
+      createdAccountName: customerCreated ? customerName : null,
+      welcomeOrderItems: customerCreated
+        ? lines.map((line) => ({
+            nameEn: line.name_en,
+            nameAr: line.name_ar,
+            qty: line.requested_qty,
+            totalJod: line.line_total_jod,
+          }))
+        : [],
       warning:
         missingProductIds.size > 0
           ? `Some products were unavailable and skipped: ${Array.from(missingProductIds).join(", ")}`
+          : hasBackorder
+          ? "Some quantities were backordered due to inventory limits"
           : null,
     };
   });
 
-  if (!response.ok) return NextResponse.json({ ok: false, error: response.error }, { status: response.status });
-  return NextResponse.json(response);
+  if (!response.ok) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: response.error,
+        missingProductIds: response.missingProductIds,
+        staleCart: response.staleCart,
+      },
+      { status: response.status }
+    );
+  }
+
+  if (response.customerCreated && response.createdAccountEmail && response.createdAccountPassword) {
+    await sendSalesWelcomeEmail({
+      to: String(response.createdAccountEmail),
+      customerName: String(response.createdAccountName || body.customer?.name || "Customer"),
+      temporaryPassword: String(response.createdAccountPassword),
+      items: Array.isArray(response.welcomeOrderItems) ? response.welcomeOrderItems : [],
+      totalJod: Number(response.totalJod || 0),
+      accountUrl: "https://www.nivran.com/en/account",
+    }).catch(() => null);
+  }
+
+  return NextResponse.json({
+    ok: true,
+    orderId: response.orderId,
+    totalJod: response.totalJod,
+    statusCode: response.statusCode,
+    ignoredProductIds: response.ignoredProductIds,
+    missingProductIds: response.missingProductIds,
+    customerMatched: response.customerMatched,
+    customerCreated: response.customerCreated,
+    createdAccountEmail: response.createdAccountEmail,
+    warning: response.warning,
+  });
 }

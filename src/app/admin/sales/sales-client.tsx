@@ -38,6 +38,16 @@ type OrderRow = {
   created_at: string;
 };
 
+type OrdersResponse = {
+  orders: OrderRow[];
+  pagination?: {
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+    nextOffset: number | null;
+  };
+};
+
 function money(n: number): string {
   return `${n.toFixed(2)} JOD`;
 }
@@ -57,7 +67,9 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
   const [sortMode, setSortMode] = useState<"recent" | "name" | "stock-asc" | "stock-desc">("recent");
   const [ordersStatusFilter, setOrdersStatusFilter] = useState<"" | "PAID" | "BACKORDER">("");
-  const [ordersLimit, setOrdersLimit] = useState<120 | 200 | 300>(120);
+  const [ordersLimit, setOrdersLimit] = useState<10 | 20 | 30>(10);
+  const [ordersOffset, setOrdersOffset] = useState(0);
+  const [ordersHasMore, setOrdersHasMore] = useState(false);
   const [ordersFrom, setOrdersFrom] = useState("");
   const [ordersTo, setOrdersTo] = useState("");
   const [promoCode, setPromoCode] = useState("");
@@ -91,8 +103,9 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
 
   const isAr = lang === "ar";
 
-  const load = useCallback(async () => {
-    const orderParams = new URLSearchParams({ limit: String(ordersLimit) });
+  const load = useCallback(async (offsetOverride?: number) => {
+    const offset = typeof offsetOverride === "number" ? Math.max(0, Math.trunc(offsetOverride)) : ordersOffset;
+    const orderParams = new URLSearchParams({ limit: String(ordersLimit), offset: String(offset) });
     if (ordersStatusFilter) orderParams.set("status", ordersStatusFilter);
     if (ordersFrom) orderParams.set("from", ordersFrom);
     if (ordersTo) orderParams.set("to", ordersTo);
@@ -102,12 +115,14 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
       fetch(`/api/admin/sales/orders?${orderParams.toString()}`, { credentials: "include", cache: "no-store" }),
     ]);
     const catalog = (await catalogRes.json()) as { products: Product[]; promotions: Promo[] };
-    const salesOrders = (await ordersRes.json()) as { orders: OrderRow[] };
+    const salesOrders = (await ordersRes.json()) as OrdersResponse;
 
     const loadedProducts = Array.isArray(catalog.products) ? catalog.products : [];
     setProducts(loadedProducts);
     setPromos(Array.isArray(catalog.promotions) ? catalog.promotions : []);
     setOrders(Array.isArray(salesOrders.orders) ? salesOrders.orders : []);
+    setOrdersHasMore(Boolean(salesOrders.pagination?.hasMore));
+    setOrdersOffset(offset);
 
     const selection: Record<number, number | null> = {};
     for (const product of loadedProducts) {
@@ -115,11 +130,15 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
       selection[product.id] = defaultVariant ? defaultVariant.id : null;
     }
     setVariantSelection(selection);
-  }, [ordersLimit, ordersStatusFilter, ordersFrom, ordersTo]);
+  }, [ordersLimit, ordersStatusFilter, ordersFrom, ordersTo, ordersOffset]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    setOrdersOffset(0);
+  }, [ordersLimit, ordersStatusFilter, ordersFrom, ordersTo]);
 
   const productById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
 
@@ -265,6 +284,8 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
         missingProductIds?: number[];
         warning?: string | null;
         customerMatched?: boolean;
+        customerCreated?: boolean;
+        createdAccountEmail?: string | null;
         staleCart?: boolean;
       };
       if (!res.ok || !data.ok) {
@@ -297,11 +318,16 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
           ? " (تم تحديث ملف عميل موجود)"
           : " (existing customer profile updated)"
         : "";
+      const createdLabel = data.customerCreated
+        ? isAr
+          ? ` • تم إنشاء حساب جديد${data.createdAccountEmail ? ` (${data.createdAccountEmail})` : ""}`
+          : ` • New customer profile created${data.createdAccountEmail ? ` (${data.createdAccountEmail})` : ""}`
+        : "";
       const warningLabel = data.warning ? ` • ${data.warning}` : "";
       setMsg(
         isAr
-          ? `تمت عملية البيع بنجاح. طلب #${data.orderId || ""}${data.statusCode === "BACKORDER" ? " (تم إنشاء طلب مؤجل)" : ""}${ignoredLabel}${matchedLabel}${warningLabel}`
-          : `Sale completed. Order #${data.orderId || ""}${data.statusCode === "BACKORDER" ? " (Backorder created)" : ""}${ignoredLabel}${matchedLabel}${warningLabel}`
+          ? `تمت عملية البيع بنجاح. طلب #${data.orderId || ""}${data.statusCode === "BACKORDER" ? " (تم إنشاء طلب مؤجل)" : ""}${ignoredLabel}${matchedLabel}${createdLabel}${warningLabel}`
+          : `Sale completed. Order #${data.orderId || ""}${data.statusCode === "BACKORDER" ? " (Backorder created)" : ""}${ignoredLabel}${matchedLabel}${createdLabel}${warningLabel}`
       );
       setCart([]);
       setPromoCode("");
@@ -445,14 +471,16 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
             <option value="PAID">{isAr ? "مدفوع" : "Paid"}</option>
             <option value="BACKORDER">{isAr ? "طلب مؤجل" : "Backorder"}</option>
           </select>
-          <select className="admin-select" value={ordersLimit} onChange={(event) => setOrdersLimit(Number(event.target.value) as 120 | 200 | 300)}>
-            <option value={120}>{isAr ? "آخر 120" : "Latest 120"}</option>
-            <option value={200}>{isAr ? "آخر 200" : "Latest 200"}</option>
-            <option value={300}>{isAr ? "آخر 300" : "Latest 300"}</option>
+          <select className="admin-select" value={ordersLimit} onChange={(event) => setOrdersLimit(Number(event.target.value) as 10 | 20 | 30)}>
+            <option value={10}>{isAr ? "آخر 10" : "Latest 10"}</option>
+            <option value={20}>{isAr ? "آخر 20" : "Latest 20"}</option>
+            <option value={30}>{isAr ? "آخر 30" : "Latest 30"}</option>
           </select>
           <input className="admin-input" type="date" aria-label={isAr ? "من تاريخ" : "From date"} value={ordersFrom} onChange={(event) => setOrdersFrom(event.target.value)} />
           <input className="admin-input" type="date" aria-label={isAr ? "إلى تاريخ" : "To date"} value={ordersTo} onChange={(event) => setOrdersTo(event.target.value)} />
-          <button className="btn" type="button" onClick={() => void load()}>{isAr ? "تحديث" : "Refresh"}</button>
+          <button className="btn" type="button" onClick={() => void load(0)}>{isAr ? "تحديث" : "Refresh"}</button>
+          <button className="btn" type="button" disabled={ordersOffset <= 0} onClick={() => void load(Math.max(0, ordersOffset - ordersLimit))}>{isAr ? "السابق" : "Previous"}</button>
+          <button className="btn" type="button" disabled={!ordersHasMore} onClick={() => void load(ordersOffset + ordersLimit)}>{isAr ? "التالي" : "Next"}</button>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table className="admin-table" style={{ minWidth: 900 }}>
