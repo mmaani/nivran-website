@@ -1,6 +1,6 @@
-import { db } from "@/lib/db";
+import { db, isDbConnectivityError, isDbSchemaError } from "@/lib/db";
 import { hasColumn } from "@/lib/dbSchema";
-import { ensureIdentityTables } from "@/lib/identity";
+import { ensureIdentityTablesSafe } from "@/lib/identity";
 import { getAdminLang } from "@/lib/admin-lang";
 
 export const runtime = "nodejs";
@@ -48,9 +48,21 @@ function fmtDate(value: string, lang: "en" | "ar"): string {
 }
 
 export default async function AdminStaffPage({ searchParams }: { searchParams?: Promise<SearchParams> }) {
-  await ensureIdentityTables();
   const [lang, resolved] = await Promise.all([getAdminLang(), searchParams]);
-  const hasUsername = await hasColumn("staff_users", "username");
+  let hasUsername = true;
+  let bootstrapError = "";
+
+  try {
+    await ensureIdentityTablesSafe();
+    hasUsername = await hasColumn("staff_users", "username");
+  } catch (error: unknown) {
+    bootstrapError = error instanceof Error ? error.message : String(error || "Identity bootstrap failed");
+    if (!isDbConnectivityError(error) && !isDbSchemaError(error)) throw error;
+  }
+
+  const query = String(resolved?.q || "").trim().toLowerCase();
+  const saved = String(resolved?.saved || "").trim();
+  const error = String(resolved?.error || "").trim();
 
   const query = String(resolved?.q || "").trim().toLowerCase();
   const saved = String(resolved?.saved || "").trim();
@@ -123,18 +135,43 @@ export default async function AdminStaffPage({ searchParams }: { searchParams?: 
           statsAdmins: "Admin/Ops/Sales",
         };
 
-  const { rows } = await db.query<StaffRow>(
-    `select id,
-            ${hasUsername ? "username" : "email"} as username,
-            full_name,
-            role,
-            is_active,
-            created_at::text,
-            updated_at::text
-       from staff_users
-      order by created_at desc
-      limit 300`
-  );
+  let rows: StaffRow[] = [];
+  if (!bootstrapError) {
+    try {
+      const res = await db.query<StaffRow>(
+        `select id,
+                ${hasUsername ? "username" : "email"} as username,
+                full_name,
+                role,
+                is_active,
+                created_at::text,
+                updated_at::text
+           from staff_users
+          order by created_at desc
+          limit 300`
+      );
+      rows = res.rows;
+    } catch (error: unknown) {
+      bootstrapError = error instanceof Error ? error.message : String(error || "Failed to load staff users");
+      if (!isDbConnectivityError(error) && !isDbSchemaError(error)) throw error;
+    }
+  }
+
+  const filtered = rows.filter((row) => {
+    if (!query) return true;
+    const hay = `${row.username} ${row.full_name || ""} ${row.role}`.toLowerCase();
+    return hay.includes(query);
+  });
+
+  const stats = {
+    total: rows.length,
+    active: rows.filter((row) => row.is_active).length,
+    inactive: rows.filter((row) => !row.is_active).length,
+    admins: rows.filter((row) => {
+      const role = String(row.role || "").toLowerCase();
+      return role === "admin" || role === "ops" || role === "sales";
+    }).length,
+  };
 
   const filtered = rows.filter((row) => {
     if (!query) return true;
@@ -159,6 +196,7 @@ export default async function AdminStaffPage({ searchParams }: { searchParams?: 
         <p className="admin-muted">{L.subtitle}</p>
         {saved ? <p style={{ color: "#0f766e", fontWeight: 700 }}>{savedMessage(saved, lang)}</p> : null}
         {error ? <p style={{ color: "#b91c1c", fontWeight: 700 }}>{error}</p> : null}
+        {bootstrapError ? <p style={{ color: "#8b5e1a", fontWeight: 700 }}>{lang === "ar" ? "تعذر الاتصال بقاعدة البيانات لبعض جداول الموظفين." : "Some staff database tables are unavailable."}</p> : null}
       </div>
 
       <section className="admin-grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 10 }}>

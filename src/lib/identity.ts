@@ -70,6 +70,30 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return false;
 }
 
+
+export async function ensureIdentityTablesSafe(): Promise<{ ok: true } | { ok: false; reason: string }> {
+  try {
+    await ensureIdentityTables();
+    return { ok: true };
+  } catch (error: unknown) {
+    const reason = error instanceof Error ? error.message : String(error || "UNKNOWN_IDENTITY_BOOTSTRAP_ERROR");
+    const ddlBlocked = /permission denied|must be owner|read-only|readonly|cannot execute|not authorized|ddl/i.test(reason);
+
+    if (ddlBlocked) {
+      try {
+        await db.query(`select 1 from staff_users limit 1`);
+        await db.query(`select 1 from customers limit 1`);
+        console.warn("[identity] ensureIdentityTables skipped (DDL blocked), but required tables exist; proceeding read-only.");
+        return { ok: false, reason: "DDL_BLOCKED_EXISTING_TABLES" };
+      } catch {
+        console.warn(`[identity] ensureIdentityTables skipped and required tables missing: ${reason}`);
+      }
+    }
+
+    throw error;
+  }
+}
+
 /** Tables */
 export async function ensureIdentityTables(): Promise<void> {
   // Keep it light: only create if missing (safe for Neon).

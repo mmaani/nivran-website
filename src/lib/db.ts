@@ -46,7 +46,6 @@ function getPool(): Pool {
 
   pool = new Pool({
     connectionString,
-    ssl: isLocal ? undefined : { rejectUnauthorized: true },
   });
 
   return pool;
@@ -120,6 +119,16 @@ export function isDbConnectivityError(error: unknown): boolean {
   if (code === "57P03") return true;
   if (msg.includes("terminating connection")) return true;
   if (msg.includes("no pg_hba.conf entry")) return true;
+  if (msg.includes("self signed certificate")) return true;
+  if (msg.includes("certificate has expired")) return true;
+  if (msg.includes("unable to verify the first certificate")) return true;
 
   return false;
+}
+
+export function isDbSchemaError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const nodeError = error as Error & { code?: unknown };
+  const code = typeof nodeError.code === "string" ? nodeError.code.toUpperCase() : "";
+  return code === "42P01" || code === "42703" || code === "42883" || code === "42P07";
 }
