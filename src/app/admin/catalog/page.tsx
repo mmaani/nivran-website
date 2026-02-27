@@ -70,6 +70,10 @@ type PromoRow = {
   product_slugs: string[] | null;
 };
 
+const WEAR_TIME_TAGS = ["day", "night", "anytime"] as const;
+const SEASON_TAGS = ["spring", "summer", "fall", "winter", "all-season"] as const;
+const AUDIENCE_TAGS = ["unisex", "unisex-men-leaning", "unisex-women-leaning", "men", "women"] as const;
+
 function isSeasonalPromoKind(value: unknown): boolean {
   if (typeof value !== "string") return false;
   const k = value.trim().toUpperCase();
@@ -502,7 +506,7 @@ export default async function AdminCatalogPage({
             <Link href="/admin" className="admin-logo" style={{ textDecoration: "none" }}>
               NIVRAN
             </Link>
-            <span className={UI.muted} style={{ fontSize: 13 }}>
+            <span className={UI.muted}>
               {isAr ? "لوحة التحكم" : "Admin"}
             </span>
           </div>
@@ -749,15 +753,15 @@ export default async function AdminCatalogPage({
                 <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(3,minmax(0,1fr))" }}>
                   <div>
                     <div style={{ fontWeight: 700, marginBottom: 6 }}>{L.wearTime}</div>
-                    <label style={{ marginInlineEnd: 10 }}><input type="checkbox" name="wear_times" value="day" /> Day</label>
-                    <label style={{ marginInlineEnd: 10 }}><input type="checkbox" name="wear_times" value="night" /> Night</label>
-                    <label><input type="checkbox" name="wear_times" value="anytime" /> Anytime</label>
+                    <label className="admin-tag-chip"><input type="checkbox" name="wear_times" value="day" /> Day</label>
+                    <label className="admin-tag-chip"><input type="checkbox" name="wear_times" value="night" /> Night</label>
+                    <label className="admin-tag-chip"><input type="checkbox" name="wear_times" value="anytime" /> Anytime</label>
                   </div>
 
                   <div>
                     <div style={{ fontWeight: 700, marginBottom: 6 }}>{L.season}</div>
-                    {["spring", "summer", "fall", "winter", "all-season"].map((s) => (
-                      <label key={s} style={{ marginInlineEnd: 10 }}>
+                    {SEASON_TAGS.map((s) => (
+                      <label key={s} className="admin-tag-chip">
                         <input type="checkbox" name="seasons" value={s} /> {s}
                       </label>
                     ))}
@@ -765,8 +769,8 @@ export default async function AdminCatalogPage({
 
                   <div>
                     <div style={{ fontWeight: 700, marginBottom: 6 }}>{L.audience}</div>
-                    {["unisex", "unisex-men-leaning", "unisex-women-leaning", "men", "women"].map((a) => (
-                      <label key={a} style={{ marginInlineEnd: 10 }}>
+                    {AUDIENCE_TAGS.map((a) => (
+                      <label key={a} className="admin-tag-chip">
                         <input type="checkbox" name="audiences" value={a} /> {a}
                       </label>
                     ))}
@@ -850,8 +854,8 @@ export default async function AdminCatalogPage({
                   <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(3,minmax(0,1fr))" }}>
                     <div>
                       <div style={{ fontWeight: 700, marginBottom: 6 }}>{L.wearTime}</div>
-                      {["day", "night", "anytime"].map((key) => (
-                        <label key={`ws-${key}`} style={{ marginInlineEnd: 10 }}>
+                      {WEAR_TIME_TAGS.map((key) => (
+                        <label key={`ws-${key}`} className="admin-tag-chip">
                           <input type="checkbox" name="wear_times" value={key} defaultChecked={selectedEditProduct.wear_times.includes(key)} /> {key}
                         </label>
                       ))}
@@ -859,8 +863,8 @@ export default async function AdminCatalogPage({
 
                     <div>
                       <div style={{ fontWeight: 700, marginBottom: 6 }}>{L.season}</div>
-                      {["spring", "summer", "fall", "winter", "all-season"].map((key) => (
-                        <label key={`ss-${key}`} style={{ marginInlineEnd: 10 }}>
+                      {SEASON_TAGS.map((key) => (
+                        <label key={`ss-${key}`} className="admin-tag-chip">
                           <input type="checkbox" name="seasons" value={key} defaultChecked={selectedEditProduct.seasons.includes(key)} /> {key}
                         </label>
                       ))}
@@ -868,8 +872,8 @@ export default async function AdminCatalogPage({
 
                     <div>
                       <div style={{ fontWeight: 700, marginBottom: 6 }}>{L.audience}</div>
-                      {["unisex", "unisex-men-leaning", "unisex-women-leaning", "men", "women"].map((key) => (
-                        <label key={`as-${key}`} style={{ marginInlineEnd: 10 }}>
+                      {AUDIENCE_TAGS.map((key) => (
+                        <label key={`as-${key}`} className="admin-tag-chip">
                           <input type="checkbox" name="audiences" value={key} defaultChecked={selectedEditProduct.audiences.includes(key)} /> {key}
                         </label>
                       ))}
@@ -961,22 +965,22 @@ export default async function AdminCatalogPage({
                               <summary className={UI.muted} style={{ cursor: "pointer" }}>{L.tags}</summary>
                               <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
                                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                  {["day", "night", "anytime"].map((key) => (
-                                    <label key={`wt-${p.id}-${key}`} style={{ fontSize: 13 }}>
+                                  {WEAR_TIME_TAGS.map((key) => (
+                                    <label key={`wt-${p.id}-${key}`} className="admin-tag-chip">
                                       <input type="checkbox" name="wear_times" value={key} defaultChecked={p.wear_times.includes(key)} /> {key}
                                     </label>
                                   ))}
                                 </div>
                                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                  {["spring", "summer", "fall", "winter", "all-season"].map((key) => (
-                                    <label key={`ss-${p.id}-${key}`} style={{ fontSize: 13 }}>
+                                  {SEASON_TAGS.map((key) => (
+                                    <label key={`ss-${p.id}-${key}`} className="admin-tag-chip">
                                       <input type="checkbox" name="seasons" value={key} defaultChecked={p.seasons.includes(key)} /> {key}
                                     </label>
                                   ))}
                                 </div>
                                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                  {["unisex", "unisex-men-leaning", "unisex-women-leaning", "men", "women"].map((key) => (
-                                    <label key={`au-${p.id}-${key}`} style={{ fontSize: 13 }}>
+                                  {AUDIENCE_TAGS.map((key) => (
+                                    <label key={`au-${p.id}-${key}`} className="admin-tag-chip">
                                       <input type="checkbox" name="audiences" value={key} defaultChecked={p.audiences.includes(key)} /> {key}
                                     </label>
                                   ))}

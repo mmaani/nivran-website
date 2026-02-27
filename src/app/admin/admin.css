@@ -724,6 +724,19 @@
   background: linear-gradient(180deg,#f8f1e3,#f2e7d2);
 }
 
+.admin-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bd);
+  background: #fffaf1;
+  font-size: 12px;
+  margin-inline-end: 8px;
+  margin-bottom: 6px;
+}
+
 .mono, .ltr {
   direction: ltr;
   unicode-bidi: plaintext;

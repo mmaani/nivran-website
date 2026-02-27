@@ -26,6 +26,11 @@ export async function GET(req: Request) {
   const limitRaw = Number(url.searchParams.get("limit") || "120");
   const limit = Math.max(20, Math.min(400, Number.isFinite(limitRaw) ? Math.trunc(limitRaw) : 120));
   const statusFilter = String(url.searchParams.get("status") || "").trim().toUpperCase();
+  const from = String(url.searchParams.get("from") || "").trim();
+  const to = String(url.searchParams.get("to") || "").trim();
+
+  const fromIso = /^\d{4}-\d{2}-\d{2}$/.test(from) ? from : "";
+  const toIso = /^\d{4}-\d{2}-\d{2}$/.test(to) ? to : "";
 
   const auditMap = await db
     .query<{ order_id: number }>(
@@ -43,7 +48,21 @@ export async function GET(req: Request) {
   const ids = auditMap.rows.map((row) => row.order_id).filter((id) => Number.isFinite(id));
   if (!ids.length) return NextResponse.json({ ok: true, orders: [] });
 
-  const whereStatus = statusFilter ? ` and o.status = $2` : "";
+  let where = "";
+  const params: Array<string | number[] | number | null> = [ids];
+
+  if (statusFilter) {
+    params.push(statusFilter);
+    where += ` and o.status = $${params.length}`;
+  }
+  if (fromIso) {
+    params.push(`${fromIso}T00:00:00.000Z`);
+    where += ` and o.created_at >= $${params.length}::timestamptz`;
+  }
+  if (toIso) {
+    params.push(`${toIso}T23:59:59.999Z`);
+    where += ` and o.created_at <= $${params.length}::timestamptz`;
+  }
 
   const orders = await db.query<SalesOrderRow>(
     `select
@@ -63,9 +82,9 @@ export async function GET(req: Request) {
        o.created_at::text as created_at
      from orders o
      where o.id = any($1::bigint[])
-       ${whereStatus}
+       ${where}
      order by o.created_at desc`,
-    statusFilter ? [ids, statusFilter] : [ids]
+    params
   );
 
   return NextResponse.json({ ok: true, orders: orders.rows });

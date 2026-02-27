@@ -35,6 +35,8 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
   const [token, setToken] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [capsLockOn, setCapsLockOn] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -151,14 +153,23 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
                 required
               />
               <label className="admin-muted" style={{ fontWeight: 700 }}>{isAr ? "كلمة المرور" : "Password"}</label>
-              <input
-                className="admin-input"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder={isAr ? "كلمة المرور" : "Password"}
-                required
-              />
+              <div className="admin-row" style={{ gap: 8 }}>
+                <input
+                  className="admin-input"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  onKeyUp={(event) => setCapsLockOn(event.getModifierState("CapsLock"))}
+                  onBlur={() => setCapsLockOn(false)}
+                  placeholder={isAr ? "كلمة المرور" : "Password"}
+                  required
+                  style={{ flex: 1 }}
+                />
+                <button className="btn" type="button" onClick={() => setShowPassword((value) => !value)}>
+                  {showPassword ? (isAr ? "إخفاء" : "Hide") : (isAr ? "إظهار" : "Show")}
+                </button>
+              </div>
+              {capsLockOn ? <p className="admin-muted" style={{ color: "#8b5e1a" }}>{isAr ? "تنبيه: زر الأحرف الكبيرة مفعل." : "Warning: Caps Lock is ON."}</p> : null}
               <label className="admin-row" style={{ gap: 8 }}>
                 <input type="checkbox" checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} />
                 <span>{isAr ? "تذكرني" : "Remember me"}</span>

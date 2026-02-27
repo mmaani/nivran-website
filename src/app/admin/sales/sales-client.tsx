@@ -56,6 +56,8 @@ export default function SalesClient() {
   const [sortMode, setSortMode] = useState<"recent" | "name" | "stock-asc" | "stock-desc">("recent");
   const [ordersStatusFilter, setOrdersStatusFilter] = useState<"" | "PAID" | "BACKORDER">("");
   const [ordersLimit, setOrdersLimit] = useState<120 | 200 | 300>(120);
+  const [ordersFrom, setOrdersFrom] = useState("");
+  const [ordersTo, setOrdersTo] = useState("");
   const [promoCode, setPromoCode] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -71,6 +73,8 @@ export default function SalesClient() {
   const load = useCallback(async () => {
     const orderParams = new URLSearchParams({ limit: String(ordersLimit) });
     if (ordersStatusFilter) orderParams.set("status", ordersStatusFilter);
+    if (ordersFrom) orderParams.set("from", ordersFrom);
+    if (ordersTo) orderParams.set("to", ordersTo);
 
     const [catalogRes, ordersRes] = await Promise.all([
       fetch("/api/admin/sales/catalog", { credentials: "include", cache: "no-store" }),
@@ -90,7 +94,7 @@ export default function SalesClient() {
       selection[product.id] = defaultVariant ? defaultVariant.id : null;
     }
     setVariantSelection(selection);
-  }, [ordersLimit, ordersStatusFilter]);
+  }, [ordersLimit, ordersStatusFilter, ordersFrom, ordersTo]);
 
   useEffect(() => {
     void load();
@@ -179,6 +183,17 @@ export default function SalesClient() {
 
     if (createAccount && !accountPassword.trim()) {
       setMsg("Please enter account password when account creation is enabled.");
+      setLoading(false);
+      return;
+    }
+
+    const staleIds = cart
+      .filter((line) => !productById.has(line.productId))
+      .map((line) => line.productId)
+      .filter((id, idx, arr) => arr.indexOf(id) === idx);
+    if (staleIds.length > 0) {
+      setCart((prev) => prev.filter((line) => !staleIds.includes(line.productId)));
+      setMsg(`Some items were removed because they are no longer available: ${staleIds.join(", ")}. Please review cart and confirm again.`);
       setLoading(false);
       return;
     }
@@ -368,6 +383,8 @@ export default function SalesClient() {
             <option value={200}>Latest 200</option>
             <option value={300}>Latest 300</option>
           </select>
+          <input className="admin-input" type="date" value={ordersFrom} onChange={(event) => setOrdersFrom(event.target.value)} />
+          <input className="admin-input" type="date" value={ordersTo} onChange={(event) => setOrdersTo(event.target.value)} />
           <button className="btn" type="button" onClick={() => void load()}>Refresh</button>
         </div>
         <div style={{ overflowX: "auto" }}>
@@ -408,13 +425,3 @@ export default function SalesClient() {
     </div>
   );
 }
-    const staleIds = cart
-      .filter((line) => !productById.has(line.productId))
-      .map((line) => line.productId)
-      .filter((id, idx, arr) => arr.indexOf(id) === idx);
-    if (staleIds.length > 0) {
-      setCart((prev) => prev.filter((line) => !staleIds.includes(line.productId)));
-      setMsg(`Some items were removed because they are no longer available: ${staleIds.join(", ")}. Please review cart and confirm again.`);
-      setLoading(false);
-      return;
-    }

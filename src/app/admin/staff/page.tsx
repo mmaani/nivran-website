@@ -269,16 +269,19 @@ export default async function AdminStaffPage({ searchParams }: { searchParams?: 
                         <button className="btn" type="submit">{L.update}</button>
                       </form>
 
-                      <form action="/api/admin/staff" method="post" className="admin-grid" style={{ gap: 6, marginTop: 8 }}>
-                        <input type="hidden" name="action" value="reset_password" />
-                        <input type="hidden" name="id" value={row.id} />
-                        <input type="hidden" name="email" value={row.username} />
-                        <input type="hidden" name="full_name" value={row.full_name || ""} />
-                        <input type="hidden" name="role" value={normalizedRole} />
-                        <input type="hidden" name="is_active" value={row.is_active ? "true" : "false"} />
-                        <input className="admin-input" type="password" name="password" minLength={8} required placeholder={L.resetPassword} />
-                        <button className="btn" type="submit">{L.resetPassword}</button>
-                      </form>
+                      <details style={{ marginTop: 8 }}>
+                        <summary className="btn" style={{ cursor: "pointer", listStyle: "none" }}>{L.resetPassword}</summary>
+                        <form action="/api/admin/staff" method="post" className="admin-grid" style={{ gap: 6, marginTop: 8 }}>
+                          <input type="hidden" name="action" value="reset_password" />
+                          <input type="hidden" name="id" value={row.id} />
+                          <input type="hidden" name="email" value={row.username} />
+                          <input type="hidden" name="full_name" value={row.full_name || ""} />
+                          <input type="hidden" name="role" value={normalizedRole} />
+                          <input type="hidden" name="is_active" value={row.is_active ? "true" : "false"} />
+                          <input className="admin-input" type="password" name="password" minLength={8} required placeholder={L.resetPassword} />
+                          <button className="btn" type="submit">{L.resetPassword}</button>
+                        </form>
+                      </details>
 
                       <form action="/api/admin/staff" method="post" style={{ marginTop: 8 }}>
                         <input type="hidden" name="action" value="delete" />
