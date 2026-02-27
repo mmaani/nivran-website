@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { readJsonSafe } from "@/lib/http";
+import { mergeCartSum, normalizeCartItems, readLocalCart, type CartItem, writeLocalCart } from "@/lib/cartStore";
 
 type Profile = {
   id: number;
@@ -496,6 +497,24 @@ export default function AccountClient({ locale }: { locale: string }) {
         setMsg(COPY.reorderNoItems);
         return;
       }
+
+      const mappedCartItems: CartItem[] = mapped.map((item) => ({
+        slug: item.slug,
+        name: item.slug,
+        priceJod: 0,
+        qty: item.qty,
+        variantId: item.variantId,
+      }));
+
+      const currentCart = normalizeCartItems(readLocalCart());
+      const nextCart = mode === "replace" ? mappedCartItems : mergeCartSum(currentCart, mappedCartItems);
+      writeLocalCart(nextCart);
+
+      fetch("/api/cart/sync", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "replace", items: nextCart.map((entry) => ({ slug: entry.slug, qty: entry.qty, variantId: entry.variantId })) }),
+      }).catch(() => null);
 
       sessionStorage.setItem("nivran_reorder_payload_v1", JSON.stringify({ items: mapped, mode }));
       setMsg(COPY.reorderSuccess);

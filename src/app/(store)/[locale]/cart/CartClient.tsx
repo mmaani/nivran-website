@@ -180,6 +180,8 @@ export default function CartClient({ locale }: { locale: Locale }) {
 
   const [quote, setQuote] = useState<QuotePayload | null>(null);
   const [quoteError, setQuoteError] = useState<string | null>(null);
+useEffect(() => {
+  let cancelled = false;
 
   useEffect(() => {
     let cancelled = false;
