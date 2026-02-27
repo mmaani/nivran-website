@@ -1,6 +1,7 @@
 // src/app/admin/catalog/page.tsx
 import Link from "next/link";
 import { db, isDbConnectivityError } from "@/lib/db";
+import { hasColumn } from "@/lib/dbSchema";
 import { ensureCatalogTablesSafe } from "@/lib/catalog";
 import { DEFAULT_FREE_SHIPPING_THRESHOLD_JOD, readFreeShippingThresholdJod } from "@/lib/shipping";
 import { getAdminLang } from "@/lib/admin-lang";
@@ -69,6 +70,10 @@ type PromoRow = {
   ends_at: string | null;
   product_slugs: string[] | null;
 };
+
+const WEAR_TIME_TAGS = ["day", "night", "anytime"] as const;
+const SEASON_TAGS = ["spring", "summer", "fall", "winter", "all-season"] as const;
+const AUDIENCE_TAGS = ["unisex", "unisex-men-leaning", "unisex-women-leaning", "men", "women"] as const;
 
 function isSeasonalPromoKind(value: unknown): boolean {
   if (typeof value !== "string") return false;
@@ -157,6 +162,12 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
   }
 
   try {
+    const [hasWearTimes, hasSeasons, hasAudiences] = await Promise.all([
+      hasColumn("products", "wear_times").catch(() => false),
+      hasColumn("products", "seasons").catch(() => false),
+      hasColumn("products", "audiences").catch(() => false),
+    ]);
+
     const [categoriesRes, productsRes, variantsRes, promosRes, shippingThreshold] = await Promise.all([
       db.query<CategoryRow>(
         `select key, name_en, name_ar, sort_order, is_active, is_promoted
@@ -177,9 +188,9 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
                 p.is_active,
                 coalesce(i.image_count,0)::int as image_count,
                 coalesce(ap.auto_promo_count,0)::int as auto_promo_count,
-                coalesce(p.wear_times, '{}'::text[]) as wear_times,
-                coalesce(p.seasons, '{}'::text[]) as seasons,
-                coalesce(p.audiences, '{}'::text[]) as audiences
+                ${hasWearTimes ? "coalesce(p.wear_times, '{}'::text[])" : "'{}'::text[]"} as wear_times,
+                ${hasSeasons ? "coalesce(p.seasons, '{}'::text[])" : "'{}'::text[]"} as seasons,
+                ${hasAudiences ? "coalesce(p.audiences, '{}'::text[])" : "'{}'::text[]"} as audiences
            from products p
       left join (
              select product_id, count(*)::int as image_count
@@ -502,7 +513,7 @@ export default async function AdminCatalogPage({
             <Link href="/admin" className="admin-logo" style={{ textDecoration: "none" }}>
               NIVRAN
             </Link>
-            <span className={UI.muted} style={{ fontSize: 13 }}>
+            <span className={UI.muted}>
               {isAr ? "لوحة التحكم" : "Admin"}
             </span>
           </div>
@@ -749,15 +760,15 @@ export default async function AdminCatalogPage({
                 <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(3,minmax(0,1fr))" }}>
                   <div>
                     <div style={{ fontWeight: 700, marginBottom: 6 }}>{L.wearTime}</div>
-                    <label style={{ marginInlineEnd: 10 }}><input type="checkbox" name="wear_times" value="day" /> Day</label>
-                    <label style={{ marginInlineEnd: 10 }}><input type="checkbox" name="wear_times" value="night" /> Night</label>
-                    <label><input type="checkbox" name="wear_times" value="anytime" /> Anytime</label>
+                    <label className="admin-tag-chip"><input type="checkbox" name="wear_times" value="day" /> Day</label>
+                    <label className="admin-tag-chip"><input type="checkbox" name="wear_times" value="night" /> Night</label>
+                    <label className="admin-tag-chip"><input type="checkbox" name="wear_times" value="anytime" /> Anytime</label>
                   </div>
 
                   <div>
                     <div style={{ fontWeight: 700, marginBottom: 6 }}>{L.season}</div>
-                    {["spring", "summer", "fall", "winter", "all-season"].map((s) => (
-                      <label key={s} style={{ marginInlineEnd: 10 }}>
+                    {SEASON_TAGS.map((s) => (
+                      <label key={s} className="admin-tag-chip">
                         <input type="checkbox" name="seasons" value={s} /> {s}
                       </label>
                     ))}
@@ -765,8 +776,8 @@ export default async function AdminCatalogPage({
 
                   <div>
                     <div style={{ fontWeight: 700, marginBottom: 6 }}>{L.audience}</div>
-                    {["unisex", "unisex-men-leaning", "unisex-women-leaning", "men", "women"].map((a) => (
-                      <label key={a} style={{ marginInlineEnd: 10 }}>
+                    {AUDIENCE_TAGS.map((a) => (
+                      <label key={a} className="admin-tag-chip">
                         <input type="checkbox" name="audiences" value={a} /> {a}
                       </label>
                     ))}
@@ -850,8 +861,8 @@ export default async function AdminCatalogPage({
                   <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(3,minmax(0,1fr))" }}>
                     <div>
                       <div style={{ fontWeight: 700, marginBottom: 6 }}>{L.wearTime}</div>
-                      {["day", "night", "anytime"].map((key) => (
-                        <label key={`ws-${key}`} style={{ marginInlineEnd: 10 }}>
+                      {WEAR_TIME_TAGS.map((key) => (
+                        <label key={`ws-${key}`} className="admin-tag-chip">
                           <input type="checkbox" name="wear_times" value={key} defaultChecked={selectedEditProduct.wear_times.includes(key)} /> {key}
                         </label>
                       ))}
@@ -859,8 +870,8 @@ export default async function AdminCatalogPage({
 
                     <div>
                       <div style={{ fontWeight: 700, marginBottom: 6 }}>{L.season}</div>
-                      {["spring", "summer", "fall", "winter", "all-season"].map((key) => (
-                        <label key={`ss-${key}`} style={{ marginInlineEnd: 10 }}>
+                      {SEASON_TAGS.map((key) => (
+                        <label key={`ss-${key}`} className="admin-tag-chip">
                           <input type="checkbox" name="seasons" value={key} defaultChecked={selectedEditProduct.seasons.includes(key)} /> {key}
                         </label>
                       ))}
@@ -868,8 +879,8 @@ export default async function AdminCatalogPage({
 
                     <div>
                       <div style={{ fontWeight: 700, marginBottom: 6 }}>{L.audience}</div>
-                      {["unisex", "unisex-men-leaning", "unisex-women-leaning", "men", "women"].map((key) => (
-                        <label key={`as-${key}`} style={{ marginInlineEnd: 10 }}>
+                      {AUDIENCE_TAGS.map((key) => (
+                        <label key={`as-${key}`} className="admin-tag-chip">
                           <input type="checkbox" name="audiences" value={key} defaultChecked={selectedEditProduct.audiences.includes(key)} /> {key}
                         </label>
                       ))}
@@ -935,60 +946,64 @@ export default async function AdminCatalogPage({
                           </div>
                         </td>
                         <td>{p.is_active ? L.active : L.hidden}</td>
-                        <td style={{ minWidth: 420 }}>
-                          <form action="/api/admin/catalog/products" method="post" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                        <td style={{ minWidth: 460 }}>
+                          <form action="/api/admin/catalog/products" method="post" style={{ display: "grid", gap: 10 }}>
                             <input type="hidden" name="return_to" value={returnTo} />
                             <input type="hidden" name="action" value="update" />
                             <input type="hidden" name="id" value={p.id} />
 
-                            <select name="category_key" defaultValue={p.category_key} className={UI.select}>
-                              {data.categories.map((c) => (
-                                <option key={c.key} value={c.key}>
-                                  {labelCategory(lang, c)} ({c.key})
-                                </option>
-                              ))}
-                            </select>
+                            <div style={{ display: "grid", gap: 8, gridTemplateColumns: "minmax(200px,1fr) 110px 110px auto" }}>
+                              <select name="category_key" defaultValue={p.category_key} className={UI.select}>
+                                {data.categories.map((c) => (
+                                  <option key={c.key} value={c.key}>
+                                    {labelCategory(lang, c)} ({c.key})
+                                  </option>
+                                ))}
+                              </select>
 
-                            <input name="price_jod" type="number" step="0.01" defaultValue={Number(p.price_jod || "0")} className={cx(UI.input, UI.ltr)} style={{ width: 120 }} />
-                            <input name="inventory_qty" type="number" min="0" defaultValue={p.inventory_qty} className={cx(UI.input, UI.ltr)} style={{ width: 110 }} />
-
-                            <div style={{ display: "grid", gap: 6 }}>
-                              <div className={UI.muted} style={{ fontSize: 12 }}>{L.tags}</div>
-                              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                {["day", "night", "anytime"].map((key) => (
-                                  <label key={`wt-${p.id}-${key}`} style={{ fontSize: 13 }}>
-                                    <input type="checkbox" name="wear_times" value={key} defaultChecked={p.wear_times.includes(key)} /> {key}
-                                  </label>
-                                ))}
-                              </div>
-                              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                {["spring", "summer", "fall", "winter", "all-season"].map((key) => (
-                                  <label key={`ss-${p.id}-${key}`} style={{ fontSize: 13 }}>
-                                    <input type="checkbox" name="seasons" value={key} defaultChecked={p.seasons.includes(key)} /> {key}
-                                  </label>
-                                ))}
-                              </div>
-                              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                {["unisex", "unisex-men-leaning", "unisex-women-leaning", "men", "women"].map((key) => (
-                                  <label key={`au-${p.id}-${key}`} style={{ fontSize: 13 }}>
-                                    <input type="checkbox" name="audiences" value={key} defaultChecked={p.audiences.includes(key)} /> {key}
-                                  </label>
-                                ))}
-                              </div>
+                              <input name="price_jod" type="number" step="0.01" defaultValue={Number(p.price_jod || "0")} className={cx(UI.input, UI.ltr)} />
+                              <input name="inventory_qty" type="number" min="0" defaultValue={p.inventory_qty} className={cx(UI.input, UI.ltr)} />
+                              <label style={{ display: "flex", gap: 8, alignItems: "center", whiteSpace: "nowrap" }}>
+                                <input type="checkbox" name="is_active" defaultChecked={p.is_active} /> {L.active}
+                              </label>
                             </div>
 
-                            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                              <input type="checkbox" name="is_active" defaultChecked={p.is_active} /> {L.active}
-                            </label>
+                            <details>
+                              <summary className={UI.muted} style={{ cursor: "pointer" }}>{L.tags}</summary>
+                              <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                  {WEAR_TIME_TAGS.map((key) => (
+                                    <label key={`wt-${p.id}-${key}`} className="admin-tag-chip">
+                                      <input type="checkbox" name="wear_times" value={key} defaultChecked={p.wear_times.includes(key)} /> {key}
+                                    </label>
+                                  ))}
+                                </div>
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                  {SEASON_TAGS.map((key) => (
+                                    <label key={`ss-${p.id}-${key}`} className="admin-tag-chip">
+                                      <input type="checkbox" name="seasons" value={key} defaultChecked={p.seasons.includes(key)} /> {key}
+                                    </label>
+                                  ))}
+                                </div>
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                  {AUDIENCE_TAGS.map((key) => (
+                                    <label key={`au-${p.id}-${key}`} className="admin-tag-chip">
+                                      <input type="checkbox" name="audiences" value={key} defaultChecked={p.audiences.includes(key)} /> {key}
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            </details>
 
-                            <button className={cx(UI.btn, UI.btnPrimary)} type="submit">{L.update}</button>
-
-                            <Link className={UI.btn} href={buildCatalogPath({ productEditId: p.id, variantProductId: p.id })}>
-                              {isAr ? "إدارة" : "Manage"}
-                            </Link>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                              <button className={cx(UI.btn, UI.btnPrimary)} type="submit">{L.update}</button>
+                              <Link className={UI.btn} href={buildCatalogPath({ productEditId: p.id, variantProductId: p.id })}>
+                                {isAr ? "إدارة" : "Manage"}
+                              </Link>
+                            </div>
                           </form>
 
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
                             <form action="/api/admin/catalog/products" method="post">
                               <input type="hidden" name="return_to" value={returnTo} />
                               <input type="hidden" name="action" value="clone" />
@@ -1003,6 +1018,7 @@ export default async function AdminCatalogPage({
                               <button className={UI.btn} type="submit">{L.del}</button>
                             </form>
                           </div>
+
                         </td>
                       </tr>
                     ))}
@@ -1450,32 +1466,34 @@ export default async function AdminCatalogPage({
                         <td>{c.is_active ? "✓" : "—"}</td>
                         <td>{c.is_promoted ? "✓" : "—"}</td>
                         <td style={{ minWidth: 420 }}>
-                          <form action="/api/admin/catalog/categories" method="post" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                            <input type="hidden" name="return_to" value={returnTo} />
-                            <input type="hidden" name="action" value="update" />
-                            <input type="hidden" name="key" value={c.key} />
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                            <form action="/api/admin/catalog/categories" method="post" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                              <input type="hidden" name="return_to" value={returnTo} />
+                              <input type="hidden" name="action" value="update" />
+                              <input type="hidden" name="key" value={c.key} />
 
-                            <input name="name_en" defaultValue={c.name_en} className={UI.input} style={{ width: 160 }} />
-                            <input name="name_ar" defaultValue={c.name_ar} className={UI.input} style={{ width: 160 }} />
-                            <input name="sort_order" type="number" defaultValue={c.sort_order} className={cx(UI.input, UI.ltr)} style={{ width: 110 }} />
+                              <input name="name_en" defaultValue={c.name_en} className={UI.input} style={{ width: 160 }} />
+                              <input name="name_ar" defaultValue={c.name_ar} className={UI.input} style={{ width: 160 }} />
+                              <input name="sort_order" type="number" defaultValue={c.sort_order} className={cx(UI.input, UI.ltr)} style={{ width: 110 }} />
 
-                            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                              <input type="checkbox" name="is_active" defaultChecked={c.is_active} /> {L.active}
-                            </label>
+                              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                <input type="checkbox" name="is_active" defaultChecked={c.is_active} /> {L.active}
+                              </label>
 
-                            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                              <input type="checkbox" name="is_promoted" defaultChecked={c.is_promoted} /> Promoted
-                            </label>
+                              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                <input type="checkbox" name="is_promoted" defaultChecked={c.is_promoted} /> Promoted
+                              </label>
 
-                            <button className={cx(UI.btn, UI.btnPrimary)} type="submit">{L.update}</button>
-                          </form>
+                              <button className={cx(UI.btn, UI.btnPrimary)} type="submit">{L.update}</button>
+                            </form>
 
-                          <form action="/api/admin/catalog/categories" method="post" style={{ marginTop: 8 }}>
-                            <input type="hidden" name="return_to" value={returnTo} />
-                            <input type="hidden" name="action" value="delete" />
-                            <input type="hidden" name="key" value={c.key} />
-                            <button className={UI.btn} type="submit">{L.del}</button>
-                          </form>
+                            <form action="/api/admin/catalog/categories" method="post" style={{ margin: 0 }}>
+                              <input type="hidden" name="return_to" value={returnTo} />
+                              <input type="hidden" name="action" value="delete" />
+                              <input type="hidden" name="key" value={c.key} />
+                              <button className={UI.btn} type="submit">{L.del}</button>
+                            </form>
+                          </div>
                         </td>
                       </tr>
                     ))}

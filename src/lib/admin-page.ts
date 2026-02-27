@@ -1,11 +1,11 @@
-import { cookies } from "next/headers";
+import { readAdminSessionFromCookies } from "@/lib/adminSession";
 
 export async function isAdminAuthed(): Promise<boolean> {
-  const store = await cookies();
-  const token =
-    store.get("admin_token")?.value ||
-    store.get("nivran_admin_token")?.value ||
-    "";
-  const expected = process.env.ADMIN_TOKEN || "";
-  return Boolean(expected && token && token.trim() === expected.trim());
+  const session = await readAdminSessionFromCookies();
+  return session?.role === "admin";
+}
+
+export async function getAdminRole(): Promise<"admin" | "sales" | null> {
+  const session = await readAdminSessionFromCookies();
+  return session?.role || null;
 }
