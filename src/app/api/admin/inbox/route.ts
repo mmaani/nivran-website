@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/guards";
-import { ensureInboxTables } from "@/lib/inbox";
+import { ensureInboxTablesSafe } from "@/lib/inbox";
 import { hasColumn } from "@/lib/dbSchema";
-import { ensureOrdersTables } from "@/lib/orders";
+import { ensureOrdersTablesSafe } from "@/lib/orders";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,7 +44,7 @@ export async function GET(req: Request): Promise<Response> {
     return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
   }
 
-  await Promise.all([ensureInboxTables(), ensureOrdersTables()]);
+  await Promise.all([ensureInboxTablesSafe(), ensureOrdersTablesSafe()]);
 
   const hasVerified = await hasColumn("paytabs_callbacks", "verified");
   const hasReceivedAt = await hasColumn("paytabs_callbacks", "received_at");
