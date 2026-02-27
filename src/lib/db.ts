@@ -7,12 +7,19 @@ function normalizeDatabaseUrl(connectionString: string): string {
   try {
     const url = new URL(connectionString);
 
-    const sslmode = url.searchParams.get("sslmode");
-    if (!sslmode) url.searchParams.set("sslmode", "require");
+    const sslmode = (url.searchParams.get("sslmode") || "").toLowerCase();
+    if (!sslmode) {
+      url.searchParams.set("sslmode", "require");
+    }
 
-    const sslmode2 = url.searchParams.get("sslmode");
-    if (sslmode2 === "verify-full" && !url.searchParams.get("sslrootcert")) {
-      url.searchParams.set("sslrootcert", "system");
+    // Silence pg/pg-connection-string compatibility warning while keeping current behavior.
+    if (!url.searchParams.get("uselibpqcompat")) {
+      url.searchParams.set("uselibpqcompat", "true");
+    }
+
+    // Node postgres does not understand sslrootcert=system as a cert path.
+    if ((url.searchParams.get("sslrootcert") || "").toLowerCase() === "system") {
+      url.searchParams.delete("sslrootcert");
     }
 
     return url.toString();
@@ -20,6 +27,7 @@ function normalizeDatabaseUrl(connectionString: string): string {
     return connectionString;
   }
 }
+
 
 function getPool(): Pool {
   if (pool) return pool;
@@ -31,7 +39,6 @@ function getPool(): Pool {
 
   pool = new Pool({
     connectionString,
-    ssl: connectionString.includes("localhost") ? undefined : { rejectUnauthorized: false },
   });
 
   return pool;
@@ -105,6 +112,16 @@ export function isDbConnectivityError(error: unknown): boolean {
   if (code === "57P03") return true;
   if (msg.includes("terminating connection")) return true;
   if (msg.includes("no pg_hba.conf entry")) return true;
+  if (msg.includes("self signed certificate")) return true;
+  if (msg.includes("certificate has expired")) return true;
+  if (msg.includes("unable to verify the first certificate")) return true;
 
   return false;
+}
+
+export function isDbSchemaError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const nodeError = error as Error & { code?: unknown };
+  const code = typeof nodeError.code === "string" ? nodeError.code.toUpperCase() : "";
+  return code === "42P01" || code === "42703" || code === "42883" || code === "42P07";
 }
