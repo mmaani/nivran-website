@@ -18,6 +18,8 @@ type Product = {
   name_ar: string;
   price_jod: string;
   inventory_qty: number;
+  category_key?: string | null;
+  active_promo_count?: number;
   variants: ProductVariant[];
 };
 
@@ -229,6 +231,19 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
     if (normalized === "BACKORDER") return isAr ? "طلب مؤجل" : "Backorder";
     return value || "—";
   };
+
+  const applyPromotionCode = (code: string | null | undefined) => {
+    const next = String(code || "").trim();
+    if (!next) return;
+    setPromoCode(next);
+    setMsg(isAr ? `تم تطبيق رمز العرض: ${next}` : `Promotion code applied: ${next}`);
+  };
+
+  const clearPromotionCode = () => {
+    setPromoCode("");
+    setMsg(isAr ? "تمت إزالة رمز العرض من الطلب." : "Promotion code removed from checkout.");
+  };
+
   async function checkout() {
     setLoading(true);
     setMsg("");
@@ -377,6 +392,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
                 <div style={{ fontSize: 12, opacity: 0.8 }}>
                   {money(Number(product.price_jod))} • {isAr ? "المخزون" : "Stock"} {product.inventory_qty}
                   {product.inventory_qty <= 5 ? <b style={{ marginInlineStart: 8, color: "#8b5e1a" }}>{isAr ? "مخزون منخفض" : "Low stock"}</b> : null}
+                  {Number(product.active_promo_count || 0) > 0 ? <b style={{ marginInlineStart: 8, color: "#1f6f43" }}>{isAr ? `ضمن عرض (${product.active_promo_count})` : `On promotion (${product.active_promo_count})`}</b> : null}
                 </div>
                 {product.variants?.length ? (
                   <select
@@ -451,6 +467,31 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
           </label>
           {createAccount ? <input className="admin-input" type="password" placeholder={isAr ? "كلمة مرور الحساب" : "Account password"} value={accountPassword} onChange={(event) => setAccountPassword(event.target.value)} /> : null}
         </div>
+
+        <div className="admin-card" style={{ marginTop: 10, padding: 10, background: "#fffaf2" }}>
+          <div className="admin-row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+            <b>{isAr ? "العروض النشطة في المتجر" : "Active website promotions"}</b>
+            {promoCode ? <button className="btn" type="button" onClick={clearPromotionCode}>{isAr ? "حذف العرض" : "Remove promo"}</button> : null}
+          </div>
+          <div className="admin-row" style={{ gap: 8 }}>
+            {promos.map((promo) => {
+              const code = String(promo.code || "").trim();
+              const title = isAr ? (promo.title_ar || promo.title_en || "عرض") : (promo.title_en || promo.title_ar || "Promotion");
+              const active = code && promoCode.trim().toLowerCase() === code.toLowerCase();
+              return (
+                <div key={promo.id} className="admin-row" style={{ gap: 6, border: "1px solid rgba(0,0,0,.1)", borderRadius: 999, padding: "6px 10px", background: active ? "#f0f7ef" : "#fff" }}>
+                  <span style={{ fontSize: 12 }}><b>{title}</b>{code ? ` (${code})` : ""}</span>
+                  {code ? (
+                    <button className="btn" type="button" onClick={() => applyPromotionCode(code)}>{active ? (isAr ? "مُطبّق" : "Applied") : (isAr ? "إضافة" : "Add")}</button>
+                  ) : (
+                    <span className="admin-muted" style={{ fontSize: 12 }}>{isAr ? "تلقائي" : "Auto"}</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         <datalist id="promo-list">{promos.map((promo) => (<option key={promo.id} value={promo.code || ""}>{isAr ? (promo.title_ar || promo.title_en || "عرض") : (promo.title_en || promo.title_ar || "Promotion")}</option>))}</datalist>
 
         <div className="admin-row" style={{ justifyContent: "space-between", marginTop: 12 }}>

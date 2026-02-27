@@ -11,6 +11,8 @@ type ProductRow = {
   name_ar: string;
   price_jod: string;
   inventory_qty: number;
+  category_key: string | null;
+  active_promo_count: number;
   variants_json: unknown;
 };
 
@@ -48,6 +50,8 @@ export async function GET(req: Request) {
        p.name_ar,
        p.price_jod::text as price_jod,
        p.inventory_qty,
+       p.category_key,
+       coalesce(ap.active_promo_count, 0)::int as active_promo_count,
        coalesce(
          (
            select jsonb_agg(
@@ -67,6 +71,21 @@ export async function GET(req: Request) {
          '[]'::jsonb
        ) as variants_json
      from products p
+     left join lateral (
+       select count(*)::int as active_promo_count
+       from promotions pr
+       where pr.is_active=true
+         and (pr.starts_at is null or pr.starts_at <= now())
+         and (pr.ends_at is null or pr.ends_at >= now())
+         and (
+           coalesce(array_length(pr.product_slugs, 1), 0) = 0
+           or p.slug = any(pr.product_slugs)
+         )
+         and (
+           coalesce(array_length(pr.category_keys, 1), 0) = 0
+           or p.category_key = any(pr.category_keys)
+         )
+     ) ap on true
      where p.is_active=true
      order by p.updated_at desc
      limit 400`
@@ -89,6 +108,8 @@ export async function GET(req: Request) {
     name_ar: row.name_ar,
     price_jod: row.price_jod,
     inventory_qty: row.inventory_qty,
+    category_key: row.category_key,
+    active_promo_count: row.active_promo_count,
     variants: parseVariants(row.variants_json),
   }));
 
