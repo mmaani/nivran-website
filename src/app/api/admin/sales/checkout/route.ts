@@ -5,7 +5,7 @@ import { requireAdminOrSales } from "@/lib/guards";
 import { evaluatePromoCodeForLines, type PricedOrderLine } from "@/lib/promotions";
 import { hashPassword } from "@/lib/identity";
 
-type CheckoutItem = { productId: number; qty: number; variantId?: number | null };
+type CheckoutItem = { productId: number; qty: number; variantId?: number | null; productSlug?: string | null };
 type CheckoutBody = {
   items: CheckoutItem[];
   promoCode?: string;
@@ -52,6 +52,13 @@ export async function POST(req: Request) {
   const customerCountry = String(body.customer?.country || "Jordan").trim() || "Jordan";
 
   const productIds = Array.from(new Set(body.items.map((line) => Number(line.productId)).filter((n) => Number.isFinite(n) && n > 0)));
+  const productSlugs = Array.from(
+    new Set(
+      body.items
+        .map((line) => String(line.productSlug || "").trim().toLowerCase())
+        .filter((slug) => slug.length > 0)
+    )
+  );
   const variantIds = Array.from(
     new Set(
       body.items
@@ -69,6 +76,15 @@ export async function POST(req: Request) {
       [productIds]
     );
 
+    const fallbackBySlugRes = productSlugs.length
+      ? await trx.query<{ id: number; slug: string; name_en: string; category_key: string | null; price_jod: string; inventory_qty: number }>(
+          `select id, slug, name_en, category_key, price_jod::text, inventory_qty
+             from products
+            where lower(slug) = any($1::text[])`,
+          [productSlugs]
+        )
+      : { rows: [] as Array<{ id: number; slug: string; name_en: string; category_key: string | null; price_jod: string; inventory_qty: number }> };
+
     const variantRes = variantIds.length
       ? await trx.query<{ id: number; product_id: number; label: string; size_ml: number | null; price_jod: string; is_active: boolean }>(
           `select id, product_id, label, size_ml, price_jod::text, is_active
@@ -79,11 +95,13 @@ export async function POST(req: Request) {
         )
       : { rows: [] as Array<{ id: number; product_id: number; label: string; size_ml: number | null; price_jod: string; is_active: boolean }> };
 
-    const productMap = new Map(productsRes.rows.map((row) => [row.id, row]));
+    const allProductRows = [...productsRes.rows, ...fallbackBySlugRes.rows];
+    const productMap = new Map(allProductRows.map((row) => [row.id, row]));
+    const productSlugMap = new Map(allProductRows.map((row) => [String(row.slug || "").toLowerCase(), row]));
     const variantMap = new Map(variantRes.rows.map((row) => [row.id, row]));
 
     const missingProductIds = new Set<number>();
-    const aggregated = new Map<string, { productId: number; variantId: number | null; qty: number }>();
+    const aggregated = new Map<string, { productId: number; variantId: number | null; qty: number; productSlug: string | null }>();
 
     for (const item of body.items) {
       const productId = Math.trunc(Number(item.productId || 0));
@@ -92,7 +110,7 @@ export async function POST(req: Request) {
       const key = `${productId}:${variantId ?? "base"}`;
       const prev = aggregated.get(key);
       const nextQty = normalizeQty(item.qty) + (prev?.qty || 0);
-      aggregated.set(key, { productId, variantId, qty: Math.min(nextQty, 999) });
+      aggregated.set(key, { productId, variantId, qty: Math.min(nextQty, 999), productSlug: String(item.productSlug || "").trim().toLowerCase() || null });
     }
 
     const lines: Array<
@@ -129,6 +147,14 @@ export async function POST(req: Request) {
       if (!product && variant) {
         productId = variant.product_id;
         product = productMap.get(productId) || null;
+      }
+
+      if (!product && item.productSlug) {
+        const bySlug = productSlugMap.get(item.productSlug) || null;
+        if (bySlug) {
+          product = bySlug;
+          productId = bySlug.id;
+        }
       }
 
       if (!product) {
@@ -173,7 +199,7 @@ export async function POST(req: Request) {
       return {
         ok: false as const,
         status: 409,
-        error: `No valid items found for checkout. Missing products: ${missing}`,
+        error: `No valid items found for checkout. Missing products: ${missing}. Please refresh catalog and retry.`,
         missingProductIds: Array.from(missingProductIds),
         staleCart: true,
       };
@@ -279,6 +305,7 @@ export async function POST(req: Request) {
         JSON.stringify(
           lines.map((line) => ({
             productId: line.product_id,
+            resolvedProductId: line.product_id,
             variantId: line.variant_id,
             variantLabel: line.variant_label,
             requested_qty: line.requested_qty,

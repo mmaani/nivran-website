@@ -23,7 +23,7 @@ type Product = {
 
 type Promo = { id: number; code: string | null; title_en: string | null; title_ar: string | null; discount_type: string; discount_value: string };
 
-type CartLine = { productId: number; variantId: number | null; qty: number };
+type CartLine = { productId: number; variantId: number | null; productSlug: string; qty: number };
 
 type OrderRow = {
   id: number;
@@ -164,7 +164,10 @@ export default function SalesClient() {
     setCart((prev) => {
       if (qty <= 0) return prev.filter((line) => !(line.productId === productId && line.variantId === variantId));
       const found = prev.find((line) => line.productId === productId && line.variantId === variantId);
-      if (!found) return [...prev, { productId, variantId, qty }];
+      if (!found) {
+        const product = productById.get(productId);
+        return [...prev, { productId, variantId, productSlug: product?.slug || "", qty }];
+      }
       return prev.map((line) => (line.productId === productId && line.variantId === variantId ? { ...line, qty } : line));
     });
   }
@@ -178,7 +181,6 @@ export default function SalesClient() {
   function clearCart() {
     setCart([]);
   }
-
 
 
   const paymentLabel = (value?: string | null) => {
@@ -232,7 +234,7 @@ export default function SalesClient() {
         headers: { "content-type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          items: cart.map((line) => ({ productId: line.productId, variantId: line.variantId, qty: line.qty })),
+          items: cart.map((line) => ({ productId: line.productId, productSlug: line.productSlug, variantId: line.variantId, qty: line.qty })),
           promoCode: promoCode.trim() || undefined,
           customer: { name, email, phone, city, address, country: "Jordan" },
           paymentMethod,
@@ -264,6 +266,9 @@ export default function SalesClient() {
                 : `Some products are no longer available (${missing.join(", ")}). They were removed from your cart. Please confirm again.`
             );
           }
+        }
+        if (res.status === 409 && data.error) {
+          throw new Error(isAr ? "تعذر إتمام البيع لأن المنتجات تغيّرت. تم تحديث السلة، راجعها ثم أكد مجددًا." : data.error);
         }
         throw new Error(data.error || "Checkout failed");
       }
@@ -322,10 +327,14 @@ export default function SalesClient() {
           </label>
         </div>
         <div style={{ display: "grid", gap: 8, maxHeight: 280, overflow: "auto" }}>
+          {visibleProducts.length === 0 ? (
+            <p className="admin-muted" style={{ margin: 0 }}>{isAr ? "لا توجد منتجات مطابقة للبحث الحالي." : "No products match current filters."}</p>
+          ) : null}
+
           {visibleProducts.map((product) => (
             <div key={product.id} className="admin-row" style={{ justifyContent: "space-between", borderBottom: "1px solid rgba(0,0,0,.08)", paddingBottom: 8 }}>
               <div style={{ flex: 1 }}>
-                <div><b>{product.name_en}</b> <span style={{ opacity: 0.6 }}>({product.slug})</span></div>
+                <div><b>{isAr ? product.name_ar || product.name_en : product.name_en}</b> <span style={{ opacity: 0.6 }}>({product.slug})</span></div>
                 <div style={{ fontSize: 12, opacity: 0.8 }}>
                   {money(Number(product.price_jod))} • {isAr ? "المخزون" : "Stock"} {product.inventory_qty}
                   {product.inventory_qty <= 5 ? <b style={{ marginInlineStart: 8, color: "#8b5e1a" }}>{isAr ? "مخزون منخفض" : "Low stock"}</b> : null}
@@ -366,6 +375,7 @@ export default function SalesClient() {
               <button className="btn" onClick={() => updateQty(row.productId, row.variantId, row.qty - 1)}>-</button>
               <input className="admin-input" style={{ width: 64, textAlign: "center" }} value={row.qty} onChange={(event) => updateQty(row.productId, row.variantId, Number(event.target.value || 0))} />
               <button className="btn" onClick={() => updateQty(row.productId, row.variantId, row.qty + 1)}>+</button>
+              <button className="btn" onClick={() => updateQty(row.productId, row.variantId, 0)}>{isAr ? "إزالة" : "Remove"}</button>
             </div>
             <div style={{ minWidth: 120, textAlign: "right" }}>{money(row.lineTotal)}</div>
           </div>
@@ -462,6 +472,9 @@ export default function SalesClient() {
                   <td style={{ textAlign: "right" }}>{money(Number(order.total_jod || 0))}</td>
                 </tr>
               ))}
+            {orders.length === 0 ? (
+              <tr><td colSpan={10} style={{ padding: 12 }}>{isAr ? "لا توجد طلبات مبيعات ضمن المرشحات." : "No sales orders in current filters."}</td></tr>
+              ) : null}
             </tbody>
           </table>
         </div>
