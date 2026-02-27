@@ -14,6 +14,15 @@ type ReorderPayload = {
   mode: "replace" | "add";
 };
 
+type ReorderOrderItemLine = {
+  qty?: number;
+  variant_id?: number;
+  variantId?: number;
+  product_slug?: string | null;
+  productSlug?: string | null;
+  slug?: string | null;
+};
+
 function isRecord(v: unknown): v is JsonRecord {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -51,6 +60,61 @@ function readReorderPayload(): ReorderPayload | null {
 
     if (!items.length) return null;
     return { mode, items };
+  } catch {
+    return null;
+  }
+}
+
+function toInt(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return Math.trunc(value);
+  if (typeof value === "string") {
+    const n = Number(value.trim());
+    if (Number.isFinite(n) && n > 0) return Math.trunc(n);
+  }
+  return null;
+}
+
+function toQty(value: unknown): number {
+  const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(1, Math.min(99, Math.trunc(n)));
+}
+
+function pickSlug(line: ReorderOrderItemLine): string | null {
+  const a = typeof line.product_slug === "string" ? line.product_slug : null;
+  const b = typeof line.productSlug === "string" ? line.productSlug : null;
+  const c = typeof line.slug === "string" ? line.slug : null;
+  const s = (a || b || c || "").trim();
+  return s ? s : null;
+}
+
+async function fetchReorderPayloadFromOrder(orderId: string, mode: "replace" | "add"): Promise<ReorderPayload | null> {
+  const idNum = Number(orderId);
+  if (!Number.isFinite(idNum) || idNum <= 0) return null;
+
+  try {
+    const res = await fetch(`/api/orders?id=${encodeURIComponent(orderId)}&includeItems=1`, { cache: "no-store" });
+    const data: unknown = await res.json().catch(() => null);
+    if (!res.ok || !isRecord(data) || data.ok !== true || !isRecord(data.order)) return null;
+
+    const lineItems = data.order.line_items;
+    const legacyItems = data.order.items;
+    const source = Array.isArray(lineItems) ? lineItems : Array.isArray(legacyItems) ? legacyItems : [];
+
+    const items = source
+      .map((entry): CartItem | null => {
+        if (!isRecord(entry)) return null;
+        const line = entry as ReorderOrderItemLine;
+        const slug = pickSlug(line);
+        if (!slug) return null;
+        const qty = toQty(line.qty);
+        const variantId = toInt(line.variant_id ?? line.variantId);
+        return { slug, name: slug, priceJod: 0, qty, variantId: variantId ?? null };
+      })
+      .filter((item): item is CartItem => item !== null);
+
+    if (!items.length) return null;
+    return { items, mode };
   } catch {
     return null;
   }
@@ -117,26 +181,51 @@ export default function CartClient({ locale }: { locale: Locale }) {
   const [quoteError, setQuoteError] = useState<string | null>(null);
 
   useEffect(() => {
-    const current = readCart();
-    const reorderPayload = readReorderPayload();
+    let cancelled = false;
 
-    if (reorderPayload) {
-      const nextItems = reorderPayload.mode === "replace" ? reorderPayload.items : mergeCartSum(current, reorderPayload.items);
-      writeCart(nextItems);
-      bestEffortSync(nextItems);
-      setItems(nextItems);
-      sessionStorage.removeItem(REORDER_KEY);
-      if (window.location.search.includes("reorder=1")) {
-        const target = `/${locale}/cart`;
-        window.history.replaceState({}, "", target);
+    async function run() {
+      const current = readCart();
+      let reorderPayload = readReorderPayload();
+
+      if (!reorderPayload && typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        const reorder = url.searchParams.get("reorder") === "1";
+        const orderId = url.searchParams.get("orderId") || "";
+        const modeRaw = url.searchParams.get("mode");
+        const mode: "replace" | "add" = modeRaw === "add" ? "add" : "replace";
+
+        if (reorder && orderId) {
+          reorderPayload = await fetchReorderPayloadFromOrder(orderId, mode);
+        }
       }
-    } else {
-      setItems(current);
+
+      if (cancelled) return;
+
+      if (reorderPayload) {
+        const nextItems = reorderPayload.mode === "replace" ? reorderPayload.items : mergeCartSum(current, reorderPayload.items);
+        writeCart(nextItems);
+        bestEffortSync(nextItems);
+        setItems(nextItems);
+        sessionStorage.removeItem(REORDER_KEY);
+        if (window.location.search.includes("reorder=1")) {
+          const target = `/${locale}/cart`;
+          window.history.replaceState({}, "", target);
+        }
+      } else {
+        setItems(current);
+      }
     }
+
+    run().catch(() => {
+      if (!cancelled) setItems(readCart());
+    });
 
     const onCustom = () => setItems(readCart());
     window.addEventListener("nivran_cart_updated", onCustom as EventListener);
-    return () => window.removeEventListener("nivran_cart_updated", onCustom as EventListener);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("nivran_cart_updated", onCustom as EventListener);
+    };
   }, [locale]);
 
   useEffect(() => {
