@@ -1,7 +1,7 @@
 // src/app/api/admin/order-status/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { ensureOrdersTables, commitInventoryForPaidOrderId } from "@/lib/orders";
+import { ensureOrdersTablesSafe, commitInventoryForPaidOrderId } from "@/lib/orders";
 import { requireAdmin } from "@/lib/guards";
 import { consumePromotionUsage } from "@/lib/promotions";
 
@@ -135,7 +135,7 @@ export async function POST(req: Request) {
   const auth = requireAdmin(req);
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: 401 });
 
-  await ensureOrdersTables();
+  await ensureOrdersTablesSafe();
 
   const parsed: unknown = await req.json().catch(() => ({}));
   const body = isRecord(parsed) ? parsed : {};
