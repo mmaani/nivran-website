@@ -72,6 +72,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
   const [ordersLimit, setOrdersLimit] = useState<10 | 20 | 30>(10);
   const [ordersOffset, setOrdersOffset] = useState(0);
   const [ordersHasMore, setOrdersHasMore] = useState(false);
+  const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersFrom, setOrdersFrom] = useState("");
   const [ordersTo, setOrdersTo] = useState("");
   const [promoCode, setPromoCode] = useState("");
@@ -105,34 +106,50 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
 
   const isAr = lang === "ar";
 
-  const load = useCallback(async (offsetOverride?: number) => {
+  const load = useCallback(async (offsetOverride?: number, append = false) => {
     const offset = typeof offsetOverride === "number" ? Math.max(0, Math.trunc(offsetOverride)) : ordersOffset;
+    if (ordersFrom && ordersTo && ordersFrom > ordersTo) {
+      setMsg(isAr ? "تاريخ البداية يجب أن يكون قبل تاريخ النهاية." : "From date must be before To date.");
+      return;
+    }
+
     const orderParams = new URLSearchParams({ limit: String(ordersLimit), offset: String(offset) });
     if (ordersStatusFilter) orderParams.set("status", ordersStatusFilter);
     if (ordersFrom) orderParams.set("from", ordersFrom);
     if (ordersTo) orderParams.set("to", ordersTo);
 
-    const [catalogRes, ordersRes] = await Promise.all([
-      fetch("/api/admin/sales/catalog", { credentials: "include", cache: "no-store" }),
-      fetch(`/api/admin/sales/orders?${orderParams.toString()}`, { credentials: "include", cache: "no-store" }),
-    ]);
-    const catalog = (await catalogRes.json()) as { products: Product[]; promotions: Promo[] };
-    const salesOrders = (await ordersRes.json()) as OrdersResponse;
+    setOrdersLoading(true);
+    try {
+      const [catalogRes, ordersRes] = await Promise.all([
+        fetch("/api/admin/sales/catalog", { credentials: "include", cache: "no-store" }),
+        fetch(`/api/admin/sales/orders?${orderParams.toString()}`, { credentials: "include", cache: "no-store" }),
+      ]);
+      if (!catalogRes.ok || !ordersRes.ok) {
+        throw new Error(isAr ? "تعذر تحميل بيانات المبيعات." : "Could not load sales data.");
+      }
+      const catalog = (await catalogRes.json()) as { products: Product[]; promotions: Promo[] };
+      const salesOrders = (await ordersRes.json()) as OrdersResponse;
 
-    const loadedProducts = Array.isArray(catalog.products) ? catalog.products : [];
-    setProducts(loadedProducts);
-    setPromos(Array.isArray(catalog.promotions) ? catalog.promotions : []);
-    setOrders(Array.isArray(salesOrders.orders) ? salesOrders.orders : []);
-    setOrdersHasMore(Boolean(salesOrders.pagination?.hasMore));
-    setOrdersOffset(offset);
+      const loadedProducts = Array.isArray(catalog.products) ? catalog.products : [];
+      setProducts(loadedProducts);
+      setPromos(Array.isArray(catalog.promotions) ? catalog.promotions : []);
+      const nextOrders = Array.isArray(salesOrders.orders) ? salesOrders.orders : [];
+      setOrders((prev) => (append ? [...prev, ...nextOrders] : nextOrders));
+      setOrdersHasMore(Boolean(salesOrders.pagination?.hasMore));
+      setOrdersOffset(offset);
 
-    const selection: Record<number, number | null> = {};
-    for (const product of loadedProducts) {
-      const defaultVariant = product.variants?.find((variant) => variant.is_default) || product.variants?.[0] || null;
-      selection[product.id] = defaultVariant ? defaultVariant.id : null;
+      const selection: Record<number, number | null> = {};
+      for (const product of loadedProducts) {
+        const defaultVariant = product.variants?.find((variant) => variant.is_default) || product.variants?.[0] || null;
+        selection[product.id] = defaultVariant ? defaultVariant.id : null;
+      }
+      setVariantSelection(selection);
+    } catch (error: unknown) {
+      setMsg(error instanceof Error ? error.message : (isAr ? "تعذر تحميل البيانات." : "Failed to load sales data."));
+    } finally {
+      setOrdersLoading(false);
     }
-    setVariantSelection(selection);
-  }, [ordersLimit, ordersStatusFilter, ordersFrom, ordersTo, ordersOffset]);
+  }, [ordersLimit, ordersStatusFilter, ordersFrom, ordersTo, ordersOffset, isAr]);
 
   useEffect(() => {
     void load();
@@ -216,6 +233,13 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
     setCart([]);
   }
 
+  function resetOrdersFilters() {
+    setOrdersStatusFilter("");
+    setOrdersLimit(10);
+    setOrdersFrom("");
+    setOrdersTo("");
+    setOrdersOffset(0);
+  }
 
   const paymentLabel = (value?: string | null) => {
     const normalized = String(value || "").toUpperCase();
@@ -355,7 +379,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
   }
 
   return (
-    <div className="admin-grid" style={{ gap: 16 }}>
+    <div className="admin-grid" style={{ gap: 16 }} dir={isAr ? "rtl" : "ltr"}>
       <h1 className="admin-h1">{isAr ? "بوابة المبيعات" : "Sales Portal"}</h1>
 
       <div className="admin-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
@@ -520,11 +544,12 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
           <input className="admin-input" type="date" aria-label={isAr ? "من تاريخ" : "From date"} value={ordersFrom} onChange={(event) => setOrdersFrom(event.target.value)} />
           <input className="admin-input" type="date" aria-label={isAr ? "إلى تاريخ" : "To date"} value={ordersTo} onChange={(event) => setOrdersTo(event.target.value)} />
           <button className="btn" type="button" onClick={() => void load(0)}>{isAr ? "تحديث" : "Refresh"}</button>
-          <button className="btn" type="button" disabled={ordersOffset <= 0} onClick={() => void load(Math.max(0, ordersOffset - ordersLimit))}>{isAr ? "السابق" : "Previous"}</button>
-          <button className="btn" type="button" disabled={!ordersHasMore} onClick={() => void load(ordersOffset + ordersLimit)}>{isAr ? "التالي" : "Next"}</button>
+          <button className="btn" type="button" onClick={resetOrdersFilters}>{isAr ? "إعادة ضبط" : "Reset"}</button>
+          <button className="btn" type="button" disabled={ordersOffset <= 0 || ordersLoading} onClick={() => void load(Math.max(0, ordersOffset - ordersLimit), false)}>{isAr ? "السابق" : "Previous"}</button>
+          <button className="btn" type="button" disabled={!ordersHasMore || ordersLoading} onClick={() => void load(ordersOffset + ordersLimit, true)}>{isAr ? "عرض المزيد" : "Show more"}</button>
         </div>
-        <div style={{ overflowX: "auto" }}>
-          <table className="admin-table" style={{ minWidth: 900 }}>
+        <div className="admin-table-wrap">
+          <table className="admin-table sales-orders-table">
             <thead>
               <tr>
                 <th>{isAr ? "الرقم" : "#"}</th>
@@ -542,24 +567,25 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
             <tbody>
               {orders.map((order) => (
                 <tr key={order.id}>
-                  <td>#{order.id}</td>
-                  <td>{new Date(order.created_at).toLocaleString(isAr ? "ar-JO" : "en-GB")}</td>
-                  <td>{order.customer_name || "—"}</td>
-                  <td>{order.customer_email || "—"}</td>
-                  <td>{order.customer_phone || "—"}</td>
-                  <td>{paymentLabel(order.payment_method)}</td>
-                  <td>{order.item_lines ?? 0}</td>
-                  <td>{order.item_qty_total ?? 0}</td>
-                  <td>{statusLabel(order.status)}</td>
-                  <td style={{ textAlign: "right" }}>{money(Number(order.total_jod || 0))}</td>
+                  <td data-label={isAr ? "الرقم" : "ID"}>#{order.id}</td>
+                  <td data-label={isAr ? "التاريخ" : "Created"}>{new Date(order.created_at).toLocaleString(isAr ? "ar-JO" : "en-GB")}</td>
+                  <td data-label={isAr ? "العميل" : "Customer"}>{order.customer_name || "—"}</td>
+                  <td data-label={isAr ? "البريد" : "Email"}>{order.customer_email || "—"}</td>
+                  <td data-label={isAr ? "الهاتف" : "Phone"}>{order.customer_phone || "—"}</td>
+                  <td data-label={isAr ? "الدفع" : "Payment"}>{paymentLabel(order.payment_method)}</td>
+                  <td data-label={isAr ? "العناصر" : "Items"}>{order.item_lines ?? 0}</td>
+                  <td data-label={isAr ? "الكمية" : "Qty"}>{order.item_qty_total ?? 0}</td>
+                  <td data-label={isAr ? "الحالة" : "Status"}>{statusLabel(order.status)}</td>
+                  <td data-label={isAr ? "الإجمالي" : "Amount"} style={{ textAlign: "right" }}>{money(Number(order.total_jod || 0))}</td>
                 </tr>
               ))}
             {orders.length === 0 ? (
-              <tr><td colSpan={10} style={{ padding: 12 }}>{isAr ? "لا توجد طلبات مبيعات ضمن المرشحات." : "No sales orders in current filters."}</td></tr>
+              <tr><td data-label={isAr ? "الحالة" : "Status"} colSpan={10} style={{ padding: 12 }}>{isAr ? "لا توجد طلبات مبيعات ضمن المرشحات." : "No sales orders in current filters."}</td></tr>
               ) : null}
             </tbody>
           </table>
         </div>
+        {ordersLoading ? <p className="admin-muted" style={{ marginTop: 8 }}>{isAr ? "جارٍ تحميل الطلبات..." : "Loading orders..."}</p> : null}
       </div>
     </div>
   );

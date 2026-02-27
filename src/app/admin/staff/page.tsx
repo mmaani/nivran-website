@@ -241,17 +241,17 @@ export default async function AdminStaffPage({ searchParams }: { searchParams?: 
 
                 return (
                   <tr key={row.id}>
-                    <td className="ltr">{row.id}</td>
-                    <td>{row.full_name || "—"}</td>
-                    <td className="ltr">{row.username}</td>
-                    <td>
+                    <td data-label={L.th_id} className="ltr">{row.id}</td>
+                    <td data-label={L.th_name}>{row.full_name || "—"}</td>
+                    <td data-label={L.th_email} className="ltr">{row.username}</td>
+                    <td data-label={L.th_role}>
                       <b className="ltr">{normalizedRole}</b>
                       <div style={{ fontSize: 12, opacity: 0.75 }}>{roleText}</div>
                     </td>
-                    <td>{row.is_active ? L.active : L.inactive}</td>
-                    <td style={{ fontSize: 12, opacity: 0.8 }}>{fmtDate(row.created_at, lang)}</td>
-                    <td style={{ fontSize: 12, opacity: 0.8 }}>{fmtDate(row.updated_at, lang)}</td>
-                    <td>
+                    <td data-label={L.th_status}>{row.is_active ? L.active : L.inactive}</td>
+                    <td data-label={L.th_created} style={{ fontSize: 12, opacity: 0.8 }}>{fmtDate(row.created_at, lang)}</td>
+                    <td data-label={L.th_updated} style={{ fontSize: 12, opacity: 0.8 }}>{fmtDate(row.updated_at, lang)}</td>
+                    <td data-label={L.th_actions}>
                       <form action="/api/admin/staff" method="post" className="admin-grid" style={{ gap: 6 }}>
                         <input type="hidden" name="action" value="update" />
                         <input type="hidden" name="id" value={row.id} />
@@ -295,7 +295,7 @@ export default async function AdminStaffPage({ searchParams }: { searchParams?: 
 
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ padding: 14, opacity: 0.7 }}>{L.noStaff}</td>
+                  <td data-label={L.th_status} colSpan={8} style={{ padding: 14, opacity: 0.7 }}>{L.noStaff}</td>
                 </tr>
               ) : null}
             </tbody>

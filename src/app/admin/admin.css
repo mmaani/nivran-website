@@ -1008,3 +1008,33 @@
     justify-content: flex-start;
   }
 }
+
+/* Sales portal responsive polish */
+.sales-orders-table td[data-label="Amount"],
+.sales-orders-table td[data-label="الإجمالي"] {
+  font-weight: 800;
+}
+
+@media (max-width: 640px) {
+  .sales-orders-table td[data-label="Amount"],
+  .sales-orders-table td[data-label="الإجمالي"] {
+    text-align: start !important;
+  }
+
+  .sales-orders-table td[data-label="Amount"]::before,
+  .sales-orders-table td[data-label="الإجمالي"]::before {
+    color: var(--ink);
+  }
+
+  .admin-table td:not([data-label]),
+  .table td:not([data-label]),
+  .admin-scroll td:not([data-label]) {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-table td:not([data-label])::before,
+  .table td:not([data-label])::before,
+  .admin-scroll td:not([data-label])::before {
+    content: none;
+  }
+}
