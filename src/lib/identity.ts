@@ -432,7 +432,7 @@ export async function upsertStaffUser(args: {
   const fullName =
     args.full_name === undefined ? null : args.full_name === null ? null : String(args.full_name || "").trim() || null;
 
-  const role = String(args.role || "admin").trim();
+  const role = String(args.role || "admin").trim().toLowerCase();
   const isActive = !!args.is_active;
 
   const hasUsername = await hasColumn("staff_users", "username");
@@ -440,40 +440,59 @@ export async function upsertStaffUser(args: {
 
   if (!username) throw new Error("Missing username");
 
-  if (args.id) {
-    if (args.password) {
-      const ph = await hashPassword(args.password);
-      await db.query(
-        `update staff_users
-            set ${loginColumn}=$1, full_name=$2, role=$3, is_active=$4, password_hash=$5, updated_at=now()
-          where id=$6`,
-        [username, fullName, role, isActive, ph, args.id]
-      );
-    } else {
-      await db.query(
-        `update staff_users
-            set ${loginColumn}=$1, full_name=$2, role=$3, is_active=$4, updated_at=now()
-          where id=$5`,
-        [username, fullName, role, isActive, args.id]
-      );
+  async function tryUpsertRole(persistRole: string): Promise<void> {
+    if (args.id) {
+      if (args.password) {
+        const ph = await hashPassword(args.password);
+        await db.query(
+          `update staff_users
+              set ${loginColumn}=$1, full_name=$2, role=$3, is_active=$4, password_hash=$5, updated_at=now()
+            where id=$6`,
+          [username, fullName, persistRole, isActive, ph, args.id]
+        );
+      } else {
+        await db.query(
+          `update staff_users
+              set ${loginColumn}=$1, full_name=$2, role=$3, is_active=$4, updated_at=now()
+            where id=$5`,
+          [username, fullName, persistRole, isActive, args.id]
+        );
+      }
+      return;
     }
-    return;
+
+    if (!args.password) throw new Error("Password required for new staff user");
+    const ph = await hashPassword(args.password);
+
+    await db.query(
+      `insert into staff_users (${loginColumn}, password_hash, full_name, role, is_active)
+       values ($1,$2,$3,$4,$5)
+       on conflict (${loginColumn}) do update
+          set password_hash=excluded.password_hash,
+              full_name=excluded.full_name,
+              role=excluded.role,
+              is_active=excluded.is_active,
+              updated_at=now()`,
+      [username, ph, fullName, persistRole, isActive]
+    );
   }
 
-  if (!args.password) throw new Error("Password required for new staff user");
-  const ph = await hashPassword(args.password);
+  function canRetryLegacyRole(error: unknown): boolean {
+    const code = typeof error === "object" && error && "code" in error ? String((error as { code?: unknown }).code || "") : "";
+    if (code === "23514" || code === "22P02") return true;
+    const message = typeof error === "object" && error && "message" in error ? String((error as { message?: unknown }).message || "") : "";
+    return /role/i.test(message) && /(constraint|enum|invalid)/i.test(message);
+  }
 
-  await db.query(
-    `insert into staff_users (${loginColumn}, password_hash, full_name, role, is_active)
-     values ($1,$2,$3,$4,$5)
-     on conflict (${loginColumn}) do update
-        set password_hash=excluded.password_hash,
-            full_name=excluded.full_name,
-            role=excluded.role,
-            is_active=excluded.is_active,
-            updated_at=now()`,
-    [username, ph, fullName, role, isActive]
-  );
+  try {
+    await tryUpsertRole(role);
+  } catch (error) {
+    if (role === "sales" && canRetryLegacyRole(error)) {
+      await tryUpsertRole("staff");
+      return;
+    }
+    throw error;
+  }
 }
 
 // Backwards-compat named exports used by existing routes
