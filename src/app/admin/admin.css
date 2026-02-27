@@ -237,7 +237,7 @@
   border-radius: 12px;
   min-height: 42px;
   padding: 10px 12px;
-  background: rgba(251, 248, 243, 0.55);
+  background: rgba(247, 236, 215, 0.48);
   color: var(--ink);
   text-decoration: none;
   display: flex;
@@ -251,7 +251,7 @@
 }
 
 .admin-menu-item:hover {
-  background: #fffaf2;
+  background: #fdf4e6;
   border-color: rgba(20, 20, 20, 0.18);
 }
 
@@ -339,7 +339,7 @@
   border: 1px solid var(--bd);
   border-radius: var(--card-radius);
   padding: 16px;
-  background: #fff;
+  background: #fffdf8;
   box-shadow: 0 14px 34px rgba(18, 16, 12, 0.08);
   width: 100%;
   max-width: 100%;
@@ -441,7 +441,7 @@
   border-radius: 16px;
   padding: 14px;
   border: 1px solid var(--bd);
-  background: #fff;
+  background: #fffdf8;
   box-shadow: 0 10px 26px rgba(18, 16, 12, 0.08);
   min-width: 0;
 }
@@ -513,7 +513,7 @@
   overflow-x: auto;
   border: 1px solid var(--bd);
   border-radius: 14px;
-  background: #fff;
+  background: #fffdf8;
   -webkit-overflow-scrolling: touch;
   position: relative;
   width: 100%;
@@ -575,7 +575,7 @@
   text-align: start;
   padding: 10px;
   border-bottom: 1px solid var(--bd);
-  background: var(--cream);
+  background: linear-gradient(180deg,#f8f1e3,#f2e7d2);
   color: #3f3a33;
   white-space: nowrap;
   position: sticky;
@@ -589,19 +589,19 @@
   padding: 10px;
   border-bottom: 1px solid rgba(20, 20, 20, 0.10);
   vertical-align: top;
-  background: #fff;
+  background: #fffdf8;
 }
 
 .admin-table tbody tr:nth-child(even) td,
 .table tbody tr:nth-child(even) td,
 .admin-scroll tbody tr:nth-child(even) td {
-  background: rgba(251, 248, 243, 0.55);
+  background: rgba(247, 236, 215, 0.48);
 }
 
 .admin-table tbody tr:hover td,
 .table tbody tr:hover td,
 .admin-scroll tbody tr:hover td {
-  background: #fffaf2;
+  background: #fdf4e6;
 }
 
 /* Sticky first column (desktop only) */
@@ -662,7 +662,7 @@
   .table tbody tr,
   .admin-scroll tbody tr {
     border: 1px solid var(--bd);
-    background: #fff;
+    background: #fffdf8;
     border-radius: 14px;
     box-shadow: 0 10px 26px rgba(18, 16, 12, 0.08);
     padding: 10px 12px;
@@ -721,7 +721,20 @@
   padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid var(--bd);
-  background: var(--cream);
+  background: linear-gradient(180deg,#f8f1e3,#f2e7d2);
+}
+
+.admin-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bd);
+  background: #fffaf1;
+  font-size: 12px;
+  margin-inline-end: 8px;
+  margin-bottom: 6px;
 }
 
 .mono, .ltr {
@@ -738,7 +751,7 @@
   padding: 0 var(--ctl-pad-x);
   border-radius: 12px;
   border: 1px solid var(--bd);
-  background: #fff;
+  background: #fffdf8;
   color: var(--ink);
   cursor: pointer;
   text-decoration: none;
@@ -764,7 +777,7 @@
 }
 
 .admin-shell .btn-primary:hover { filter: brightness(1.05); }
-.admin-shell .btn-secondary { background: var(--cream); }
+.admin-shell .btn-secondary { background: linear-gradient(180deg,#f8f1e3,#f2e7d2); }
 
 .admin-shell .btn:disabled {
   opacity: 0.62;
@@ -867,7 +880,7 @@
   padding: 4px 10px;
   font-size: 12px;
   font-weight: 800;
-  background: #fff;
+  background: #fffdf8;
 }
 
 .admin-pill-title {
@@ -952,3 +965,29 @@
   .admin-login-side ul { display: none; }
   .admin-login-form { padding: 16px; gap: 12px; }
 }
+
+/* Premium header/login polish */
+.admin-brand-chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+.admin-topbar {
+  background: linear-gradient(180deg, rgba(255,255,255,.92), rgba(247,240,229,.88));
+  border-bottom-color: rgba(169,130,62,.25);
+}
+.nav-link.active { box-shadow: 0 10px 28px rgba(139,101,36,.16); }
+.admin-login-side-lux {
+  background: radial-gradient(120% 150% at 20% 15%, rgba(230,199,146,.55), rgba(22,20,16,.95)),
+              linear-gradient(145deg, #1b1711, #2c2318 58%, #3a2f22);
+  color: rgba(255,255,255,.92);
+}
+.admin-login-form {
+  background: linear-gradient(180deg, #ffffff, #fffaf2);
+}
+.admin-login-form h2 { letter-spacing: .02em; }
+.admin-login-card { box-shadow: 0 28px 64px rgba(24,20,14,.14); }
+
+.admin-topbar-compact { gap: 8px; }
+.admin-topbar-compact .admin-topbar-main { align-items: center; }
+.admin-topbar-compact .admin-brand { min-width: 240px; }
+.admin-topbar-compact .admin-nav { flex: 1; }
+.admin-topbar-compact .admin-actions { margin-inline-start: 0; }
+.admin-table td form .btn { min-height: 38px; }
+.admin-table td form .admin-input, .admin-table td form .admin-select { background: #fffaf1; }
