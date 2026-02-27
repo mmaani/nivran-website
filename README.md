@@ -24,6 +24,19 @@ This executes:
 - lint
 - production build
 
+### Critical endpoint monitor smoke check
+
+Run this to perform a synthetic smoke check against key customer-facing endpoints:
+
+```bash
+BASE_URL=http://127.0.0.1:3000 LOCALE=en pnpm monitor:critical-endpoints
+```
+
+Default checks include:
+- `/api/health`
+- `/api/catalog/product-by-slug?slug=nivran-calm-100ml`
+- `/<locale>/checkout`
+
 ## Local development
 
 1. Install dependencies:

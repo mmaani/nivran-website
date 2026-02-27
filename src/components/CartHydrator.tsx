@@ -4,6 +4,7 @@ import { useEffect } from "react";
 
 const KEY = "nivran_cart_v1";
 const KEY_CUS = "nivran_customer_id_v1";
+const REORDER_KEY = "nivran_reorder_payload_v1";
 
 type CartItem = { slug: string; name: string; priceJod: number; qty: number };
 
@@ -72,6 +73,19 @@ function getBool(obj: JsonRecord, key: string): boolean {
   return obj[key] === true;
 }
 
+function hasPendingReorderPayload(): boolean {
+  try {
+    const byQuery = typeof window !== "undefined" && new URL(window.location.href).searchParams.get("reorder") === "1";
+    if (byQuery) return true;
+    const raw = sessionStorage.getItem(REORDER_KEY);
+    if (!raw) return false;
+    const parsed: unknown = JSON.parse(raw);
+    return isRecord(parsed) && Array.isArray(parsed.items) && parsed.items.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export default function CartHydrator() {
   useEffect(() => {
     (async () => {
@@ -89,6 +103,10 @@ export default function CartHydrator() {
 
       const localItems = readLocal();
       const localCustomer = readLocalCustomerId();
+
+      // Reorder flow has its own cart apply+sync path in CartClient.
+      // Skip hydrator merge/mirror to avoid race-driven double-merge quantities.
+      if (hasPendingReorderPayload()) return;
 
       // If local cart belongs to another logged-in account, keep server as source of truth.
       if (localCustomer && localCustomer !== customerId) {
