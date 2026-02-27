@@ -22,6 +22,11 @@ export async function GET(req: Request) {
   const auth = requireAdminOrSales(req);
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
 
+  const url = new URL(req.url);
+  const limitRaw = Number(url.searchParams.get("limit") || "120");
+  const limit = Math.max(20, Math.min(400, Number.isFinite(limitRaw) ? Math.trunc(limitRaw) : 120));
+  const statusFilter = String(url.searchParams.get("status") || "").trim().toUpperCase();
+
   const auditMap = await db
     .query<{ order_id: number }>(
       `select distinct order_id
@@ -30,13 +35,15 @@ export async function GET(req: Request) {
           and order_id is not null
           ${auth.role === "sales" ? "and actor_staff_id=$1" : ""}
         order by order_id desc
-        limit 200`,
+        limit ${limit}`,
       auth.role === "sales" ? [auth.staffId] : []
     )
     .catch(() => ({ rows: [] as Array<{ order_id: number }> }));
 
   const ids = auditMap.rows.map((row) => row.order_id).filter((id) => Number.isFinite(id));
   if (!ids.length) return NextResponse.json({ ok: true, orders: [] });
+
+  const whereStatus = statusFilter ? ` and o.status = $2` : "";
 
   const orders = await db.query<SalesOrderRow>(
     `select
@@ -56,8 +63,9 @@ export async function GET(req: Request) {
        o.created_at::text as created_at
      from orders o
      where o.id = any($1::bigint[])
+       ${whereStatus}
      order by o.created_at desc`,
-    [ids]
+    statusFilter ? [ids, statusFilter] : [ids]
   );
 
   return NextResponse.json({ ok: true, orders: orders.rows });

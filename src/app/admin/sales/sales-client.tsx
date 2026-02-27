@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 type ProductVariant = {
   id: number;
@@ -54,6 +54,8 @@ export default function SalesClient() {
   const [query, setQuery] = useState("");
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
   const [sortMode, setSortMode] = useState<"recent" | "name" | "stock-asc" | "stock-desc">("recent");
+  const [ordersStatusFilter, setOrdersStatusFilter] = useState<"" | "PAID" | "BACKORDER">("");
+  const [ordersLimit, setOrdersLimit] = useState<120 | 200 | 300>(120);
   const [promoCode, setPromoCode] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -66,10 +68,13 @@ export default function SalesClient() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
 
-  async function load() {
+  const load = useCallback(async () => {
+    const orderParams = new URLSearchParams({ limit: String(ordersLimit) });
+    if (ordersStatusFilter) orderParams.set("status", ordersStatusFilter);
+
     const [catalogRes, ordersRes] = await Promise.all([
       fetch("/api/admin/sales/catalog", { credentials: "include", cache: "no-store" }),
-      fetch("/api/admin/sales/orders", { credentials: "include", cache: "no-store" }),
+      fetch(`/api/admin/sales/orders?${orderParams.toString()}`, { credentials: "include", cache: "no-store" }),
     ]);
     const catalog = (await catalogRes.json()) as { products: Product[]; promotions: Promo[] };
     const salesOrders = (await ordersRes.json()) as { orders: OrderRow[] };
@@ -85,11 +90,11 @@ export default function SalesClient() {
       selection[product.id] = defaultVariant ? defaultVariant.id : null;
     }
     setVariantSelection(selection);
-  }
+  }, [ordersLimit, ordersStatusFilter]);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   const productById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
 
@@ -340,6 +345,19 @@ export default function SalesClient() {
 
       <div className="admin-card" style={{ padding: 14 }}>
         <h3>My Sales Orders</h3>
+        <div className="admin-row" style={{ gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+          <select className="admin-select" value={ordersStatusFilter} onChange={(event) => setOrdersStatusFilter(event.target.value as "" | "PAID" | "BACKORDER")}>
+            <option value="">All statuses</option>
+            <option value="PAID">Paid</option>
+            <option value="BACKORDER">Backorder</option>
+          </select>
+          <select className="admin-select" value={ordersLimit} onChange={(event) => setOrdersLimit(Number(event.target.value) as 120 | 200 | 300)}>
+            <option value={120}>Latest 120</option>
+            <option value={200}>Latest 200</option>
+            <option value={300}>Latest 300</option>
+          </select>
+          <button className="btn" type="button" onClick={() => void load()}>Refresh</button>
+        </div>
         <div style={{ overflowX: "auto" }}>
           <table className="admin-table" style={{ minWidth: 900 }}>
             <thead>
