@@ -112,11 +112,7 @@ export default function AdminShell({
     }
 
     document.addEventListener("mousedown", onDocPointerDown);
-    document.addEventListener("keydown", onDocKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onDocPointerDown);
-      document.removeEventListener("keydown", onDocKeyDown);
-    };
+    return () => document.removeEventListener("mousedown", onDocPointerDown);
   }, [menuOpen]);
 
   return (
