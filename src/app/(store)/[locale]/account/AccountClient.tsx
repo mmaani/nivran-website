@@ -462,21 +462,36 @@ export default function AccountClient({ locale }: { locale: string }) {
       const normalizedLines = orderObj?.line_items;
       const legacyLines = orderObj?.items;
 
-      const list = Array.isArray(normalizedLines)
-        ? (normalizedLines as OrderItemLine[])
-        : Array.isArray(legacyLines)
-          ? (legacyLines as OrderItemLine[])
-          : [];
+      const normalizedList = Array.isArray(normalizedLines) ? (normalizedLines as OrderItemLine[]) : [];
+      const legacyList = Array.isArray(legacyLines) ? (legacyLines as OrderItemLine[]) : [];
 
-      const mapped: CartReorderItem[] = list
-        .map((x) => {
-          const slug = pickSlug(x);
+      const slugByVariant = new Map<number, string>();
+      for (const legacy of legacyList) {
+        const variantId = toInt(legacy.variant_id ?? legacy.variantId);
+        const slug = pickSlug(legacy);
+        if (variantId && slug && !slugByVariant.has(variantId)) slugByVariant.set(variantId, slug);
+      }
+
+      const mappedNormalized: CartReorderItem[] = normalizedList
+        .map((line) => {
+          const variantId = toInt(line.variant_id ?? line.variantId);
+          const directSlug = pickSlug(line);
+          const slug = directSlug || (variantId ? slugByVariant.get(variantId) || null : null);
           if (!slug) return null;
-          const qty = toQty(x.qty);
-          const variantId = toInt(x.variant_id ?? x.variantId);
-          return { slug, qty, variantId: variantId ?? null };
+          return { slug, qty: toQty(line.qty), variantId: variantId ?? null };
         })
-        .filter((x): x is CartReorderItem => Boolean(x));
+        .filter((entry): entry is CartReorderItem => entry !== null);
+
+      const mappedLegacy: CartReorderItem[] = legacyList
+        .map((line) => {
+          const slug = pickSlug(line);
+          if (!slug) return null;
+          const variantId = toInt(line.variant_id ?? line.variantId);
+          return { slug, qty: toQty(line.qty), variantId: variantId ?? null };
+        })
+        .filter((entry): entry is CartReorderItem => entry !== null);
+
+      const mapped = mappedNormalized.length ? mappedNormalized : mappedLegacy;
 
       if (!mapped.length) {
         setMsg(COPY.reorderNoItems);

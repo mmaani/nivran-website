@@ -97,6 +97,7 @@ type OrderListRow = {
   promo_code?: string | null;
   promotion_id?: string | null;
   discount_source?: string | null;
+  items_snapshot?: unknown;
 };
 
 type OrderItemRow = {
@@ -170,6 +171,7 @@ export async function GET(req: Request) {
   const hasPromoCode = await hasColumn("orders", "promo_code");
   const hasPromotionId = await hasColumn("orders", "promotion_id");
   const hasDiscountSource = await hasColumn("orders", "discount_source");
+  const hasOrderItemsSnapshot = await hasColumn("orders", "items");
 
   const hasOrderItemsJsonb = await hasColumn("order_items", "items");
   const hasOrderItemsNormalized = await hasColumn("order_items", "variant_id");
@@ -215,6 +217,7 @@ export async function GET(req: Request) {
               ${hasPromoCode ? "promo_code" : "null::text"} as promo_code,
               ${hasPromotionId ? "promotion_id::text" : "null::text"} as promotion_id,
               ${hasDiscountSource ? "discount_source" : "null::text"} as discount_source,
+              ${hasOrderItemsSnapshot ? "items" : "null::jsonb"} as items_snapshot,
               created_at::text as created_at
          from orders
         where id=$1 and customer_id=$2
@@ -253,7 +256,8 @@ export async function GET(req: Request) {
           order by oi.id asc`,
         [orderId]
       );
-      return Response.json({ ok: true, order: { ...order, line_items: ir.rows } });
+      const snapshotItems = Array.isArray(order.items_snapshot) ? order.items_snapshot : [];
+      return Response.json({ ok: true, order: { ...order, line_items: ir.rows, items: snapshotItems } });
     }
 
     return Response.json({ ok: true, order });
