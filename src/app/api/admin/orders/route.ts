@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { ensureOrdersTables } from "@/lib/orders";
+import { ensureOrdersTablesSafe } from "@/lib/orders";
 import { requireAdmin } from "@/lib/guards";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  await ensureOrdersTables();
+  await ensureOrdersTablesSafe();
   const auth = requireAdmin(req);
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: 401 });
 

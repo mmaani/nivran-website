@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { ensureOrdersTables } from "@/lib/orders";
+import { ensureOrdersTablesSafe } from "@/lib/orders";
 import OrdersClient from "./ui";
 import { adminT, getAdminLang } from "@/lib/admin-lang";
 
@@ -46,7 +46,7 @@ async function hasColumn(columnName: string): Promise<boolean> {
 }
 
 export default async function AdminOrdersPage() {
-  await ensureOrdersTables();
+  await ensureOrdersTablesSafe();
 
   const lang = await getAdminLang();
   const t = adminT(lang);

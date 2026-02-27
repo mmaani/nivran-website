@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { db, isDbConnectivityError } from "@/lib/db";
-import { ensureOrdersTables } from "@/lib/orders";
-import { ensureInboxTables } from "@/lib/inbox";
+import { db, isDbConnectivityError, isDbSchemaError } from "@/lib/db";
+import { ensureOrdersTablesSafe } from "@/lib/orders";
+import { ensureInboxTablesSafe } from "@/lib/inbox";
 import { getAdminLang } from "@/lib/admin-lang";
 import RequireAdmin from "./_components/RequireAdmin";
 
@@ -57,7 +57,7 @@ function toNum(v: string | null | undefined): number {
 
 async function getStats(): Promise<DashboardStats> {
   try {
-    await Promise.all([ensureOrdersTables(), ensureInboxTables()]);
+    await Promise.all([ensureOrdersTablesSafe(), ensureInboxTablesSafe()]);
 
     const [
       totalOrders,
@@ -117,7 +117,7 @@ async function getStats(): Promise<DashboardStats> {
       recentCallbacks: recentCallbacks.rows,
     };
   } catch (error: unknown) {
-    if (!isDbConnectivityError(error)) throw error;
+    if (!isDbConnectivityError(error) && !isDbSchemaError(error)) throw error;
 
     return {
       health: "fallback",
