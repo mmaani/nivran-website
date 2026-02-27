@@ -64,6 +64,10 @@ export default async function AdminStaffPage({ searchParams }: { searchParams?: 
   const saved = String(resolved?.saved || "").trim();
   const error = String(resolved?.error || "").trim();
 
+  const query = String(resolved?.q || "").trim().toLowerCase();
+  const saved = String(resolved?.saved || "").trim();
+  const error = String(resolved?.error || "").trim();
+
   const L =
     lang === "ar"
       ? {
@@ -152,6 +156,22 @@ export default async function AdminStaffPage({ searchParams }: { searchParams?: 
       if (!isDbConnectivityError(error) && !isDbSchemaError(error)) throw error;
     }
   }
+
+  const filtered = rows.filter((row) => {
+    if (!query) return true;
+    const hay = `${row.username} ${row.full_name || ""} ${row.role}`.toLowerCase();
+    return hay.includes(query);
+  });
+
+  const stats = {
+    total: rows.length,
+    active: rows.filter((row) => row.is_active).length,
+    inactive: rows.filter((row) => !row.is_active).length,
+    admins: rows.filter((row) => {
+      const role = String(row.role || "").toLowerCase();
+      return role === "admin" || role === "ops" || role === "sales";
+    }).length,
+  };
 
   const filtered = rows.filter((row) => {
     if (!query) return true;
