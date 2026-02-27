@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureOrdersTables, commitInventoryForPaidCart } from "@/lib/orders";
 import { consumePromotionUsage } from "@/lib/promotions";
+import { sendOrderThankYouEmail } from "@/lib/email";
+import { hasSuccessfulEmailByKindAndMeta } from "@/lib/emailLog";
 import {
   computePaytabsSignature,
   getPaytabsEnv,
@@ -117,6 +119,60 @@ async function tryCommitInventoryOnPaid(cartId: string): Promise<void> {
   });
 }
 
+
+
+type OrderEmailRow = {
+  cart_id: string;
+  customer_name: string | null;
+  customer_email: string | null;
+  total_jod: string | null;
+  items: unknown;
+};
+
+async function trySendPaidOrderThankYouEmail(cartId: string): Promise<void> {
+  const orderRes = await db.query<OrderEmailRow>(
+    `select cart_id, customer_name, customer_email, total_jod::text, items
+       from orders
+      where cart_id = $1
+      limit 1`,
+    [cartId]
+  );
+
+  const order = orderRes.rows[0];
+  if (!order) return;
+  const to = String(order.customer_email || "").trim().toLowerCase();
+  if (!to) return;
+
+  const alreadySent = await hasSuccessfulEmailByKindAndMeta({
+    kind: "order_thank_you",
+    to,
+    metaKey: "cartId",
+    metaValue: cartId,
+  }).catch(() => false);
+  if (alreadySent) return;
+
+  const rawItems = Array.isArray(order.items) ? order.items : [];
+  const items = rawItems.map((entry) => {
+    if (!entry || typeof entry !== "object") return { nameEn: "Item", nameAr: null, qty: 1, totalJod: 0 };
+    const row = entry as Record<string, unknown>;
+    return {
+      nameEn: String(row.name_en || row.nameEn || row.slug || "Item"),
+      nameAr: row.name_ar ? String(row.name_ar) : null,
+      qty: Math.max(1, Math.trunc(Number(row.requested_qty || row.qty || 1))),
+      totalJod: Number(row.line_total_jod || row.lineTotalJod || 0),
+    };
+  });
+
+  await sendOrderThankYouEmail({
+    to,
+    customerName: String(order.customer_name || "Customer"),
+    items,
+    totalJod: Number(order.total_jod || 0),
+    accountUrl: "https://www.nivran.com/en/account",
+    returningCustomer: true,
+    cartId,
+  });
+}
 export async function POST(req: Request) {
   await ensureOrdersTables();
   const { serverKey } = getPaytabsEnv();
@@ -207,6 +263,11 @@ export async function POST(req: Request) {
       await tryConsumeCodePromoOnPaid(cartId);
     } catch {
       // ignore consume errors
+    }
+    try {
+      await trySendPaidOrderThankYouEmail(cartId);
+    } catch {
+      // ignore email errors
     }
   }
 
