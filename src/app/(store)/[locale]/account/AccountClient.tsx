@@ -33,12 +33,19 @@ type OrderListRow = {
 };
 
 type OrderItemLine = {
+  id?: number;
   qty?: number;
   variant_id?: number;
   variantId?: number;
   product_slug?: string | null;
   productSlug?: string | null;
   slug?: string | null;
+};
+
+type OrderInsight = {
+  totalOrders: number;
+  totalSpent: number;
+  lastOrderAt: string | null;
 };
 
 type CartReorderItem = { slug: string; qty: number; variantId: number | null };
@@ -169,6 +176,13 @@ export default function AccountClient({ locale }: { locale: string }) {
       loggingOut: isAr ? "جارٍ تسجيل الخروج..." : "Logging out...",
       logout: isAr ? "تسجيل الخروج" : "Logout",
       reorderLoading: isAr ? "جارٍ التحضير..." : "Preparing...",
+      reorderSuccess: isAr ? "تم تجهيز الطلب. يتم تحويلك للسلة..." : "Order prepared. Redirecting to your cart...",
+      reorderNoItems: isAr ? "لا يمكن إعادة الطلب لهذا الطلب حالياً." : "We couldn't rebuild this order yet.",
+      overviewOrders: isAr ? "إجمالي الطلبات" : "Total orders",
+      overviewSpent: isAr ? "إجمالي الإنفاق" : "Total spent",
+      overviewLast: isAr ? "آخر طلب" : "Last order",
+      noDate: isAr ? "لا يوجد" : "N/A",
+      ordersTitle: isAr ? "طلباتك" : "Your Orders",
       verifySending: isAr ? "جارٍ الإرسال..." : "Sending...",
     }),
     [isAr]
@@ -200,6 +214,31 @@ export default function AccountClient({ locale }: { locale: string }) {
   const [countryActiveIdx, setCountryActiveIdx] = useState(0);
 
   const verified = useMemo(() => asBool(profile?.is_verified), [profile?.is_verified]);
+
+  const orderInsight = useMemo<OrderInsight>(() => {
+    if (!orders.length) return { totalOrders: 0, totalSpent: 0, lastOrderAt: null };
+
+    let totalSpent = 0;
+    let latestTime = 0;
+    let latestRaw: string | null = null;
+
+    for (const row of orders) {
+      const amount = Number(row.total_jod ?? row.amount_jod ?? 0);
+      if (Number.isFinite(amount)) totalSpent += amount;
+
+      const created = Date.parse(row.created_at);
+      if (Number.isFinite(created) && created > latestTime) {
+        latestTime = created;
+        latestRaw = row.created_at;
+      }
+    }
+
+    return {
+      totalOrders: orders.length,
+      totalSpent,
+      lastOrderAt: latestRaw,
+    };
+  }, [orders]);
 
   const canSave = useMemo(() => {
     if (!fullName.trim()) return false;
@@ -370,9 +409,14 @@ export default function AccountClient({ locale }: { locale: string }) {
       }
 
       const orderObj = (data as Record<string, unknown>).order as Record<string, unknown> | undefined;
-      const linesUnknown = orderObj ? (orderObj.line_items as unknown) : null;
+      const normalizedLines = orderObj?.line_items;
+      const legacyLines = orderObj?.items;
 
-      const list = Array.isArray(linesUnknown) ? (linesUnknown as OrderItemLine[]) : [];
+      const list = Array.isArray(normalizedLines)
+        ? (normalizedLines as OrderItemLine[])
+        : Array.isArray(legacyLines)
+          ? (legacyLines as OrderItemLine[])
+          : [];
 
       const mapped: CartReorderItem[] = list
         .map((x) => {
@@ -385,11 +429,12 @@ export default function AccountClient({ locale }: { locale: string }) {
         .filter((x): x is CartReorderItem => Boolean(x));
 
       if (!mapped.length) {
-        setMsg(COPY.error);
+        setMsg(COPY.reorderNoItems);
         return;
       }
 
       sessionStorage.setItem("nivran_reorder_payload_v1", JSON.stringify({ items: mapped, mode }));
+      setMsg(COPY.reorderSuccess);
       window.location.href = `/${locale}/cart?reorder=1`;
     } catch {
       setMsg(COPY.error);
@@ -443,6 +488,17 @@ export default function AccountClient({ locale }: { locale: string }) {
     setCountry(v || (code ? code : ""));
     setCountryQuery(v);
     setCountryOpen(false);
+  }
+
+  function formatDate(raw: string | null): string {
+    if (!raw) return COPY.noDate;
+    const date = new Date(raw);
+    if (!Number.isFinite(date.getTime())) return COPY.noDate;
+    return date.toLocaleDateString(locale === "ar" ? "ar" : "en", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
   }
 
   function onCountryKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -631,6 +687,21 @@ export default function AccountClient({ locale }: { locale: string }) {
         </div>
 
         <div className="card account-panel">
+          <div className="orders-overview" aria-label={COPY.ordersTitle}>
+            <div className="overview-item">
+              <span className="muted">{COPY.overviewOrders}</span>
+              <strong>{orderInsight.totalOrders}</strong>
+            </div>
+            <div className="overview-item">
+              <span className="muted">{COPY.overviewSpent}</span>
+              <strong>{orderInsight.totalSpent.toFixed(2)} JOD</strong>
+            </div>
+            <div className="overview-item">
+              <span className="muted">{COPY.overviewLast}</span>
+              <strong>{formatDate(orderInsight.lastOrderAt)}</strong>
+            </div>
+          </div>
+
           {orders.length === 0 ? (
             <p className="muted" style={{ margin: 0 }}>{COPY.emptyOrders}</p>
           ) : (
