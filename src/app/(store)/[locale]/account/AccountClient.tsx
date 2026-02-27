@@ -522,6 +522,7 @@ export default function AccountClient({ locale }: { locale: string }) {
         reorder: "1",
         orderId: String(reorderOrderId),
         mode,
+        t: String(Date.now()),
       });
       window.location.href = `/${locale}/cart?${qs.toString()}`;
     } catch {

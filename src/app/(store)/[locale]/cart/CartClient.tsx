@@ -8,6 +8,7 @@ type Locale = "en" | "ar";
 type JsonRecord = Record<string, unknown>;
 
 const REORDER_KEY = "nivran_reorder_payload_v1";
+const REORDER_CONSUMED_KEY = "nivran_reorder_consumed_v1";
 
 type ReorderPayload = {
   items: CartItem[];
@@ -196,13 +197,25 @@ export default function CartClient({ locale }: { locale: Locale }) {
       const reorderOrderId = url?.searchParams.get("orderId") || "";
       const modeRaw = url?.searchParams.get("mode");
       const mode: "replace" | "add" = modeRaw === "add" ? "add" : "replace";
+      const nonce = url?.searchParams.get("t") || "";
 
       if (hasReorderFlag) {
         const target = `/${locale}/cart`;
         window.history.replaceState({}, "", target);
       }
 
-      let reorderPayload = readReorderPayload();
+      const consumeToken = `${reorderOrderId}:${mode}:${nonce}`;
+      if (hasReorderFlag) {
+        const consumed = sessionStorage.getItem(REORDER_CONSUMED_KEY);
+        if (consumed === consumeToken) {
+          setItems(current);
+          sessionStorage.removeItem(REORDER_KEY);
+          return;
+        }
+        sessionStorage.setItem(REORDER_CONSUMED_KEY, consumeToken);
+      }
+
+      let reorderPayload = hasReorderFlag ? readReorderPayload() : null;
 
       if (!reorderPayload && hasReorderFlag && reorderOrderId) {
         reorderPayload = await fetchReorderPayloadFromOrder(reorderOrderId, mode);
