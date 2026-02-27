@@ -59,8 +59,9 @@ function readReorderPayload(): ReorderPayload | null {
       })
       .filter((entry): entry is CartItem => entry !== null);
 
-    if (!items.length) return null;
-    return { mode, items };
+    const collapsed = collapseCartItems(items);
+    if (!collapsed.length) return null;
+    return { mode, items: collapsed };
   } catch {
     return null;
   }
@@ -114,8 +115,9 @@ async function fetchReorderPayloadFromOrder(orderId: string, mode: "replace" | "
       })
       .filter((item): item is CartItem => item !== null);
 
-    if (!items.length) return null;
-    return { items, mode };
+    const collapsed = collapseCartItems(items);
+    if (!collapsed.length) return null;
+    return { items: collapsed, mode };
   } catch {
     return null;
   }
@@ -125,6 +127,20 @@ function readCart(): CartItem[] {
   return normalizeCartItems(readLocalCart());
 }
 
+
+function collapseCartItems(items: CartItem[]): CartItem[] {
+  const map = new Map<string, CartItem>();
+  for (const it of normalizeCartItems(items)) {
+    const key = `${it.slug}::${it.variantId ?? 0}`;
+    const prev = map.get(key);
+    if (!prev) {
+      map.set(key, { ...it, qty: Math.max(1, Math.min(99, Math.trunc(it.qty || 1))) });
+      continue;
+    }
+    map.set(key, { ...prev, qty: Math.max(1, Math.min(99, Math.trunc((prev.qty || 0) + (it.qty || 0)))) });
+  }
+  return Array.from(map.values());
+}
 function writeCart(items: CartItem[]) {
   writeLocalCart(normalizeCartItems(items));
 }
