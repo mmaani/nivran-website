@@ -7,11 +7,15 @@ function normalizeDatabaseUrl(connectionString: string): string {
   try {
     const url = new URL(connectionString);
 
-    const sslmode = url.searchParams.get("sslmode");
-    if (!sslmode) url.searchParams.set("sslmode", "require");
+    const sslmode = (url.searchParams.get("sslmode") || "").toLowerCase();
+    if (!sslmode) {
+      url.searchParams.set("sslmode", "verify-full");
+    } else if (sslmode === "prefer" || sslmode === "require" || sslmode === "verify-ca") {
+      // Keep current strong behavior and silence pg v9 compatibility warning.
+      url.searchParams.set("sslmode", "verify-full");
+    }
 
-    const sslmode2 = url.searchParams.get("sslmode");
-    if (sslmode2 === "verify-full" && !url.searchParams.get("sslrootcert")) {
+    if (url.searchParams.get("sslmode") === "verify-full" && !url.searchParams.get("sslrootcert")) {
       url.searchParams.set("sslrootcert", "system");
     }
 
@@ -21,6 +25,7 @@ function normalizeDatabaseUrl(connectionString: string): string {
   }
 }
 
+
 function getPool(): Pool {
   if (pool) return pool;
 
@@ -29,9 +34,19 @@ function getPool(): Pool {
 
   const connectionString = normalizeDatabaseUrl(rawConnectionString);
 
+  const host = (() => {
+    try {
+      return new URL(connectionString).hostname;
+    } catch {
+      return "";
+    }
+  })();
+
+  const isLocal = host === "localhost" || host === "127.0.0.1";
+
   pool = new Pool({
     connectionString,
-    ssl: connectionString.includes("localhost") ? undefined : { rejectUnauthorized: false },
+    ssl: isLocal ? undefined : { rejectUnauthorized: true },
   });
 
   return pool;
