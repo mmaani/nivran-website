@@ -25,7 +25,6 @@ type SearchParams = {
 const ROLE_LABELS: Record<string, { en: string; ar: string }> = {
   admin: { en: "Admin", ar: "مدير" },
   ops: { en: "Operations", ar: "عمليات" },
-  staff: { en: "Staff", ar: "موظف" },
   sales: { en: "Sales", ar: "مبيعات" },
 };
 
@@ -187,8 +186,7 @@ export default async function AdminStaffPage({ searchParams }: { searchParams?: 
 
           <div className="admin-grid" style={{ gap: 8 }}>
             <label style={{ fontSize: 13, opacity: 0.8 }}>{L.role}</label>
-            <select className="admin-select" name="role" defaultValue="staff">
-              <option value="staff">staff</option>
+            <select className="admin-select" name="role" defaultValue="sales">
               <option value="sales">sales</option>
               <option value="ops">ops</option>
               <option value="admin">admin</option>
@@ -236,8 +234,9 @@ export default async function AdminStaffPage({ searchParams }: { searchParams?: 
             </thead>
             <tbody>
               {filtered.map((row) => {
-                const roleKey = String(row.role || "staff").toLowerCase();
-                const roleLabel = ROLE_LABELS[roleKey] || { en: roleKey, ar: roleKey };
+                const roleKey = String(row.role || "sales").toLowerCase();
+                const normalizedRole = roleKey === "staff" ? "sales" : roleKey;
+                const roleLabel = ROLE_LABELS[normalizedRole] || { en: normalizedRole, ar: normalizedRole };
                 const roleText = lang === "ar" ? roleLabel.ar : roleLabel.en;
 
                 return (
@@ -246,7 +245,7 @@ export default async function AdminStaffPage({ searchParams }: { searchParams?: 
                     <td>{row.full_name || "—"}</td>
                     <td className="ltr">{row.username}</td>
                     <td>
-                      <b className="ltr">{roleKey}</b>
+                      <b className="ltr">{normalizedRole}</b>
                       <div style={{ fontSize: 12, opacity: 0.75 }}>{roleText}</div>
                     </td>
                     <td>{row.is_active ? L.active : L.inactive}</td>
@@ -258,8 +257,7 @@ export default async function AdminStaffPage({ searchParams }: { searchParams?: 
                         <input type="hidden" name="id" value={row.id} />
                         <input type="hidden" name="email" value={row.username} />
                         <input className="admin-input" name="full_name" defaultValue={row.full_name || ""} placeholder={L.fullName} />
-                        <select className="admin-select" name="role" defaultValue={roleKey}>
-                          <option value="staff">staff</option>
+                        <select className="admin-select" name="role" defaultValue={normalizedRole}>
                           <option value="sales">sales</option>
                           <option value="ops">ops</option>
                           <option value="admin">admin</option>
@@ -276,7 +274,7 @@ export default async function AdminStaffPage({ searchParams }: { searchParams?: 
                         <input type="hidden" name="id" value={row.id} />
                         <input type="hidden" name="email" value={row.username} />
                         <input type="hidden" name="full_name" value={row.full_name || ""} />
-                        <input type="hidden" name="role" value={roleKey} />
+                        <input type="hidden" name="role" value={normalizedRole} />
                         <input type="hidden" name="is_active" value={row.is_active ? "true" : "false"} />
                         <input className="admin-input" type="password" name="password" minLength={8} required placeholder={L.resetPassword} />
                         <button className="btn" type="submit">{L.resetPassword}</button>

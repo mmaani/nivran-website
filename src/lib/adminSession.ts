@@ -49,7 +49,7 @@ export function verifyAdminFromRequest(req: Request): boolean {
   const expected = (process.env.ADMIN_TOKEN || "").trim();
   if (!expected) return false;
   const cookieHeader = req.headers.get("cookie") || "";
-  const pieces = cookieHeader.split(";").map((v) => v.trim());
+  const pieces = cookieHeader.split(";").map((value) => value.trim());
   for (const piece of pieces) {
     if (piece.startsWith("admin_token=") || piece.startsWith("nivran_admin_token=")) {
       const got = decodeURIComponent(piece.slice(piece.indexOf("=") + 1)).trim();
@@ -60,7 +60,7 @@ export function verifyAdminFromRequest(req: Request): boolean {
 }
 
 function readCookie(header: string, name: string): string {
-  const pieces = header.split(";").map((v) => v.trim());
+  const pieces = header.split(";").map((value) => value.trim());
   for (const piece of pieces) {
     if (piece.toLowerCase().startsWith(`${name.toLowerCase()}=`)) {
       return decodeURIComponent(piece.slice(name.length + 1));
@@ -73,12 +73,15 @@ export function readSalesFromRequest(req: Request): { staffId: number; username:
   const cookie = req.headers.get("cookie") || "";
   const role = readCookie(cookie, "nivran_admin_role").trim();
   if (role !== "sales") return null;
+
   const staffId = Number(readCookie(cookie, "nivran_staff_id"));
   const username = readCookie(cookie, "nivran_staff_user").trim().toLowerCase();
   const sig = readCookie(cookie, "nivran_staff_sig").trim();
   if (!Number.isFinite(staffId) || staffId <= 0 || !username || !sig) return null;
+
   const expectedSig = signStaff(Math.trunc(staffId), username);
   if (!safeEq(sig, expectedSig)) return null;
+
   return { staffId: Math.trunc(staffId), username };
 }
 
@@ -86,6 +89,7 @@ export function makeSalesCookies(staffId: number, username: string, rememberMe: 
   const maxAge = rememberMe ? 60 * 60 * 24 * 14 : 60 * 30;
   const normalizedUser = username.trim().toLowerCase();
   const sig = signStaff(staffId, normalizedUser);
+
   return [
     { name: "nivran_admin_role", value: "sales", maxAge },
     { name: "nivran_staff_id", value: String(staffId), maxAge },
@@ -128,7 +132,9 @@ export async function authenticateSalesUser(usernameRaw: string, password: strin
   );
 
   const user = row.rows[0];
-  const valid = !!user && user.is_active && user.role === "staff" && (await verifyPassword(password, user.password_hash));
+  const role = String(user?.role || "").toLowerCase();
+  const isSalesRole = role === "sales" || role === "staff";
+  const valid = !!user && user.is_active && isSalesRole && (await verifyPassword(password, user.password_hash));
 
   await db.query(`insert into staff_login_attempts (username, success) values ($1,$2)`, [username, valid]);
 

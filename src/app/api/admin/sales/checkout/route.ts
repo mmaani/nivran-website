@@ -5,7 +5,7 @@ import { requireAdminOrSales } from "@/lib/guards";
 import { evaluatePromoCodeForLines, type PricedOrderLine } from "@/lib/promotions";
 import { hashPassword } from "@/lib/identity";
 
-type CheckoutItem = { productId: number; qty: number };
+type CheckoutItem = { productId: number; qty: number; variantId?: number | null };
 type CheckoutBody = {
   items: CheckoutItem[];
   promoCode?: string;
@@ -21,6 +21,12 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+function parseVariantId(value: unknown): number | null {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.trunc(n);
+}
+
 export async function POST(req: Request) {
   const auth = requireAdminOrSales(req);
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
@@ -33,7 +39,20 @@ export async function POST(req: Request) {
   const customerEmail = String(body.customer?.email || "").trim().toLowerCase();
   if (!customerEmail) return NextResponse.json({ ok: false, error: "Customer email required" }, { status: 400 });
 
+  const customerName = String(body.customer?.name || "").trim();
+  const customerPhone = String(body.customer?.phone || "").trim();
+  const customerCity = String(body.customer?.city || "").trim();
+  const customerAddress = String(body.customer?.address || "").trim();
+  const customerCountry = String(body.customer?.country || "Jordan").trim() || "Jordan";
+
   const productIds = Array.from(new Set(body.items.map((line) => Number(line.productId)).filter((n) => Number.isFinite(n) && n > 0)));
+  const variantIds = Array.from(
+    new Set(
+      body.items
+        .map((line) => parseVariantId(line.variantId))
+        .filter((v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0)
+    )
+  );
 
   const response = await db.withTransaction(async (trx) => {
     const productsRes = await trx.query<{ id: number; slug: string; name_en: string; category_key: string | null; price_jod: string; inventory_qty: number }>(
@@ -44,20 +63,58 @@ export async function POST(req: Request) {
       [productIds]
     );
 
-    const productMap = new Map(productsRes.rows.map((row) => [row.id, row]));
+    const variantRes = variantIds.length
+      ? await trx.query<{ id: number; product_id: number; label: string; size_ml: number | null; price_jod: string; is_active: boolean }>(
+          `select id, product_id, label, size_ml, price_jod::text, is_active
+             from product_variants
+            where id = any($1::bigint[])
+            for update`,
+          [variantIds]
+        )
+      : { rows: [] as Array<{ id: number; product_id: number; label: string; size_ml: number | null; price_jod: string; is_active: boolean }> };
 
-    const lines: Array<PricedOrderLine & { product_id: number; unit_price_jod: number; requested_qty: number; fulfilled_qty: number; backorder_qty: number }> = [];
+    const productMap = new Map(productsRes.rows.map((row) => [row.id, row]));
+    const variantMap = new Map(variantRes.rows.map((row) => [row.id, row]));
+
+    const missingProductIds = new Set<number>();
+    const lines: Array<
+      PricedOrderLine & {
+        product_id: number;
+        variant_id: number | null;
+        variant_label: string | null;
+        unit_price_jod: number;
+        requested_qty: number;
+        fulfilled_qty: number;
+        backorder_qty: number;
+      }
+    > = [];
+
     for (const item of body.items) {
       const qty = Math.max(1, Math.trunc(Number(item.qty || 0)));
-      const product = productMap.get(Number(item.productId));
-      if (!product) return { ok: false as const, status: 400, error: `Product ${item.productId} not found` };
-      const unit = Number(product.price_jod);
+      const productId = Math.trunc(Number(item.productId || 0));
+      const product = productMap.get(productId);
+      if (!product) {
+        if (productId > 0) missingProductIds.add(productId);
+        continue;
+      }
+
+      const variantId = parseVariantId(item.variantId);
+      const variant = variantId ? variantMap.get(variantId) || null : null;
+      if (variant && (!variant.is_active || variant.product_id !== product.id)) {
+        return { ok: false as const, status: 400, error: `Invalid variant selection for product ${product.id}` };
+      }
+
+      const unit = variant ? Number(variant.price_jod) : Number(product.price_jod);
       const lineTotal = round2(unit * qty);
       const available = Math.max(0, Math.trunc(Number(product.inventory_qty || 0)));
       const fulfilledQty = Math.min(available, qty);
       const backorderQty = qty - fulfilledQty;
+      const variantLabel = variant ? `${variant.label}${variant.size_ml ? ` (${variant.size_ml}ml)` : ""}` : null;
+
       lines.push({
         product_id: product.id,
+        variant_id: variant?.id || null,
+        variant_label: variantLabel,
         qty,
         requested_qty: qty,
         fulfilled_qty: fulfilledQty,
@@ -67,6 +124,11 @@ export async function POST(req: Request) {
         unit_price_jod: unit,
         line_total_jod: lineTotal,
       });
+    }
+
+    if (lines.length === 0) {
+      const missing = Array.from(missingProductIds).join(", ") || "unknown";
+      return { ok: false as const, status: 400, error: `No valid items found for checkout. Missing products: ${missing}` };
     }
 
     const subtotal = round2(lines.reduce((sum, line) => sum + line.line_total_jod, 0));
@@ -82,13 +144,22 @@ export async function POST(req: Request) {
     }
 
     let customerId: number | null = null;
-    const existingCustomer = await trx.query<{ id: number }>(
-      `select id from customers where lower(email)=lower($1) limit 1`,
-      [customerEmail]
-    ).catch(() => ({ rows: [] as Array<{ id: number }> }));
+    const existingCustomer = await trx
+      .query<{ id: number }>(`select id from customers where lower(email)=lower($1) limit 1`, [customerEmail])
+      .catch(() => ({ rows: [] as Array<{ id: number }> }));
 
     if (existingCustomer.rows[0]?.id) {
       customerId = existingCustomer.rows[0].id;
+      await trx.query(
+        `update customers
+            set full_name = coalesce(nullif($1,''), full_name),
+                phone = coalesce(nullif($2,''), phone),
+                address_line1 = coalesce(nullif($3,''), address_line1),
+                city = coalesce(nullif($4,''), city),
+                country = coalesce(nullif($5,''), country)
+          where id = $6`,
+        [customerName, customerPhone, customerAddress, customerCity, customerCountry, customerId]
+      );
     } else if (body.createAccount) {
       const password = String(body.accountPassword || "").trim();
       if (!password) return { ok: false as const, status: 400, error: "Account password required" };
@@ -97,15 +168,7 @@ export async function POST(req: Request) {
         `insert into customers (email, password_hash, full_name, phone, address_line1, city, country, is_active)
          values ($1,$2,$3,$4,$5,$6,$7,true)
          returning id`,
-        [
-          customerEmail,
-          passwordHash,
-          String(body.customer.name || "").trim() || null,
-          String(body.customer.phone || "").trim() || null,
-          String(body.customer.address || "").trim() || null,
-          String(body.customer.city || "").trim() || null,
-          String(body.customer.country || "Jordan").trim() || "Jordan",
-        ]
+        [customerEmail, passwordHash, customerName || null, customerPhone || null, customerAddress || null, customerCity || null, customerCountry]
       );
       customerId = created.rows[0]?.id || null;
     }
@@ -133,12 +196,12 @@ export async function POST(req: Request) {
         total,
         String(body.paymentMethod || "CARD_POS"),
         customerId,
-        String(body.customer.name || "").trim(),
-        String(body.customer.phone || "").trim(),
+        customerName,
+        customerPhone,
         customerEmail,
-        String(body.customer.city || "").trim(),
-        String(body.customer.address || "").trim(),
-        String(body.customer.country || "Jordan").trim() || "Jordan",
+        customerCity,
+        customerAddress,
+        customerCountry,
         subtotal,
         discountJod,
         round2(subtotal - discountJod),
@@ -147,7 +210,19 @@ export async function POST(req: Request) {
         promoCode || null,
         promotionId,
         promoCode ? "CODE" : null,
-        JSON.stringify(lines.map((line) => ({ productId: line.product_id, requested_qty: line.requested_qty, fulfilled_qty: line.fulfilled_qty, backorder_qty: line.backorder_qty, slug: line.slug, unit_price_jod: line.unit_price_jod, line_total_jod: line.line_total_jod }))),
+        JSON.stringify(
+          lines.map((line) => ({
+            productId: line.product_id,
+            variantId: line.variant_id,
+            variantLabel: line.variant_label,
+            requested_qty: line.requested_qty,
+            fulfilled_qty: line.fulfilled_qty,
+            backorder_qty: line.backorder_qty,
+            slug: line.slug,
+            unit_price_jod: line.unit_price_jod,
+            line_total_jod: line.line_total_jod,
+          }))
+        ),
         hasBackorder ? "Contains backordered quantities" : null,
       ]
     );
@@ -173,7 +248,14 @@ export async function POST(req: Request) {
       ]
     );
 
-    return { ok: true as const, status: 200, orderId, totalJod: total, statusCode: status };
+    return {
+      ok: true as const,
+      status: 200,
+      orderId,
+      totalJod: total,
+      statusCode: status,
+      ignoredProductIds: Array.from(missingProductIds),
+    };
   });
 
   if (!response.ok) return NextResponse.json({ ok: false, error: response.error }, { status: response.status });

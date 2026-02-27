@@ -6,7 +6,7 @@ import { listStaff, upsertStaff } from "@/lib/identity";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Role = "admin" | "ops" | "staff" | "sales";
+type Role = "admin" | "ops" | "sales";
 type StaffAction = "create" | "update" | "delete" | "reset_password";
 
 function isHtmlRequest(req: Request): boolean {
@@ -38,7 +38,7 @@ function parseRole(raw: string): Role {
   if (v === "admin") return "admin";
   if (v === "ops") return "ops";
   if (v === "sales") return "sales";
-  return "staff";
+  return "sales";
 }
 
 function parseCheckbox(form: FormData, key: string): boolean {
@@ -89,41 +89,49 @@ export async function POST(req: Request) {
 
   const username = (formText(form, "username") || formText(form, "email")).toLowerCase();
   const full_name = formText(form, "full_name") || null;
-  const role = parseRole(formText(form, "role") || "staff");
+  const role = parseRole(formText(form, "role") || "sales");
   const password = formText(form, "password") || undefined;
   const is_active = parseCheckbox(form, "is_active");
   const staffId = parseId(formText(form, "id"));
 
-  if (action === "delete") {
-    if (!staffId) return badRequest(req, "Missing staff id.");
-    await deleteStaffUser(staffId);
-    if (isHtmlRequest(req)) return NextResponse.redirect(new URL("/admin/staff?saved=deleted", req.url));
-    return NextResponse.json({ ok: true, action: "delete" });
+  try {
+    if (action === "delete") {
+      if (!staffId) return badRequest(req, "Missing staff id.");
+      await deleteStaffUser(staffId);
+      if (isHtmlRequest(req)) return NextResponse.redirect(new URL("/admin/staff?saved=deleted", req.url));
+      return NextResponse.json({ ok: true, action: "delete" });
+    }
+
+    if (action === "reset_password") {
+      if (!staffId) return badRequest(req, "Missing staff id.");
+      if (!password || password.length < 8) return badRequest(req, "Password must be at least 8 characters.");
+
+      await upsertStaff({ id: staffId, username, full_name, role, password, is_active });
+      if (isHtmlRequest(req)) return NextResponse.redirect(new URL("/admin/staff?saved=password", req.url));
+      return NextResponse.json({ ok: true, action: "reset_password" });
+    }
+
+    if (!isValidUsername(username)) return badRequest(req, "Invalid username/email.");
+
+    if (action === "create" && !password) {
+      return badRequest(req, "Password is required.");
+    }
+
+    if (action === "update") {
+      if (!staffId) return badRequest(req, "Missing staff id.");
+      await upsertStaff({ id: staffId, username, full_name, role, password, is_active });
+      if (isHtmlRequest(req)) return NextResponse.redirect(new URL("/admin/staff?saved=updated", req.url));
+      return NextResponse.json({ ok: true, action: "update" });
+    }
+
+    await upsertStaff({ username, full_name, role, password, is_active });
+    if (isHtmlRequest(req)) return NextResponse.redirect(new URL("/admin/staff?saved=created", req.url));
+    return NextResponse.json({ ok: true, action: "create" });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to save staff user.";
+    if (isHtmlRequest(req)) {
+      return NextResponse.redirect(new URL(`/admin/staff?error=${encodeURIComponent(message)}`, req.url));
+    }
+    return NextResponse.json({ ok: false, error: message }, { status: 400 });
   }
-
-  if (action === "reset_password") {
-    if (!staffId) return badRequest(req, "Missing staff id.");
-    if (!password || password.length < 8) return badRequest(req, "Password must be at least 8 characters.");
-
-    await upsertStaff({ id: staffId, username, full_name, role, password, is_active });
-    if (isHtmlRequest(req)) return NextResponse.redirect(new URL("/admin/staff?saved=password", req.url));
-    return NextResponse.json({ ok: true, action: "reset_password" });
-  }
-
-  if (!isValidUsername(username)) return badRequest(req, "Invalid username/email.");
-
-  if (action === "create" && !password) {
-    return badRequest(req, "Password is required.");
-  }
-
-  if (action === "update") {
-    if (!staffId) return badRequest(req, "Missing staff id.");
-    await upsertStaff({ id: staffId, username, full_name, role, password, is_active });
-    if (isHtmlRequest(req)) return NextResponse.redirect(new URL("/admin/staff?saved=updated", req.url));
-    return NextResponse.json({ ok: true, action: "update" });
-  }
-
-  await upsertStaff({ username, full_name, role, password, is_active });
-  if (isHtmlRequest(req)) return NextResponse.redirect(new URL("/admin/staff?saved=created", req.url));
-  return NextResponse.json({ ok: true, action: "create" });
 }

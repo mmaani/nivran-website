@@ -935,60 +935,64 @@ export default async function AdminCatalogPage({
                           </div>
                         </td>
                         <td>{p.is_active ? L.active : L.hidden}</td>
-                        <td style={{ minWidth: 420 }}>
-                          <form action="/api/admin/catalog/products" method="post" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                        <td style={{ minWidth: 460 }}>
+                          <form action="/api/admin/catalog/products" method="post" style={{ display: "grid", gap: 10 }}>
                             <input type="hidden" name="return_to" value={returnTo} />
                             <input type="hidden" name="action" value="update" />
                             <input type="hidden" name="id" value={p.id} />
 
-                            <select name="category_key" defaultValue={p.category_key} className={UI.select}>
-                              {data.categories.map((c) => (
-                                <option key={c.key} value={c.key}>
-                                  {labelCategory(lang, c)} ({c.key})
-                                </option>
-                              ))}
-                            </select>
+                            <div style={{ display: "grid", gap: 8, gridTemplateColumns: "minmax(200px,1fr) 110px 110px auto" }}>
+                              <select name="category_key" defaultValue={p.category_key} className={UI.select}>
+                                {data.categories.map((c) => (
+                                  <option key={c.key} value={c.key}>
+                                    {labelCategory(lang, c)} ({c.key})
+                                  </option>
+                                ))}
+                              </select>
 
-                            <input name="price_jod" type="number" step="0.01" defaultValue={Number(p.price_jod || "0")} className={cx(UI.input, UI.ltr)} style={{ width: 120 }} />
-                            <input name="inventory_qty" type="number" min="0" defaultValue={p.inventory_qty} className={cx(UI.input, UI.ltr)} style={{ width: 110 }} />
-
-                            <div style={{ display: "grid", gap: 6 }}>
-                              <div className={UI.muted} style={{ fontSize: 12 }}>{L.tags}</div>
-                              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                {["day", "night", "anytime"].map((key) => (
-                                  <label key={`wt-${p.id}-${key}`} style={{ fontSize: 13 }}>
-                                    <input type="checkbox" name="wear_times" value={key} defaultChecked={p.wear_times.includes(key)} /> {key}
-                                  </label>
-                                ))}
-                              </div>
-                              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                {["spring", "summer", "fall", "winter", "all-season"].map((key) => (
-                                  <label key={`ss-${p.id}-${key}`} style={{ fontSize: 13 }}>
-                                    <input type="checkbox" name="seasons" value={key} defaultChecked={p.seasons.includes(key)} /> {key}
-                                  </label>
-                                ))}
-                              </div>
-                              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                {["unisex", "unisex-men-leaning", "unisex-women-leaning", "men", "women"].map((key) => (
-                                  <label key={`au-${p.id}-${key}`} style={{ fontSize: 13 }}>
-                                    <input type="checkbox" name="audiences" value={key} defaultChecked={p.audiences.includes(key)} /> {key}
-                                  </label>
-                                ))}
-                              </div>
+                              <input name="price_jod" type="number" step="0.01" defaultValue={Number(p.price_jod || "0")} className={cx(UI.input, UI.ltr)} />
+                              <input name="inventory_qty" type="number" min="0" defaultValue={p.inventory_qty} className={cx(UI.input, UI.ltr)} />
+                              <label style={{ display: "flex", gap: 8, alignItems: "center", whiteSpace: "nowrap" }}>
+                                <input type="checkbox" name="is_active" defaultChecked={p.is_active} /> {L.active}
+                              </label>
                             </div>
 
-                            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                              <input type="checkbox" name="is_active" defaultChecked={p.is_active} /> {L.active}
-                            </label>
+                            <details>
+                              <summary className={UI.muted} style={{ cursor: "pointer" }}>{L.tags}</summary>
+                              <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                  {["day", "night", "anytime"].map((key) => (
+                                    <label key={`wt-${p.id}-${key}`} style={{ fontSize: 13 }}>
+                                      <input type="checkbox" name="wear_times" value={key} defaultChecked={p.wear_times.includes(key)} /> {key}
+                                    </label>
+                                  ))}
+                                </div>
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                  {["spring", "summer", "fall", "winter", "all-season"].map((key) => (
+                                    <label key={`ss-${p.id}-${key}`} style={{ fontSize: 13 }}>
+                                      <input type="checkbox" name="seasons" value={key} defaultChecked={p.seasons.includes(key)} /> {key}
+                                    </label>
+                                  ))}
+                                </div>
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                  {["unisex", "unisex-men-leaning", "unisex-women-leaning", "men", "women"].map((key) => (
+                                    <label key={`au-${p.id}-${key}`} style={{ fontSize: 13 }}>
+                                      <input type="checkbox" name="audiences" value={key} defaultChecked={p.audiences.includes(key)} /> {key}
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            </details>
 
-                            <button className={cx(UI.btn, UI.btnPrimary)} type="submit">{L.update}</button>
-
-                            <Link className={UI.btn} href={buildCatalogPath({ productEditId: p.id, variantProductId: p.id })}>
-                              {isAr ? "إدارة" : "Manage"}
-                            </Link>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                              <button className={cx(UI.btn, UI.btnPrimary)} type="submit">{L.update}</button>
+                              <Link className={UI.btn} href={buildCatalogPath({ productEditId: p.id, variantProductId: p.id })}>
+                                {isAr ? "إدارة" : "Manage"}
+                              </Link>
+                            </div>
                           </form>
 
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
                             <form action="/api/admin/catalog/products" method="post">
                               <input type="hidden" name="return_to" value={returnTo} />
                               <input type="hidden" name="action" value="clone" />
@@ -1003,6 +1007,7 @@ export default async function AdminCatalogPage({
                               <button className={UI.btn} type="submit">{L.del}</button>
                             </form>
                           </div>
+
                         </td>
                       </tr>
                     ))}
@@ -1450,32 +1455,34 @@ export default async function AdminCatalogPage({
                         <td>{c.is_active ? "✓" : "—"}</td>
                         <td>{c.is_promoted ? "✓" : "—"}</td>
                         <td style={{ minWidth: 420 }}>
-                          <form action="/api/admin/catalog/categories" method="post" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                            <input type="hidden" name="return_to" value={returnTo} />
-                            <input type="hidden" name="action" value="update" />
-                            <input type="hidden" name="key" value={c.key} />
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                            <form action="/api/admin/catalog/categories" method="post" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                              <input type="hidden" name="return_to" value={returnTo} />
+                              <input type="hidden" name="action" value="update" />
+                              <input type="hidden" name="key" value={c.key} />
 
-                            <input name="name_en" defaultValue={c.name_en} className={UI.input} style={{ width: 160 }} />
-                            <input name="name_ar" defaultValue={c.name_ar} className={UI.input} style={{ width: 160 }} />
-                            <input name="sort_order" type="number" defaultValue={c.sort_order} className={cx(UI.input, UI.ltr)} style={{ width: 110 }} />
+                              <input name="name_en" defaultValue={c.name_en} className={UI.input} style={{ width: 160 }} />
+                              <input name="name_ar" defaultValue={c.name_ar} className={UI.input} style={{ width: 160 }} />
+                              <input name="sort_order" type="number" defaultValue={c.sort_order} className={cx(UI.input, UI.ltr)} style={{ width: 110 }} />
 
-                            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                              <input type="checkbox" name="is_active" defaultChecked={c.is_active} /> {L.active}
-                            </label>
+                              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                <input type="checkbox" name="is_active" defaultChecked={c.is_active} /> {L.active}
+                              </label>
 
-                            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                              <input type="checkbox" name="is_promoted" defaultChecked={c.is_promoted} /> Promoted
-                            </label>
+                              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                <input type="checkbox" name="is_promoted" defaultChecked={c.is_promoted} /> Promoted
+                              </label>
 
-                            <button className={cx(UI.btn, UI.btnPrimary)} type="submit">{L.update}</button>
-                          </form>
+                              <button className={cx(UI.btn, UI.btnPrimary)} type="submit">{L.update}</button>
+                            </form>
 
-                          <form action="/api/admin/catalog/categories" method="post" style={{ marginTop: 8 }}>
-                            <input type="hidden" name="return_to" value={returnTo} />
-                            <input type="hidden" name="action" value="delete" />
-                            <input type="hidden" name="key" value={c.key} />
-                            <button className={UI.btn} type="submit">{L.del}</button>
-                          </form>
+                            <form action="/api/admin/catalog/categories" method="post" style={{ margin: 0 }}>
+                              <input type="hidden" name="return_to" value={returnTo} />
+                              <input type="hidden" name="action" value="delete" />
+                              <input type="hidden" name="key" value={c.key} />
+                              <button className={UI.btn} type="submit">{L.del}</button>
+                            </form>
+                          </div>
                         </td>
                       </tr>
                     ))}

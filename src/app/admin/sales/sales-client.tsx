@@ -2,9 +2,27 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 
-type Product = { id: number; slug: string; name_en: string; name_ar: string; price_jod: string; inventory_qty: number };
+type ProductVariant = {
+  id: number;
+  label: string;
+  size_ml: number | null;
+  price_jod: string;
+  is_default: boolean;
+};
+
+type Product = {
+  id: number;
+  slug: string;
+  name_en: string;
+  name_ar: string;
+  price_jod: string;
+  inventory_qty: number;
+  variants: ProductVariant[];
+};
+
 type Promo = { id: number; code: string | null; title_en: string | null; discount_type: string; discount_value: string };
-type CartLine = { productId: number; qty: number };
+
+type CartLine = { productId: number; variantId: number | null; qty: number };
 
 type OrderRow = {
   id: number;
@@ -23,11 +41,16 @@ function money(n: number): string {
   return `${n.toFixed(2)} JOD`;
 }
 
+function cartKey(productId: number, variantId: number | null): string {
+  return `${productId}:${variantId ?? "base"}`;
+}
+
 export default function SalesClient() {
   const [products, setProducts] = useState<Product[]>([]);
   const [promos, setPromos] = useState<Promo[]>([]);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
+  const [variantSelection, setVariantSelection] = useState<Record<number, number | null>>({});
   const [query, setQuery] = useState("");
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
   const [promoCode, setPromoCode] = useState("");
@@ -49,16 +72,25 @@ export default function SalesClient() {
     ]);
     const catalog = (await catalogRes.json()) as { products: Product[]; promotions: Promo[] };
     const salesOrders = (await ordersRes.json()) as { orders: OrderRow[] };
-    setProducts(Array.isArray(catalog.products) ? catalog.products : []);
+
+    const loadedProducts = Array.isArray(catalog.products) ? catalog.products : [];
+    setProducts(loadedProducts);
     setPromos(Array.isArray(catalog.promotions) ? catalog.promotions : []);
     setOrders(Array.isArray(salesOrders.orders) ? salesOrders.orders : []);
+
+    const selection: Record<number, number | null> = {};
+    for (const product of loadedProducts) {
+      const defaultVariant = product.variants?.find((variant) => variant.is_default) || product.variants?.[0] || null;
+      selection[product.id] = defaultVariant ? defaultVariant.id : null;
+    }
+    setVariantSelection(selection);
   }
 
   useEffect(() => {
     void load();
   }, []);
 
-  const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+  const productById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
 
   const visibleProducts = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -76,10 +108,16 @@ export default function SalesClient() {
         .map((line) => {
           const product = productById.get(line.productId);
           if (!product) return null;
-          const unitPrice = Number(product.price_jod);
+          const variant = line.variantId ? product.variants?.find((entry) => entry.id === line.variantId) || null : null;
+          const unitPrice = Number(variant?.price_jod ?? product.price_jod);
+          const variantLabel = variant ? `${variant.label}${variant.size_ml ? ` (${variant.size_ml}ml)` : ""}` : "Base";
+
           return {
             ...line,
+            key: cartKey(line.productId, line.variantId),
             product,
+            variant,
+            variantLabel,
             unitPrice,
             lineTotal: unitPrice * line.qty,
           };
@@ -91,19 +129,20 @@ export default function SalesClient() {
   const itemCount = useMemo(() => cart.reduce((sum, line) => sum + line.qty, 0), [cart]);
   const subtotal = useMemo(() => cartRows.reduce((sum, row) => sum + row.lineTotal, 0), [cartRows]);
 
-  function updateQty(productId: number, nextQty: number) {
+  function updateQty(productId: number, variantId: number | null, nextQty: number) {
     const qty = Math.max(0, Math.trunc(nextQty));
     setCart((prev) => {
-      if (qty <= 0) return prev.filter((line) => line.productId !== productId);
-      const found = prev.find((line) => line.productId === productId);
-      if (!found) return [...prev, { productId, qty }];
-      return prev.map((line) => (line.productId === productId ? { ...line, qty } : line));
+      if (qty <= 0) return prev.filter((line) => !(line.productId === productId && line.variantId === variantId));
+      const found = prev.find((line) => line.productId === productId && line.variantId === variantId);
+      if (!found) return [...prev, { productId, variantId, qty }];
+      return prev.map((line) => (line.productId === productId && line.variantId === variantId ? { ...line, qty } : line));
     });
   }
 
   function add(productId: number) {
-    const existing = cart.find((line) => line.productId === productId);
-    updateQty(productId, (existing?.qty || 0) + 1);
+    const selectedVariant = variantSelection[productId] ?? null;
+    const existing = cart.find((line) => line.productId === productId && line.variantId === selectedVariant);
+    updateQty(productId, selectedVariant, (existing?.qty || 0) + 1);
   }
 
   function clearCart() {
@@ -132,7 +171,7 @@ export default function SalesClient() {
         headers: { "content-type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          items: cart,
+          items: cart.map((line) => ({ productId: line.productId, variantId: line.variantId, qty: line.qty })),
           promoCode: promoCode.trim() || undefined,
           customer: { name, email, phone, city, address, country: "Jordan" },
           paymentMethod,
@@ -141,10 +180,12 @@ export default function SalesClient() {
         }),
       });
 
-      const data = (await res.json()) as { ok: boolean; orderId?: number; statusCode?: string; error?: string };
+      const data = (await res.json()) as { ok: boolean; orderId?: number; statusCode?: string; error?: string; ignoredProductIds?: number[] };
       if (!res.ok || !data.ok) throw new Error(data.error || "Checkout failed");
 
-      setMsg(`Sale completed. Order #${data.orderId || ""}${data.statusCode === "BACKORDER" ? " (Backorder created)" : ""}`);
+      const ignored = Array.isArray(data.ignoredProductIds) ? data.ignoredProductIds.filter((id) => Number.isFinite(id) && id > 0) : [];
+      const ignoredLabel = ignored.length ? ` (ignored unavailable products: ${ignored.join(", ")})` : "";
+      setMsg(`Sale completed. Order #${data.orderId || ""}${data.statusCode === "BACKORDER" ? " (Backorder created)" : ""}${ignoredLabel}`);
       setCart([]);
       setPromoCode("");
       await load();
@@ -178,9 +219,23 @@ export default function SalesClient() {
         <div style={{ display: "grid", gap: 8, maxHeight: 280, overflow: "auto" }}>
           {visibleProducts.map((product) => (
             <div key={product.id} className="admin-row" style={{ justifyContent: "space-between", borderBottom: "1px solid rgba(0,0,0,.08)", paddingBottom: 8 }}>
-              <div>
+              <div style={{ flex: 1 }}>
                 <div><b>{product.name_en}</b> <span style={{ opacity: 0.6 }}>({product.slug})</span></div>
                 <div style={{ fontSize: 12, opacity: 0.8 }}>{money(Number(product.price_jod))} • Stock {product.inventory_qty}</div>
+                {product.variants?.length ? (
+                  <select
+                    className="admin-select"
+                    value={variantSelection[product.id] ?? ""}
+                    onChange={(event) => setVariantSelection((prev) => ({ ...prev, [product.id]: event.target.value ? Number(event.target.value) : null }))}
+                    style={{ marginTop: 6, maxWidth: 320 }}
+                  >
+                    {product.variants.map((variant) => (
+                      <option key={variant.id} value={variant.id}>
+                        {variant.label}{variant.size_ml ? ` (${variant.size_ml}ml)` : ""} — {money(Number(variant.price_jod))}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
               </div>
               <button className="btn" onClick={() => add(product.id)}>Add</button>
             </div>
@@ -192,19 +247,21 @@ export default function SalesClient() {
         <h3>Cart</h3>
         {cartRows.length === 0 ? <p className="admin-muted">No items in cart.</p> : null}
         {cartRows.map((row) => (
-          <div key={row.productId} className="admin-row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+          <div key={row.key} className="admin-row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
             <div style={{ flex: 1 }}>
               <b>{row.product.name_en}</b>
+              <div style={{ fontSize: 12, opacity: 0.8 }}>{row.variantLabel}</div>
               <div style={{ fontSize: 12, opacity: 0.8 }}>{money(row.unitPrice)} each</div>
             </div>
             <div className="admin-row" style={{ gap: 6 }}>
-              <button className="btn" onClick={() => updateQty(row.productId, row.qty - 1)}>-</button>
-              <input className="admin-input" style={{ width: 64, textAlign: "center" }} value={row.qty} onChange={(event) => updateQty(row.productId, Number(event.target.value || 0))} />
-              <button className="btn" onClick={() => updateQty(row.productId, row.qty + 1)}>+</button>
+              <button className="btn" onClick={() => updateQty(row.productId, row.variantId, row.qty - 1)}>-</button>
+              <input className="admin-input" style={{ width: 64, textAlign: "center" }} value={row.qty} onChange={(event) => updateQty(row.productId, row.variantId, Number(event.target.value || 0))} />
+              <button className="btn" onClick={() => updateQty(row.productId, row.variantId, row.qty + 1)}>+</button>
             </div>
             <div style={{ minWidth: 120, textAlign: "right" }}>{money(row.lineTotal)}</div>
           </div>
         ))}
+
         {cartRows.length > 0 ? (
           <div className="admin-row" style={{ justifyContent: "space-between", marginTop: 8 }}>
             <b>Subtotal</b>
