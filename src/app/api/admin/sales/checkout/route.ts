@@ -4,7 +4,7 @@ import { db, type DbExecutor } from "@/lib/db";
 import { requireAdminOrSales } from "@/lib/guards";
 import { evaluatePromoCodeForLines, type PricedOrderLine } from "@/lib/promotions";
 import { hashPassword } from "@/lib/identity";
-import { sendSalesWelcomeEmail } from "@/lib/email";
+import { sendOrderThankYouEmail, sendSalesWelcomeEmail } from "@/lib/email";
 
 type CheckoutItem = { productId: number; qty: number; variantId?: number | null; productSlug?: string | null };
 type CheckoutBody = {
@@ -369,16 +369,14 @@ export async function POST(req: Request) {
       customerMatched,
       customerCreated,
       createdAccountPassword,
-      createdAccountEmail: customerCreated ? customerEmail : null,
-      createdAccountName: customerCreated ? customerName : null,
-      welcomeOrderItems: customerCreated
-        ? lines.map((line) => ({
+      createdAccountEmail: customerEmail || null,
+      createdAccountName: customerName || null,
+      welcomeOrderItems: lines.map((line) => ({
             nameEn: line.name_en,
             nameAr: line.name_ar,
             qty: line.requested_qty,
             totalJod: line.line_total_jod,
-          }))
-        : [],
+          })),
       warning:
         missingProductIds.size > 0
           ? `Some products were unavailable and skipped: ${Array.from(missingProductIds).join(", ")}`
@@ -408,6 +406,18 @@ export async function POST(req: Request) {
       items: Array.isArray(response.welcomeOrderItems) ? response.welcomeOrderItems : [],
       totalJod: Number(response.totalJod || 0),
       accountUrl: "https://www.nivran.com/en/account",
+    }).catch(() => null);
+  }
+
+  if (response.customerMatched && response.createdAccountEmail) {
+    await sendOrderThankYouEmail({
+      to: String(response.createdAccountEmail),
+      customerName: String(response.createdAccountName || body.customer?.name || "Customer"),
+      items: Array.isArray(response.welcomeOrderItems) ? response.welcomeOrderItems : [],
+      totalJod: Number(response.totalJod || 0),
+      accountUrl: "https://www.nivran.com/en/account",
+      returningCustomer: true,
+      cartId: String(response.orderId || ""),
     }).catch(() => null);
   }
 

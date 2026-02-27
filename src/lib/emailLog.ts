@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 
-export type EmailKind = "verify_code" | "password_reset" | "sales_welcome";
+export type EmailKind = "verify_code" | "password_reset" | "sales_welcome" | "order_thank_you";
 
 export async function ensureEmailLogTables(): Promise<void> {
   await db.query(`
@@ -52,4 +52,26 @@ export async function logEmailSendAttempt(args: {
       args.meta ?? null,
     ]
   );
+}
+
+
+export async function hasSuccessfulEmailByKindAndMeta(args: {
+  kind: EmailKind;
+  to: string;
+  metaKey: string;
+  metaValue: string;
+}): Promise<boolean> {
+  await ensureEmailLogTables();
+  const r = await db.query<{ id: number }>(
+    `select id
+       from email_send_logs
+      where kind = $1
+        and lower("to") = lower($2)
+        and ok = true
+        and coalesce(meta->>$3, '') = $4
+      order by created_at desc
+      limit 1`,
+    [args.kind, args.to, args.metaKey, args.metaValue]
+  );
+  return (r.rowCount ?? 0) > 0;
 }

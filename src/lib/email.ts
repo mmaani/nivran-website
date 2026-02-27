@@ -45,7 +45,7 @@ function wrapEmailHtml(locale: Locale, inner: string): string {
       <div style="background:#ffffff;border:1px solid rgba(0,0,0,.08);border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.06);overflow:hidden;">
         <div style="padding:18px 20px;border-bottom:1px solid rgba(0,0,0,.06);">
           <div style="letter-spacing:.28em;font-weight:700;color:#1B1B1B;">NIVRAN</div>
-          <div style="margin-top:6px;color:#666;font-size:13px;">Wear the calm.</div>
+          <div style="margin-top:6px;color:#666;font-size:13px;">Luxury fragrance & body care • نيفران</div>
         </div>
         <div style="padding:20px;">
           ${inner}
@@ -80,10 +80,11 @@ function errToString(e: unknown): string {
 }
 
 async function sendWithRetry(args: {
-  kind: "verify_code" | "password_reset" | "sales_welcome";
+  kind: "verify_code" | "password_reset" | "sales_welcome" | "order_thank_you";
   to: string;
   subject: string;
   html: string;
+  meta?: Record<string, unknown> | null;
 }): Promise<void> {
   const resend = getResendClient();
   const from = getEmailFrom();
@@ -99,6 +100,7 @@ async function sendWithRetry(args: {
       ok: false,
       attempt: 0,
       error: "MISSING_RESEND_OR_FROM",
+      meta: args.meta ?? null,
     });
     return;
   }
@@ -126,6 +128,7 @@ async function sendWithRetry(args: {
         ok: true,
         attempt,
         provider_id: providerId,
+        meta: args.meta ?? null,
       });
 
       return;
@@ -140,6 +143,7 @@ async function sendWithRetry(args: {
         ok: false,
         attempt,
         error: errToString(e),
+        meta: args.meta ?? null,
       });
 
       if (attempt < maxAttempts) {
@@ -213,17 +217,19 @@ export async function sendVerificationCodeEmail(to: string, code: string, locale
 }
 
 
-export async function sendSalesWelcomeEmail(args: {
+export async function sendOrderThankYouEmail(args: {
   to: string;
   customerName: string;
-  temporaryPassword: string;
   items: Array<{ nameEn: string; nameAr?: string | null; qty: number; totalJod: number }>;
   totalJod: number;
   accountUrl?: string;
+  temporaryPassword?: string | null;
+  returningCustomer?: boolean;
+  cartId?: string | null;
 }): Promise<void> {
   const accountUrl = args.accountUrl || "https://www.nivran.com/en/account";
   const safeName = escapeHtml(args.customerName || "there");
-  const safePassword = escapeHtml(args.temporaryPassword);
+  const safePassword = args.temporaryPassword ? escapeHtml(args.temporaryPassword) : "";
   const rows = args.items
     .map((item) => {
       const nameEn = escapeHtml(item.nameEn || "Item");
@@ -239,24 +245,37 @@ export async function sendSalesWelcomeEmail(args: {
     })
     .join("\n");
 
+  const loyaltyEn = args.returningCustomer
+    ? "Thank you for coming back and for your loyalty to NIVRAN."
+    : "Thank you for visiting NIVRAN. We’re delighted to serve you.";
+  const loyaltyAr = args.returningCustomer
+    ? "شكرًا لعودتك وولائك لنيفران."
+    : "شكرًا لزيارتك نيفران، سعداء بخدمتك.";
+
+  const passwordBlock = safePassword
+    ? `<div style="margin:14px 0;padding:14px;border-radius:12px;border:1px solid rgba(169,130,62,.35);background:#fffaf0;">
+      <div style="font-weight:800;color:#1b1b1b;margin-bottom:6px;">Your temporary password</div>
+      <div style="font-size:20px;font-weight:900;letter-spacing:.08em;color:#1b1b1b;">${safePassword}</div>
+      <div style="margin-top:8px;font-size:12px;color:#6f6a62;">For your security, please change this password after your first login.</div>
+    </div>`
+    : "";
+
+  const passwordAr = safePassword
+    ? `<p style="margin:0 0 12px;color:#1B1B1B;line-height:1.9;">كلمة المرور المؤقتة الخاصة بك: <strong>${safePassword}</strong></p>
+       <p style="margin:0 0 12px;color:#6f6a62;line-height:1.9;">يرجى تغيير كلمة المرور بعد أول تسجيل دخول حفاظًا على أمان حسابك.</p>`
+    : "";
+
   const html = wrapEmailHtml(
     "en",
     `
     <p style="margin:0 0 10px;color:#1B1B1B;line-height:1.75;">Dear ${safeName},</p>
-    <p style="margin:0 0 12px;color:#1B1B1B;line-height:1.75;">Thank you for visiting NIVRAN. We created your customer account during your in-store purchase so you can track orders and reorder quickly.</p>
-
-    <div style="margin:14px 0;padding:14px;border-radius:12px;border:1px solid rgba(169,130,62,.35);background:#fffaf0;">
-      <div style="font-weight:800;color:#1b1b1b;margin-bottom:6px;">Your temporary password</div>
-      <div style="font-size:20px;font-weight:900;letter-spacing:.08em;color:#1b1b1b;">${safePassword}</div>
-      <div style="margin-top:8px;font-size:12px;color:#6f6a62;">For your security, please change this password after your first login.</div>
-    </div>
-
+    <p style="margin:0 0 12px;color:#1B1B1B;line-height:1.75;">${loyaltyEn}</p>
+    ${passwordBlock}
     <div style="margin:14px 0;">
       <a href="${escapeHtml(accountUrl)}" style="display:inline-block;background:#1B1B1B;color:#fff;text-decoration:none;padding:12px 16px;border-radius:12px;font-weight:700;">
         Open My Account
       </a>
     </div>
-
     <div style="margin:16px 0 8px;font-weight:800;color:#1b1b1b;">Items purchased</div>
     <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;border:1px solid rgba(0,0,0,.08);border-radius:12px;overflow:hidden;">
       <thead>
@@ -280,18 +299,39 @@ export async function sendSalesWelcomeEmail(args: {
 
     <div dir="rtl" style="text-align:right;">
       <p style="margin:0 0 10px;color:#1B1B1B;line-height:1.9;">عميلنا العزيز ${safeName}،</p>
-      <p style="margin:0 0 12px;color:#1B1B1B;line-height:1.9;">شكرًا لزيارتك NIVRAN. تم إنشاء حسابك أثناء عملية الشراء داخل المتجر لتتمكن من متابعة الطلبات وإعادة الشراء بسهولة.</p>
-      <p style="margin:0 0 12px;color:#1B1B1B;line-height:1.9;">كلمة المرور المؤقتة الخاصة بك: <strong>${safePassword}</strong></p>
-      <p style="margin:0 0 12px;color:#6f6a62;line-height:1.9;">يرجى تغيير كلمة المرور بعد أول تسجيل دخول حفاظًا على أمان حسابك.</p>
+      <p style="margin:0 0 12px;color:#1B1B1B;line-height:1.9;">${loyaltyAr}</p>
+      ${passwordAr}
       <p style="margin:0;color:#6f6a62;line-height:1.9;">رابط الحساب: <a href="${escapeHtml(accountUrl)}">${escapeHtml(accountUrl)}</a></p>
     </div>
   `
   );
 
   await sendWithRetry({
-    kind: "sales_welcome",
+    kind: args.temporaryPassword ? "sales_welcome" : "order_thank_you",
     to: args.to,
-    subject: "Welcome to NIVRAN — your account details / أهلاً بك في NIVRAN",
+    subject: args.returningCustomer
+      ? "Thank you for your loyalty to NIVRAN / شكرًا لولائك لنيفران"
+      : "Thank you for your order — NIVRAN / شكرًا لطلبك من نيفران",
     html,
+    meta: args.cartId ? { cartId: args.cartId } : null,
+  });
+}
+
+export async function sendSalesWelcomeEmail(args: {
+  to: string;
+  customerName: string;
+  temporaryPassword: string;
+  items: Array<{ nameEn: string; nameAr?: string | null; qty: number; totalJod: number }>;
+  totalJod: number;
+  accountUrl?: string;
+}): Promise<void> {
+  await sendOrderThankYouEmail({
+    to: args.to,
+    customerName: args.customerName,
+    temporaryPassword: args.temporaryPassword,
+    items: args.items,
+    totalJod: args.totalJod,
+    accountUrl: args.accountUrl,
+    returningCustomer: false,
   });
 }
