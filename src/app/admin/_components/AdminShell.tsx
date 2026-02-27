@@ -110,11 +110,6 @@ export default function AdminShell({
       if (!root.contains(target)) setMenuOpen(false);
     }
 
-    function onDocKeyDown(event: KeyboardEvent) {
-      if (!menuOpen) return;
-      if (event.key === "Escape") setMenuOpen(false);
-    }
-
     document.addEventListener("mousedown", onDocPointerDown);
     return () => document.removeEventListener("mousedown", onDocPointerDown);
   }, [menuOpen]);
