@@ -174,74 +174,65 @@ function buildKey(slug: string, requestedVariantId: number | null | undefined): 
 export default function CartClient({ locale }: { locale: Locale }) {
   const isAr = locale === "ar";
   const reorderAppliedRef = useRef(false);
+
   const [items, setItems] = useState<CartItem[]>([]);
   const [clearing, setClearing] = useState(false);
 
   const [quote, setQuote] = useState<QuotePayload | null>(null);
   const [quoteError, setQuoteError] = useState<string | null>(null);
-useEffect(() => {
-  let cancelled = false;
 
-  async function run() {
-    const current = readCart();
+  useEffect(() => {
+    let cancelled = false;
 
-    // Hard guard: never apply reorder twice in same mounted lifecycle.
-    if (reorderAppliedRef.current) {
-      setItems(current);
-      return;
+    async function run() {
+      const current = readCart();
+      if (reorderAppliedRef.current) {
+        setItems(current);
+        return;
+      }
+
+      const url = typeof window !== "undefined" ? new URL(window.location.href) : null;
+      const hasReorderFlag = url?.searchParams.get("reorder") === "1";
+      const reorderOrderId = url?.searchParams.get("orderId") || "";
+      const modeRaw = url?.searchParams.get("mode");
+      const mode: "replace" | "add" = modeRaw === "add" ? "add" : "replace";
+
+      if (hasReorderFlag) {
+        const target = `/${locale}/cart`;
+        window.history.replaceState({}, "", target);
+      }
+
+      let reorderPayload = readReorderPayload();
+
+      if (!reorderPayload && hasReorderFlag && reorderOrderId) {
+        reorderPayload = await fetchReorderPayloadFromOrder(reorderOrderId, mode);
+      }
+
+      if (cancelled) return;
+
+      if (reorderPayload) {
+        reorderAppliedRef.current = true;
+        const nextItems = reorderPayload.mode === "replace" ? reorderPayload.items : mergeCartSum(current, reorderPayload.items);
+        writeCart(nextItems);
+        bestEffortSync(nextItems);
+        setItems(nextItems);
+        sessionStorage.removeItem(REORDER_KEY);
+      } else {
+        setItems(current);
+      }
     }
 
-    // Read URL params once and clean URL early to avoid duplicate apply races.
-    const url = typeof window !== "undefined" ? new URL(window.location.href) : null;
-    const hasReorderFlag = url?.searchParams.get("reorder") === "1";
-    const reorderOrderId = url?.searchParams.get("orderId") || "";
-    const modeRaw = url?.searchParams.get("mode");
-    const urlMode: "replace" | "add" = modeRaw === "add" ? "add" : "replace";
+    run().catch(() => {
+      if (!cancelled) setItems(readCart());
+    });
 
-    // Remove query immediately so reruns/effect replays don't see reorder=1 again.
-    if (hasReorderFlag) {
-      window.history.replaceState({}, "", `/${locale}/cart`);
-    }
-
-    let reorderPayload = readReorderPayload();
-
-    // Fallback to server fetch only when payload missing.
-    if (!reorderPayload && hasReorderFlag && reorderOrderId) {
-      reorderPayload = await fetchReorderPayloadFromOrder(reorderOrderId, urlMode);
-    }
-
-    if (cancelled) return;
-
-    if (reorderPayload) {
-      reorderAppliedRef.current = true;
-
-      const nextItems =
-        reorderPayload.mode === "replace"
-          ? reorderPayload.items
-          : mergeCartSum(current, reorderPayload.items);
-
-      writeCart(nextItems);
-      bestEffortSync(nextItems);
-      setItems(nextItems);
-      sessionStorage.removeItem(REORDER_KEY);
-      return;
-    }
-
-    setItems(current);
-  }
-
-  run().catch(() => {
-    if (!cancelled) setItems(readCart());
-  });
-
-  const onCustom = () => setItems(readCart());
-  window.addEventListener("nivran_cart_updated", onCustom as EventListener);
-
-  return () => {
-    cancelled = true;
-    window.removeEventListener("nivran_cart_updated", onCustom as EventListener);
-  };
-}, [locale]);
+    const onCustom = () => setItems(readCart());
+    window.addEventListener("nivran_cart_updated", onCustom as EventListener);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("nivran_cart_updated", onCustom as EventListener);
+    };
+  }, [locale]);
 
   useEffect(() => {
     let cancelled = false;
