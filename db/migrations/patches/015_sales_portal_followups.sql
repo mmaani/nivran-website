@@ -1,10 +1,25 @@
 -- Sales portal follow-ups for Neon rollout safety + query performance
 
 -- 1) Normalize legacy role values so UI/API role model stays consistent.
-update staff_users
-   set role = 'sales',
-       updated_at = now()
- where lower(coalesce(role, '')) = 'staff';
+-- Only run when current role constraint already allows `sales`.
+do $$
+begin
+  if exists (
+    select 1
+    from pg_constraint c
+    join pg_class t on t.oid = c.conrelid
+    join pg_namespace n on n.oid = t.relnamespace
+    where n.nspname='public'
+      and t.relname='staff_users'
+      and c.conname='staff_users_role_check'
+      and pg_get_constraintdef(c.oid) ilike '%sales%'
+  ) then
+    update staff_users
+       set role = 'sales',
+           updated_at = now()
+     where lower(coalesce(role, '')) = 'staff';
+  end if;
+end $$;
 
 -- 2) Keep login throttle queries fast under load.
 create index if not exists idx_staff_login_attempts_user_success_time

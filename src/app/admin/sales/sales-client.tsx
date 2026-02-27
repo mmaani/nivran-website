@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { readAdminLangCookie } from "@/app/admin/_components/adminClient";
 
 type ProductVariant = {
   id: number;
@@ -46,6 +47,7 @@ function cartKey(productId: number, variantId: number | null): string {
 }
 
 export default function SalesClient() {
+  const [lang, setLang] = useState<"en" | "ar">("en");
   const [products, setProducts] = useState<Product[]>([]);
   const [promos, setPromos] = useState<Promo[]>([]);
   const [orders, setOrders] = useState<OrderRow[]>([]);
@@ -69,6 +71,12 @@ export default function SalesClient() {
   const [accountPassword, setAccountPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    setLang(readAdminLangCookie());
+  }, []);
+
+  const isAr = lang === "ar";
 
   const load = useCallback(async () => {
     const orderParams = new URLSearchParams({ limit: String(ordersLimit) });
@@ -176,13 +184,13 @@ export default function SalesClient() {
     setMsg("");
 
     if (!name.trim() || !email.trim() || !phone.trim() || !city.trim() || !address.trim()) {
-      setMsg("Please complete customer information before checkout.");
+      setMsg(isAr ? "يرجى إكمال بيانات العميل قبل إتمام البيع." : "Please complete customer information before checkout.");
       setLoading(false);
       return;
     }
 
     if (createAccount && !accountPassword.trim()) {
-      setMsg("Please enter account password when account creation is enabled.");
+      setMsg(isAr ? "يرجى إدخال كلمة مرور الحساب عند تفعيل إنشاء الحساب." : "Please enter account password when account creation is enabled.");
       setLoading(false);
       return;
     }
@@ -193,7 +201,11 @@ export default function SalesClient() {
       .filter((id, idx, arr) => arr.indexOf(id) === idx);
     if (staleIds.length > 0) {
       setCart((prev) => prev.filter((line) => !staleIds.includes(line.productId)));
-      setMsg(`Some items were removed because they are no longer available: ${staleIds.join(", ")}. Please review cart and confirm again.`);
+      setMsg(
+        isAr
+          ? `تمت إزالة عناصر غير متاحة من السلة: ${staleIds.join(", ")}. يرجى المراجعة ثم التأكيد مرة أخرى.`
+          : `Some items were removed because they are no longer available: ${staleIds.join(", ")}. Please review cart and confirm again.`
+      );
       setLoading(false);
       return;
     }
@@ -230,7 +242,11 @@ export default function SalesClient() {
           if (missing.length > 0) {
             setCart((prev) => prev.filter((line) => !missing.includes(line.productId)));
             await load();
-            throw new Error(`Some products are no longer available (${missing.join(", ")}). They were removed from your cart. Please confirm again.`);
+            throw new Error(
+              isAr
+                ? `بعض المنتجات لم تعد متاحة (${missing.join(", ")}) وتمت إزالتها من السلة. يرجى التأكيد مرة أخرى.`
+                : `Some products are no longer available (${missing.join(", ")}). They were removed from your cart. Please confirm again.`
+            );
           }
         }
         throw new Error(data.error || "Checkout failed");
@@ -240,12 +256,16 @@ export default function SalesClient() {
       const ignoredLabel = ignored.length ? ` (ignored unavailable products: ${ignored.join(", ")})` : "";
       const matchedLabel = data.customerMatched ? " (existing customer profile updated)" : "";
       const warningLabel = data.warning ? ` • ${data.warning}` : "";
-      setMsg(`Sale completed. Order #${data.orderId || ""}${data.statusCode === "BACKORDER" ? " (Backorder created)" : ""}${ignoredLabel}${matchedLabel}${warningLabel}`);
+      setMsg(
+        isAr
+          ? `تمت عملية البيع بنجاح. طلب #${data.orderId || ""}${data.statusCode === "BACKORDER" ? " (تم إنشاء طلب مؤجل)" : ""}${ignoredLabel}${matchedLabel}${warningLabel}`
+          : `Sale completed. Order #${data.orderId || ""}${data.statusCode === "BACKORDER" ? " (Backorder created)" : ""}${ignoredLabel}${matchedLabel}${warningLabel}`
+      );
       setCart([]);
       setPromoCode("");
       await load();
     } catch (error: unknown) {
-      setMsg(error instanceof Error ? error.message : "Checkout failed");
+      setMsg(error instanceof Error ? error.message : isAr ? "فشلت عملية الإتمام" : "Checkout failed");
     } finally {
       setLoading(false);
     }
@@ -253,28 +273,28 @@ export default function SalesClient() {
 
   return (
     <div className="admin-grid" style={{ gap: 16 }}>
-      <h1 className="admin-h1">Sales Portal</h1>
+      <h1 className="admin-h1">{isAr ? "بوابة المبيعات" : "Sales Portal"}</h1>
 
       <div className="admin-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-        <div className="admin-card" style={{ padding: 12 }}><b>Visible products</b><div>{visibleProducts.length}</div></div>
-        <div className="admin-card" style={{ padding: 12 }}><b>Promotions</b><div>{promos.length}</div></div>
-        <div className="admin-card" style={{ padding: 12 }}><b>Cart items</b><div>{itemCount}</div></div>
-        <div className="admin-card" style={{ padding: 12 }}><b>Subtotal</b><div>{money(subtotal)}</div></div>
+        <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "المنتجات المعروضة" : "Visible products"}</b><div>{visibleProducts.length}</div></div>
+        <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "العروض" : "Promotions"}</b><div>{promos.length}</div></div>
+        <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "عناصر السلة" : "Cart items"}</b><div>{itemCount}</div></div>
+        <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "المجموع الفرعي" : "Subtotal"}</b><div>{money(subtotal)}</div></div>
       </div>
 
       <div className="admin-card" style={{ padding: 14 }}>
-        <h3>Products</h3>
+        <h3>{isAr ? "المنتجات" : "Products"}</h3>
         <div className="admin-row" style={{ gap: 8, marginBottom: 10 }}>
-          <input className="admin-input" placeholder="Search product / slug" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <input className="admin-input" placeholder={isAr ? "ابحث بالمنتج / الرابط" : "Search product / slug"} value={query} onChange={(event) => setQuery(event.target.value)} />
           <select className="admin-select" value={sortMode} onChange={(event) => setSortMode(event.target.value as typeof sortMode)}>
-            <option value="recent">Recently updated</option>
-            <option value="name">Name (A-Z)</option>
-            <option value="stock-asc">Stock (low → high)</option>
-            <option value="stock-desc">Stock (high → low)</option>
+            <option value="recent">{isAr ? "الأحدث تحديثًا" : "Recently updated"}</option>
+            <option value="name">{isAr ? "الاسم (أ-ي)" : "Name (A-Z)"}</option>
+            <option value="stock-asc">{isAr ? "المخزون (منخفض ← مرتفع)" : "Stock (low → high)"}</option>
+            <option value="stock-desc">{isAr ? "المخزون (مرتفع ← منخفض)" : "Stock (high → low)"}</option>
           </select>
           <label className="admin-row" style={{ gap: 6, whiteSpace: "nowrap" }}>
             <input type="checkbox" checked={showLowStockOnly} onChange={(event) => setShowLowStockOnly(event.target.checked)} />
-            Low stock only (≤5)
+            {isAr ? "المخزون المنخفض فقط (≤5)" : "Low stock only (≤5)"}
           </label>
         </div>
         <div style={{ display: "grid", gap: 8, maxHeight: 280, overflow: "auto" }}>
@@ -309,8 +329,8 @@ export default function SalesClient() {
       </div>
 
       <div className="admin-card" style={{ padding: 14 }}>
-        <h3>Cart</h3>
-        {cartRows.length === 0 ? <p className="admin-muted">No items in cart.</p> : null}
+        <h3>{isAr ? "السلة" : "Cart"}</h3>
+        {cartRows.length === 0 ? <p className="admin-muted">{isAr ? "لا توجد عناصر في السلة." : "No items in cart."}</p> : null}
         {cartRows.map((row) => (
           <div key={row.key} className="admin-row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
             <div style={{ flex: 1 }}>
@@ -329,78 +349,78 @@ export default function SalesClient() {
 
         {cartRows.length > 0 ? (
           <div className="admin-row" style={{ justifyContent: "space-between", marginTop: 8 }}>
-            <b>Subtotal</b>
+            <b>{isAr ? "المجموع الفرعي" : "Subtotal"}</b>
             <b>{money(subtotal)}</b>
           </div>
         ) : null}
         <div className="admin-row" style={{ marginTop: 10 }}>
-          <button className="btn" onClick={clearCart} disabled={cartRows.length === 0}>Clear cart</button>
+          <button className="btn" onClick={clearCart} disabled={cartRows.length === 0}>{isAr ? "تفريغ السلة" : "Clear cart"}</button>
         </div>
       </div>
 
       <div className="admin-card" style={{ padding: 14 }}>
-        <h3>Checkout</h3>
+        <h3>{isAr ? "إتمام البيع" : "Checkout"}</h3>
         <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))" }}>
-          <input className="admin-input" placeholder="Customer name" value={name} onChange={(event) => setName(event.target.value)} />
-          <input className="admin-input" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} />
-          <input className="admin-input" placeholder="Phone" value={phone} onChange={(event) => setPhone(event.target.value)} />
-          <input className="admin-input" placeholder="City" value={city} onChange={(event) => setCity(event.target.value)} />
-          <input className="admin-input" placeholder="Address" value={address} onChange={(event) => setAddress(event.target.value)} />
-          <input className="admin-input" placeholder="Promo code" value={promoCode} onChange={(event) => setPromoCode(event.target.value)} list="promo-list" />
+          <input className="admin-input" placeholder={isAr ? "اسم العميل" : "Customer name"} value={name} onChange={(event) => setName(event.target.value)} />
+          <input className="admin-input" placeholder={isAr ? "البريد الإلكتروني" : "Email"} value={email} onChange={(event) => setEmail(event.target.value)} />
+          <input className="admin-input" placeholder={isAr ? "الهاتف" : "Phone"} value={phone} onChange={(event) => setPhone(event.target.value)} />
+          <input className="admin-input" placeholder={isAr ? "المدينة" : "City"} value={city} onChange={(event) => setCity(event.target.value)} />
+          <input className="admin-input" placeholder={isAr ? "العنوان" : "Address"} value={address} onChange={(event) => setAddress(event.target.value)} />
+          <input className="admin-input" placeholder={isAr ? "رمز الخصم" : "Promo code"} value={promoCode} onChange={(event) => setPromoCode(event.target.value)} list="promo-list" />
           <select className="admin-select" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as "CARD_POS" | "CARD_ONLINE" | "CASH")}>
-            <option value="CARD_POS">Card POS</option>
-            <option value="CARD_ONLINE">Card Online</option>
-            <option value="CASH">Cash</option>
+            <option value="CARD_POS">{isAr ? "بطاقة نقطة بيع" : "Card POS"}</option>
+            <option value="CARD_ONLINE">{isAr ? "بطاقة أونلاين" : "Card Online"}</option>
+            <option value="CASH">{isAr ? "نقدًا" : "Cash"}</option>
           </select>
           <label className="admin-row" style={{ gap: 8 }}>
             <input type="checkbox" checked={createAccount} onChange={(event) => setCreateAccount(event.target.checked)} />
-            Create customer account
+            {isAr ? "إنشاء حساب للعميل" : "Create customer account"}
           </label>
-          {createAccount ? <input className="admin-input" type="password" placeholder="Account password" value={accountPassword} onChange={(event) => setAccountPassword(event.target.value)} /> : null}
+          {createAccount ? <input className="admin-input" type="password" placeholder={isAr ? "كلمة مرور الحساب" : "Account password"} value={accountPassword} onChange={(event) => setAccountPassword(event.target.value)} /> : null}
         </div>
         <datalist id="promo-list">{promos.map((promo) => (<option key={promo.id} value={promo.code || ""}>{promo.title_en || "Promotion"}</option>))}</datalist>
 
         <div className="admin-row" style={{ justifyContent: "space-between", marginTop: 12 }}>
-          <b>Amount</b>
+          <b>{isAr ? "الإجمالي" : "Amount"}</b>
           <b>{money(subtotal)}</b>
         </div>
         <button className="btn btn-primary" onClick={checkout} disabled={loading || cartRows.length === 0} style={{ marginTop: 8 }}>
-          {loading ? "Processing..." : "Confirm Sale"}
+          {loading ? (isAr ? "جارٍ المعالجة..." : "Processing...") : (isAr ? "تأكيد البيع" : "Confirm Sale")}
         </button>
         {msg ? <p className="admin-muted" style={{ marginTop: 10 }}>{msg}</p> : null}
       </div>
 
       <div className="admin-card" style={{ padding: 14 }}>
-        <h3>My Sales Orders</h3>
+        <h3>{isAr ? "طلبات المبيعات الخاصة بي" : "My Sales Orders"}</h3>
         <div className="admin-row" style={{ gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
           <select className="admin-select" value={ordersStatusFilter} onChange={(event) => setOrdersStatusFilter(event.target.value as "" | "PAID" | "BACKORDER")}>
-            <option value="">All statuses</option>
-            <option value="PAID">Paid</option>
-            <option value="BACKORDER">Backorder</option>
+            <option value="">{isAr ? "كل الحالات" : "All statuses"}</option>
+            <option value="PAID">{isAr ? "مدفوع" : "Paid"}</option>
+            <option value="BACKORDER">{isAr ? "طلب مؤجل" : "Backorder"}</option>
           </select>
           <select className="admin-select" value={ordersLimit} onChange={(event) => setOrdersLimit(Number(event.target.value) as 120 | 200 | 300)}>
-            <option value={120}>Latest 120</option>
-            <option value={200}>Latest 200</option>
-            <option value={300}>Latest 300</option>
+            <option value={120}>{isAr ? "آخر 120" : "Latest 120"}</option>
+            <option value={200}>{isAr ? "آخر 200" : "Latest 200"}</option>
+            <option value={300}>{isAr ? "آخر 300" : "Latest 300"}</option>
           </select>
-          <input className="admin-input" type="date" value={ordersFrom} onChange={(event) => setOrdersFrom(event.target.value)} />
-          <input className="admin-input" type="date" value={ordersTo} onChange={(event) => setOrdersTo(event.target.value)} />
-          <button className="btn" type="button" onClick={() => void load()}>Refresh</button>
+          <input className="admin-input" type="date" aria-label={isAr ? "من تاريخ" : "From date"} value={ordersFrom} onChange={(event) => setOrdersFrom(event.target.value)} />
+          <input className="admin-input" type="date" aria-label={isAr ? "إلى تاريخ" : "To date"} value={ordersTo} onChange={(event) => setOrdersTo(event.target.value)} />
+          <button className="btn" type="button" onClick={() => void load()}>{isAr ? "تحديث" : "Refresh"}</button>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table className="admin-table" style={{ minWidth: 900 }}>
             <thead>
               <tr>
-                <th>#</th>
-                <th>Created</th>
-                <th>Customer</th>
-                <th>Email</th>
-                <th>Phone</th>
-                <th>Payment</th>
-                <th>Items</th>
-                <th>Qty</th>
-                <th>Status</th>
-                <th style={{ textAlign: "right" }}>Amount</th>
+                <th>{isAr ? "الرقم" : "#"}</th>
+                <th>{isAr ? "التاريخ" : "Created"}</th>
+                <th>{isAr ? "العميل" : "Customer"}</th>
+                <th>{isAr ? "البريد" : "Email"}</th>
+                <th>{isAr ? "الهاتف" : "Phone"}</th>
+                <th>{isAr ? "الدفع" : "Payment"}</th>
+                <th>{isAr ? "العناصر" : "Items"}</th>
+                <th>{isAr ? "الكمية" : "Qty"}</th>
+                <th>{isAr ? "الحالة" : "Status"}</th>
+                <th style={{ textAlign: "right" }}>{isAr ? "الإجمالي" : "Amount"}</th>
               </tr>
             </thead>
             <tbody>

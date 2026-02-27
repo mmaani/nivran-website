@@ -1,6 +1,7 @@
 // src/app/admin/catalog/page.tsx
 import Link from "next/link";
 import { db, isDbConnectivityError } from "@/lib/db";
+import { hasColumn } from "@/lib/dbSchema";
 import { ensureCatalogTablesSafe } from "@/lib/catalog";
 import { DEFAULT_FREE_SHIPPING_THRESHOLD_JOD, readFreeShippingThresholdJod } from "@/lib/shipping";
 import { getAdminLang } from "@/lib/admin-lang";
@@ -161,6 +162,12 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
   }
 
   try {
+    const [hasWearTimes, hasSeasons, hasAudiences] = await Promise.all([
+      hasColumn("products", "wear_times").catch(() => false),
+      hasColumn("products", "seasons").catch(() => false),
+      hasColumn("products", "audiences").catch(() => false),
+    ]);
+
     const [categoriesRes, productsRes, variantsRes, promosRes, shippingThreshold] = await Promise.all([
       db.query<CategoryRow>(
         `select key, name_en, name_ar, sort_order, is_active, is_promoted
@@ -181,9 +188,9 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
                 p.is_active,
                 coalesce(i.image_count,0)::int as image_count,
                 coalesce(ap.auto_promo_count,0)::int as auto_promo_count,
-                coalesce(p.wear_times, '{}'::text[]) as wear_times,
-                coalesce(p.seasons, '{}'::text[]) as seasons,
-                coalesce(p.audiences, '{}'::text[]) as audiences
+                ${hasWearTimes ? "coalesce(p.wear_times, '{}'::text[])" : "'{}'::text[]"} as wear_times,
+                ${hasSeasons ? "coalesce(p.seasons, '{}'::text[])" : "'{}'::text[]"} as seasons,
+                ${hasAudiences ? "coalesce(p.audiences, '{}'::text[])" : "'{}'::text[]"} as audiences
            from products p
       left join (
              select product_id, count(*)::int as image_count
