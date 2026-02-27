@@ -46,8 +46,8 @@ function cartKey(productId: number, variantId: number | null): string {
   return `${productId}:${variantId ?? "base"}`;
 }
 
-export default function SalesClient() {
-  const [lang, setLang] = useState<"en" | "ar">("en");
+export default function SalesClient({ initialLang = "en" }: { initialLang?: "en" | "ar" }) {
+  const [lang, setLang] = useState<"en" | "ar">(initialLang);
   const [products, setProducts] = useState<Product[]>([]);
   const [promos, setPromos] = useState<Promo[]>([]);
   const [orders, setOrders] = useState<OrderRow[]>([]);
@@ -74,6 +74,19 @@ export default function SalesClient() {
 
   useEffect(() => {
     setLang(readAdminLangCookie());
+
+    function onLangChanged(event: Event) {
+      const custom = event as CustomEvent<{ lang?: "en" | "ar" }>;
+      const next = custom.detail?.lang;
+      if (next === "ar" || next === "en") {
+        setLang(next);
+        return;
+      }
+      setLang(readAdminLangCookie());
+    }
+
+    window.addEventListener("admin_lang_changed", onLangChanged as EventListener);
+    return () => window.removeEventListener("admin_lang_changed", onLangChanged as EventListener);
   }, []);
 
   const isAr = lang === "ar";

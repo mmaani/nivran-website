@@ -78,6 +78,10 @@ export default function AdminShell({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ lang: next, next: pathname }),
       });
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("admin_lang_changed", { detail: { lang: next } }));
+      }
       router.refresh();
     } finally {
       setSavingLang(false);
@@ -119,7 +123,7 @@ export default function AdminShell({
     <div className="admin-shell" data-lang={lang} data-density="comfortable" data-route={isLoginRoute ? "login" : "app"} dir={lang === "ar" ? "rtl" : "ltr"} lang={lang}>
       <header className="admin-topbar">
         <div className="admin-topbar-inner admin-topbar-compact">
-          <div className="admin-topbar-main">
+          <div className="admin-topbar-head">
             <div className="admin-brand">
               <Link className="admin-logo" href={authed ? (isSales ? "/admin/sales" : "/admin") : "/admin/login"}>
                 <Image src="/brand/logo.svg" alt="NIVRAN" width={34} height={34} priority />
@@ -129,24 +133,6 @@ export default function AdminShell({
                 <T en="Luxury Admin Console" ar="منصة الإدارة الفاخرة" />
               </p>
             </div>
-
-            {authed ? (
-              <nav className="admin-nav" aria-label={lang === "ar" ? "تنقّل الإدارة" : "Admin navigation"}>
-                {nav.map((item) => {
-                  const active = pathname === item.href || pathname.startsWith(item.href + "/");
-                  return (
-                    <Link key={item.href} href={item.href} className={`nav-link ${active ? "active" : ""}`}>
-                      <span className="nav-icon" aria-hidden>{item.icon}</span>
-                      <T en={item.en} ar={item.ar} />
-                    </Link>
-                  );
-                })}
-              </nav>
-            ) : (
-              <div className="admin-login-chip">
-                <T en="Secure admin session required" ar="يلزم تسجيل دخول إداري آمن" />
-              </div>
-            )}
 
             <div className="admin-actions" ref={menuRef}>
               <Link className="btn" href="/">
@@ -185,16 +171,46 @@ export default function AdminShell({
             </div>
           </div>
 
+          {authed ? (
+            <div className="admin-topbar-main">
+              <nav className="admin-nav" aria-label={lang === "ar" ? "تنقّل الإدارة" : "Admin navigation"}>
+                {nav.map((item) => {
+                  const active = pathname === item.href || pathname.startsWith(item.href + "/");
+                  return (
+                    <Link key={item.href} href={item.href} className={`nav-link ${active ? "active" : ""}`}>
+                      <span className="nav-icon" aria-hidden>
+                        {item.icon}
+                      </span>
+                      <T en={item.en} ar={item.ar} />
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
+          ) : (
+            <div className="admin-login-chip">
+              <T en="Secure admin session required" ar="يلزم تسجيل دخول إداري آمن" />
+            </div>
+          )}
+
           {authed && breadcrumbs.length ? (
             <div className="admin-topbar-sub">
               <div className="admin-breadcrumbs" aria-label={lang === "ar" ? "مسار الصفحة" : "Breadcrumb"}>
                 {breadcrumbs.map((crumb, index) => (
                   <span key={`${crumb.href}-${index}`} className="admin-crumb">
-                    {index > 0 ? <span className="admin-crumb-sep" aria-hidden>›</span> : null}
+                    {index > 0 ? (
+                      <span className="admin-crumb-sep" aria-hidden>
+                        ›
+                      </span>
+                    ) : null}
                     {index === breadcrumbs.length - 1 ? (
-                      <span className="admin-crumb-current"><T en={crumb.en} ar={crumb.ar} /></span>
+                      <span className="admin-crumb-current">
+                        <T en={crumb.en} ar={crumb.ar} />
+                      </span>
                     ) : (
-                      <Link href={crumb.href} className="admin-crumb-link"><T en={crumb.en} ar={crumb.ar} /></Link>
+                      <Link href={crumb.href} className="admin-crumb-link">
+                        <T en={crumb.en} ar={crumb.ar} />
+                      </Link>
                     )}
                   </span>
                 ))}
@@ -210,10 +226,18 @@ export default function AdminShell({
         <div className="admin-footer-inner">
           <div className="admin-footer-brand">NIVRAN Admin</div>
           <div className="admin-footer-links">
-            <Link href="/admin"><T en="Dashboard" ar="لوحة التحكم" /></Link>
-            <Link href="/admin/orders"><T en="Orders" ar="الطلبات" /></Link>
-            <Link href="/admin/catalog"><T en="Catalog workspace" ar="مساحة الكتالوج" /></Link>
-            <Link href="/admin/inbox"><T en="Inbox" ar="الوارد" /></Link>
+            <Link href="/admin">
+              <T en="Dashboard" ar="لوحة التحكم" />
+            </Link>
+            <Link href="/admin/orders">
+              <T en="Orders" ar="الطلبات" />
+            </Link>
+            <Link href="/admin/catalog">
+              <T en="Catalog workspace" ar="مساحة الكتالوج" />
+            </Link>
+            <Link href="/admin/inbox">
+              <T en="Inbox" ar="الوارد" />
+            </Link>
           </div>
         </div>
       </footer>
