@@ -37,6 +37,16 @@ function getPool(): Pool {
 
   const connectionString = normalizeDatabaseUrl(rawConnectionString);
 
+  const host = (() => {
+    try {
+      return new URL(connectionString).hostname;
+    } catch {
+      return "";
+    }
+  })();
+
+  const isLocal = host === "localhost" || host === "127.0.0.1";
+
   pool = new Pool({
     connectionString,
   });
