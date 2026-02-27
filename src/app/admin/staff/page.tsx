@@ -60,11 +60,7 @@ export default async function AdminStaffPage({ searchParams }: { searchParams?: 
     if (!isDbConnectivityError(error) && !isDbSchemaError(error)) throw error;
   }
 
-  const query = String(resolved?.q || "").trim().toLowerCase();
-  const saved = String(resolved?.saved || "").trim();
-  const error = String(resolved?.error || "").trim();
-
-  const query = String(resolved?.q || "").trim().toLowerCase();
+  const searchQuery = String(resolved?.q || "").trim().toLowerCase();
   const saved = String(resolved?.saved || "").trim();
   const error = String(resolved?.error || "").trim();
 
@@ -158,25 +154,9 @@ export default async function AdminStaffPage({ searchParams }: { searchParams?: 
   }
 
   const filtered = rows.filter((row) => {
-    if (!query) return true;
+    if (!searchQuery) return true;
     const hay = `${row.username} ${row.full_name || ""} ${row.role}`.toLowerCase();
-    return hay.includes(query);
-  });
-
-  const stats = {
-    total: rows.length,
-    active: rows.filter((row) => row.is_active).length,
-    inactive: rows.filter((row) => !row.is_active).length,
-    admins: rows.filter((row) => {
-      const role = String(row.role || "").toLowerCase();
-      return role === "admin" || role === "ops" || role === "sales";
-    }).length,
-  };
-
-  const filtered = rows.filter((row) => {
-    if (!query) return true;
-    const hay = `${row.username} ${row.full_name || ""} ${row.role}`.toLowerCase();
-    return hay.includes(query);
+    return hay.includes(searchQuery);
   });
 
   const stats = {
@@ -252,7 +232,7 @@ export default async function AdminStaffPage({ searchParams }: { searchParams?: 
         <h2 style={{ margin: 0 }}>{L.staffList}</h2>
 
         <form method="get" className="admin-row" style={{ gap: 8 }}>
-          <input className="admin-input" name="q" defaultValue={query} placeholder={L.searchPlaceholder} />
+          <input className="admin-input" name="q" defaultValue={searchQuery} placeholder={L.searchPlaceholder} />
           <button className="btn" type="submit">{L.search}</button>
         </form>
 
