@@ -6,7 +6,13 @@ const KEY = "nivran_cart_v1";
 const KEY_CUS = "nivran_customer_id_v1";
 const REORDER_KEY = "nivran_reorder_payload_v1";
 
-type CartItem = { slug: string; name: string; priceJod: number; qty: number };
+type CartItem = {
+  slug: string;
+  name: string;
+  priceJod: number;
+  qty: number;
+  variantId?: number | null;
+};
 
 type JsonRecord = Record<string, unknown>;
 function isRecord(v: unknown): v is JsonRecord {
@@ -16,6 +22,13 @@ function isRecord(v: unknown): v is JsonRecord {
 function toNum(v: unknown): number {
   const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
   return Number.isFinite(n) ? n : 0;
+}
+
+function toIntOrNull(v: unknown): number | null {
+  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+  if (!Number.isFinite(n)) return null;
+  const t = Math.trunc(n);
+  return t > 0 ? t : null;
 }
 
 function toStr(v: unknown): string {
@@ -36,7 +49,10 @@ function parseCartItems(v: unknown): CartItem[] {
     const priceJod = toNum(it.priceJod);
     const qty = Math.max(1, Math.floor(toNum(it.qty) || 1));
 
-    out.push({ slug, name, priceJod, qty });
+    // ✅ keep variantId if present (supports both variantId + variant_id)
+    const variantId = toIntOrNull(it.variantId ?? it.variant_id);
+
+    out.push({ slug, name, priceJod, qty, variantId });
   }
 
   return out;
@@ -75,8 +91,9 @@ function getBool(obj: JsonRecord, key: string): boolean {
 
 function hasPendingReorderPayload(): boolean {
   try {
-    const byQuery = typeof window !== "undefined" && new URL(window.location.href).searchParams.get("reorder") === "1";
+    const byQuery = new URL(window.location.href).searchParams.get("reorder") === "1";
     if (byQuery) return true;
+
     const raw = sessionStorage.getItem(REORDER_KEY);
     if (!raw) return false;
     const parsed: unknown = JSON.parse(raw);
@@ -88,53 +105,73 @@ function hasPendingReorderPayload(): boolean {
 
 export default function CartHydrator() {
   useEffect(() => {
+    let alive = true;
+
     (async () => {
-      const cartRes = await fetch("/api/cart", { cache: "no-store" });
-      const cartData: unknown = await cartRes.json().catch(() => null);
+      try {
+        const cartRes = await fetch("/api/cart", { cache: "no-store" });
+        const cartData: unknown = await cartRes.json().catch(() => null);
 
-      if (!isRecord(cartData)) return;
-      if (cartData.ok !== true) return;
-      if (!getBool(cartData, "isAuthenticated")) return;
+        if (!alive) return;
+        if (!isRecord(cartData)) return;
+        if (cartData.ok !== true) return;
+        if (!getBool(cartData, "isAuthenticated")) return;
 
-      const customerId = toNum(cartData.customerId);
-      if (!customerId) return;
+        const customerId = toNum(cartData.customerId);
+        if (!customerId) return;
 
-      const serverItems: CartItem[] = parseCartItems(cartData.items);
+        const serverItems: CartItem[] = parseCartItems(cartData.items);
 
-      const localItems = readLocal();
-      const localCustomer = readLocalCustomerId();
+        const localItems = readLocal();
+        const localCustomer = readLocalCustomerId();
 
-      // Reorder flow has its own cart apply+sync path in CartClient.
-      // Skip hydrator merge/mirror to avoid race-driven double-merge quantities.
-      if (hasPendingReorderPayload()) return;
+        // ✅ Reorder flow has its own cart apply+sync path in CartClient.
+        // Skip hydrator merge/mirror to avoid race-driven double-merge quantities.
+        if (hasPendingReorderPayload()) return;
 
-      // If local cart belongs to another logged-in account, keep server as source of truth.
-      if (localCustomer && localCustomer !== customerId) {
-        writeLocal(serverItems, customerId);
-        return;
-      }
+        // If local cart belongs to another logged-in account, keep server as source of truth.
+        if (localCustomer && localCustomer !== customerId) {
+          writeLocal(serverItems, customerId);
+          return;
+        }
 
-      // Merge local → server then write back
-      if (localItems.length) {
-        const syncRes = await fetch("/api/cart/sync", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ mode: "merge", items: localItems }),
-        });
+        // Merge local → server then write back
+        if (localItems.length) {
+          const syncRes = await fetch("/api/cart/sync", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              mode: "merge",
+              items: localItems.map((it) => ({
+                slug: it.slug,
+                qty: it.qty,
+                variantId: it.variantId ?? null,
+              })),
+            }),
+          });
 
-        const syncData: unknown = await syncRes.json().catch(() => null);
+          const syncData: unknown = await syncRes.json().catch(() => null);
 
-        if (isRecord(syncData) && syncData.ok === true && getBool(syncData, "isAuthenticated")) {
-          if (Array.isArray(syncData.items)) {
-            writeLocal(parseCartItems(syncData.items), customerId);
-            return;
+          if (!alive) return;
+
+          if (isRecord(syncData) && syncData.ok === true && getBool(syncData, "isAuthenticated")) {
+            if (Array.isArray(syncData.items)) {
+              writeLocal(parseCartItems(syncData.items), customerId);
+              return;
+            }
           }
         }
-      }
 
-      // Otherwise mirror server
-      writeLocal(serverItems, customerId);
+        // Otherwise mirror server
+        writeLocal(serverItems, customerId);
+      } catch {
+        // ignore
+      }
     })();
+
+    return () => {
+      alive = false;
+    };
   }, []);
 
   return null;
