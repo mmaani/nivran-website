@@ -65,6 +65,18 @@ function cartKey(productId: number, variantId: number | null): string {
   return `${productId}:${variantId ?? "base"}`;
 }
 
+function normalizeId(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.trunc(n);
+}
+
+function normalizeVariantId(value: unknown): number | null {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.trunc(n);
+}
+
 export default function SalesClient({ initialLang = "en" }: { initialLang?: "en" | "ar" }) {
   const [lang, setLang] = useState<"en" | "ar">(initialLang);
   const [products, setProducts] = useState<Product[]>([]);
@@ -139,7 +151,16 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
       const catalog = (await catalogRes.json()) as { products: Product[]; promotions: Promo[] };
       const salesOrders = (await ordersRes.json()) as OrdersResponse;
 
-      const loadedProducts = Array.isArray(catalog.products) ? catalog.products : [];
+      const loadedProducts = (Array.isArray(catalog.products) ? catalog.products : []).map((product) => ({
+        ...product,
+        id: normalizeId(product.id),
+        variants: Array.isArray(product.variants)
+          ? product.variants.map((variant) => ({
+              ...variant,
+              id: normalizeId(variant.id),
+            }))
+          : [],
+      })).filter((product) => product.id > 0);
       setProducts(loadedProducts);
       setPromos(Array.isArray(catalog.promotions) ? catalog.promotions : []);
       const nextOrders = Array.isArray(salesOrders.orders) ? salesOrders.orders : [];
@@ -279,8 +300,12 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
     return () => controller.abort();
   }, [applyPromotion, promoCode, cartRows, subtotal, lang, isAr]);
 
-  function updateQty(productId: number, variantId: number | null, nextQty: number) {
+  function updateQty(productIdRaw: number, variantIdRaw: number | null, nextQty: number) {
+    const productId = normalizeId(productIdRaw);
+    const variantId = normalizeVariantId(variantIdRaw);
     const qty = Math.max(0, Math.trunc(nextQty));
+    if (productId <= 0) return;
+
     setCart((prev) => {
       if (qty <= 0) return prev.filter((line) => !(line.productId === productId && line.variantId === variantId));
       const found = prev.find((line) => line.productId === productId && line.variantId === variantId);
@@ -292,12 +317,15 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
     });
   }
 
-  function add(productId: number) {
+  function add(productIdRaw: number) {
+    const productId = normalizeId(productIdRaw);
     const product = productById.get(productId);
-    const fallbackVariant = product?.variants?.find((variant) => variant.is_default)?.id
-      ?? product?.variants?.[0]?.id
+    if (!product) return;
+
+    const fallbackVariant = product.variants?.find((variant) => variant.is_default)?.id
+      ?? product.variants?.[0]?.id
       ?? null;
-    const selectedVariant = variantSelection[productId] ?? fallbackVariant;
+    const selectedVariant = normalizeVariantId(variantSelection[productId] ?? fallbackVariant);
     const existing = cart.find((line) => line.productId === productId && line.variantId === selectedVariant);
     updateQty(productId, selectedVariant, (existing?.qty || 0) + 1);
   }
@@ -380,7 +408,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
         headers: { "content-type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          items: cart.map((line) => ({ productId: line.productId, productSlug: line.productSlug, variantId: line.variantId, qty: line.qty })),
+          items: cart.map((line) => ({ productId: normalizeId(line.productId), productSlug: line.productSlug, variantId: normalizeVariantId(line.variantId), qty: line.qty })),
           promoCode: applyPromotion ? (promoCode.trim() || undefined) : undefined,
           applyPromotion,
           customer: { name, email, phone, city, address, country: "Jordan" },
@@ -499,7 +527,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
                   <select
                     className="admin-select"
                     value={variantSelection[product.id] ?? ""}
-                    onChange={(event) => setVariantSelection((prev) => ({ ...prev, [product.id]: event.target.value ? Number(event.target.value) : null }))}
+                    onChange={(event) => setVariantSelection((prev) => ({ ...prev, [product.id]: normalizeVariantId(event.target.value) }))}
                     style={{ marginTop: 6, maxWidth: 320 }}
                   >
                     <option value="">{isAr ? "المنتج الأساسي" : "Base product"} — {money(Number(product.price_jod))}</option>
