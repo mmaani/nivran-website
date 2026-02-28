@@ -184,7 +184,8 @@ async function trySendPaidOrderThankYouEmail(cartId: string): Promise<void> {
 }
 
 async function queryPaytabsByTranRef(tranRef: string): Promise<PaytabsQueryResponse | null> {
-  if (!tranRef) return null;
+  const clean = String(tranRef || "").trim();
+  if (!clean) return null;
 
   const { profileId, serverKey, apiBase } = getPaytabsEnv();
 
@@ -196,14 +197,13 @@ async function queryPaytabsByTranRef(tranRef: string): Promise<PaytabsQueryRespo
     },
     body: JSON.stringify({
       profile_id: profileId,
-      tran_ref: tranRef,
+      tran_ref: clean,
     }),
     cache: "no-store",
   });
 
   const json = (await res.json().catch(() => null)) as PaytabsQueryResponse | null;
-  if (!json) return null;
-  return json;
+  return json || null;
 }
 
 export async function POST(req: Request) {
@@ -229,15 +229,19 @@ export async function POST(req: Request) {
   const respMessageFromBody =
     String(payload?.payment_result?.response_message || payload?.message || "").trim() || "";
 
-  // Always record callback (even unsigned) for auditability
+  // Always record callback (even unsigned) for auditability (idempotent by tran_ref unique index)
   try {
     const _hasPayload = await hasPayloadColumn();
+    // Requires: ux_paytabs_callbacks_tran_ref on paytabs_callbacks(tran_ref) where tran_ref is not null
+    const conflict = "on conflict (tran_ref) do nothing";
+
     if (_hasPayload) {
       await db.query(
         `insert into paytabs_callbacks
           (cart_id, tran_ref, signature_header, signature_computed, signature_valid, raw_body, payload)
          values
-          ($1,$2,$3,$4,$5,$6,$7)`,
+          ($1,$2,$3,$4,$5,$6,$7)
+         ${conflict}`,
         [
           cartIdFromBody || null,
           tranRefFromBody || null,
@@ -253,45 +257,48 @@ export async function POST(req: Request) {
         `insert into paytabs_callbacks
           (cart_id, tran_ref, signature_header, signature_computed, signature_valid, raw_body)
          values
-          ($1,$2,$3,$4,$5,$6)`,
+          ($1,$2,$3,$4,$5,$6)
+         ${conflict}`,
         [cartIdFromBody || null, tranRefFromBody || null, sigHeader || null, computed, sigValid, rawBody]
       );
     }
   } catch {
-    // ignore logging errors
+    // ignore logging errors (should not block callback)
   }
 
-  // Decide verification source:
-  // - If signature is valid => trust callback payload.
-  // - If signature missing/invalid => do NOT trust payload; verify via PayTabs query using tran_ref.
-let cartId = cartIdFromBody;
-const tranRef = tranRefFromBody;
-let respStatus = respStatusFromBody;
-let respMessage = respMessageFromBody;
-  
+  /**
+   * Verification strategy:
+   * - If signature is valid => trust callback payload.
+   * - If signature missing/invalid => DO NOT trust payload; verify by PayTabs query using tran_ref.
+   *
+   * We still ACK 200 always to avoid endless retries.
+   */
+  let cartId = cartIdFromBody;
+  const tranRef = tranRefFromBody;
+  let respStatus = respStatusFromBody;
+  let respMessage = respMessageFromBody;
 
   if (!sigValid) {
-    // If we don't even have tran_ref, we can’t verify; just ACK to stop retries.
+    // If no tran_ref we cannot query -> ACK only.
     if (!tranRef) {
       return NextResponse.json({ ok: true, accepted: true, verified: false }, { status: 200 });
     }
 
     const q = await queryPaytabsByTranRef(tranRef).catch(() => null);
     if (!q) {
-      // Can't verify right now; ACK to stop retries. Admin can reconcile with /query later.
+      // Can't verify now; ACK to stop retries; admin can reconcile later.
       return NextResponse.json({ ok: true, accepted: true, verified: false }, { status: 200 });
     }
 
     cartId = String(q.cart_id || q.cartId || cartIdFromBody || "").trim();
+
     const pr = q.payment_result || {};
     respStatus = String(pr.response_status || q.response_status || "").trim();
     respMessage = String(pr.response_message || q.response_message || "").trim();
-
-    // We verified by query, so treat as verified for DB update.
   }
 
   if (!cartId) {
-    // ACK to stop retries
+    // ACK to stop retries (but indicate issue)
     return NextResponse.json({ ok: true, accepted: true, error: "Missing cart_id" }, { status: 200 });
   }
 
