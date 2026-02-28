@@ -233,10 +233,16 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
         .map((line) => {
           const product = productById.get(line.productId);
           if (!product) return null;
-          const unitPrice = Number(line.unitPriceJod || 0);
+          const pricing = resolveCartLinePricing(product, line.variantId, isAr);
+          const hasRequestedVariant = line.variantId !== null;
+          const variantFound = hasRequestedVariant && product.variants.some((variant) => normalizeId(variant.id) === line.variantId);
+          const unitPrice = hasRequestedVariant && !variantFound
+            ? Number(line.unitPriceJod || pricing.unitPriceJod || 0)
+            : Number(pricing.unitPriceJod || line.unitPriceJod || 0);
 
           return {
             ...line,
+            variantLabel: hasRequestedVariant && !variantFound ? line.variantLabel : pricing.variantLabel,
             key: cartKey(line.productId, line.variantId),
             product,
             unitPrice,
@@ -244,7 +250,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
           };
         })
         .filter((row): row is NonNullable<typeof row> => row !== null),
-    [cart, productById]
+    [cart, productById, isAr]
   );
 
   const itemCount = useMemo(() => cart.reduce((sum, line) => sum + line.qty, 0), [cart]);
@@ -281,7 +287,6 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
         };
 
         if (controller.signal.aborted) return;
-
         if (!payload.ok || !payload.promo) {
           setPromoQuote({
             checking: false,
@@ -325,7 +330,13 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
         const pricing = resolveCartLinePricing(product, variantId, isAr);
         return [...prev, { productId, variantId, productSlug: product.slug || "", qty, unitPriceJod: pricing.unitPriceJod, variantLabel: pricing.variantLabel }];
       }
-      return prev.map((line) => (line.productId === productId && line.variantId === variantId ? { ...line, qty } : line));
+      return prev.map((line) => {
+        if (!(line.productId === productId && line.variantId === variantId)) return line;
+        const product = productById.get(productId);
+        if (!product) return { ...line, qty };
+        const pricing = resolveCartLinePricing(product, variantId, isAr);
+        return { ...line, qty, unitPriceJod: pricing.unitPriceJod, variantLabel: pricing.variantLabel };
+      });
     });
   }
 
@@ -596,7 +607,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
           <input className="admin-input" placeholder={isAr ? "الهاتف" : "Phone"} value={phone} onChange={(event) => setPhone(event.target.value)} />
           <input className="admin-input" placeholder={isAr ? "المدينة" : "City"} value={city} onChange={(event) => setCity(event.target.value)} />
           <input className="admin-input" placeholder={isAr ? "العنوان" : "Address"} value={address} onChange={(event) => setAddress(event.target.value)} />
-          <input className="admin-input" placeholder={isAr ? "رمز الخصم" : "Promo code"} value={promoCode} onChange={(event) => setPromoCode(event.target.value)} list="promo-list" />
+          <input className="admin-input" placeholder={isAr ? "رمز الخصم (اختياري)" : "Promo code (optional)"} value={promoCode} onChange={(event) => setPromoCode(event.target.value)} list="promo-list" />
           <label className="admin-row" style={{ gap: 8 }}>
             <input type="checkbox" checked={applyPromotion} onChange={(event) => setApplyPromotion(event.target.checked)} />
             {isAr ? "تطبيق العرض على الطلب" : "Apply promotion to this order"}
