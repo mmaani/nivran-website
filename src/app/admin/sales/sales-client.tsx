@@ -233,10 +233,12 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
         .map((line) => {
           const product = productById.get(line.productId);
           if (!product) return null;
-          const unitPrice = Number(line.unitPriceJod || 0);
+          const pricing = resolveCartLinePricing(product, line.variantId, isAr);
+          const unitPrice = Number(pricing.unitPriceJod || 0);
 
           return {
             ...line,
+            variantLabel: pricing.variantLabel,
             key: cartKey(line.productId, line.variantId),
             product,
             unitPrice,
@@ -244,7 +246,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
           };
         })
         .filter((row): row is NonNullable<typeof row> => row !== null),
-    [cart, productById]
+    [cart, productById, isAr]
   );
 
   const itemCount = useMemo(() => cart.reduce((sum, line) => sum + line.qty, 0), [cart]);
@@ -283,17 +285,6 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
         };
 
         if (controller.signal.aborted) return;
-
-        if (payload.ok && !payload.promo) {
-          setPromoQuote({
-            checking: false,
-            discountJod: 0,
-            subtotalAfterDiscountJod: subtotal,
-            error: null,
-          });
-          return;
-        }
-
         if (!payload.ok || !payload.promo) {
           setPromoQuote({
             checking: false,
