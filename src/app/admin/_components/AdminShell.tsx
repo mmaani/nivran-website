@@ -122,11 +122,7 @@ export default function AdminShell({
             <div className="admin-brand">
               <div className="admin-logo" style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
                 <BrandLogo href={authed ? (isSales ? "/admin/sales" : "/admin") : "/admin/login"} />
-                <span>NIVRAN</span>
               </div>
-              <p className="admin-subtitle">
-                <T en="Luxury Admin Console" ar="منصة الإدارة الفاخرة" />
-              </p>
             </div>
 
             <div className="admin-actions" ref={menuRef}>

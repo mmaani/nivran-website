@@ -23,10 +23,6 @@ export default async function StoreLocaleLayout({ children, params }: { children
         <div className="shell topbar">
           <div className="brand" style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
             <BrandLogo href={href("")} />
-            <span style={{ display: "inline-grid" }}>
-              <strong>{isAr ? "نيفـران" : "NIVRAN"}</strong>
-              <span>{isAr ? "ارتدِ الهدوء" : "Wear the calm."}</span>
-            </span>
           </div>
 
           <nav className="main-nav desktop-nav">
