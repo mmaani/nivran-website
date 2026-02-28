@@ -64,7 +64,7 @@ export async function POST(req: Request) {
   const variantIds = Array.from(
     new Set(
       body.items
-        .flatMap((line) => [parseVariantId(line.variantId), parseVariantId(line.productId)])
+        .map((line) => parseVariantId(line.variantId))
         .filter((v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0)
     )
   );
