@@ -258,7 +258,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
 
   useEffect(() => {
     const normalizedCode = promoCode.trim();
-    if (!applyPromotion || !normalizedCode || cartRows.length === 0) {
+    if (!applyPromotion || cartRows.length === 0) {
       setPromoQuote({ checking: false, discountJod: 0, subtotalAfterDiscountJod: subtotal, error: null });
       return;
     }
@@ -268,14 +268,16 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
 
     const run = async () => {
       try {
+        const mode = normalizedCode ? 'CODE' : 'AUTO';
+
         const response = await fetch('/api/promotions/validate', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           credentials: 'include',
           signal: controller.signal,
           body: JSON.stringify({
-            mode: 'CODE',
-            promoCode: normalizedCode,
+            mode,
+            promoCode: normalizedCode || undefined,
             locale: lang,
             items: cartRows.map((row) => ({ slug: row.productSlug, qty: row.qty, variantId: row.variantId })),
           }),

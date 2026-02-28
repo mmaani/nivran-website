@@ -43,6 +43,11 @@ export function clampQty(v: unknown, min = 1, max = MAX_QTY): number {
   return Math.min(max, Math.max(min, x));
 }
 
+/** Use one consistent key everywhere (base = "base") */
+function cartKey(slug: string, variantId: number | null | undefined): string {
+  return `${slug}::${variantId ?? "base"}`;
+}
+
 export function normalizeCartItems(items: unknown): CartItem[] {
   if (!Array.isArray(items)) return [];
   const out: CartItem[] = [];
@@ -66,12 +71,26 @@ export function normalizeCartItems(items: unknown): CartItem[] {
     });
   }
 
-  // de-dupe by slug + variant
+  // de-dupe by slug + variant AND sum qty
   const map = new Map<string, CartItem>();
   for (const i of out) {
-    const key = `${i.slug}::${i.variantId ?? "base"}`;
-    map.set(key, i);
+    const key = cartKey(i.slug, i.variantId ?? null);
+    const prev = map.get(key);
+
+    if (!prev) {
+      map.set(key, i);
+    } else {
+      map.set(key, {
+        ...prev,
+        // keep best available metadata
+        variantLabel: prev.variantLabel || i.variantLabel,
+        name: prev.name || i.name,
+        priceJod: Number.isFinite(i.priceJod) ? i.priceJod : prev.priceJod,
+        qty: clampQty((prev.qty || 0) + (i.qty || 0)),
+      });
+    }
   }
+
   return Array.from(map.values());
 }
 
@@ -117,12 +136,11 @@ export function mergeCartSum(a: CartItem[], b: CartItem[]): CartItem[] {
   const map = new Map<string, CartItem>();
 
   for (const it of normalizeCartItems(a)) {
-    const key = `${it.slug}::${it.variantId ?? "base"}`;
-    map.set(key, { ...it });
+    map.set(cartKey(it.slug, it.variantId ?? null), { ...it });
   }
 
   for (const it of normalizeCartItems(b)) {
-    const key = `${it.slug}::${it.variantId ?? "base"}`;
+    const key = cartKey(it.slug, it.variantId ?? null);
     const prev = map.get(key);
 
     if (!prev) {
