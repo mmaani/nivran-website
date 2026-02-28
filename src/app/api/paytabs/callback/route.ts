@@ -277,7 +277,8 @@ export async function POST(req: Request) {
   const tranRef = tranRefFromBody;
   let respStatus = respStatusFromBody;
   let respMessage = respMessageFromBody;
-
+  let payloadForOrder = rawBody; // what we store in paytabs_last_payload
+  let signatureForOrder = sigHeader; // what we store in paytabs_last_signature
   if (!sigValid) {
     // If no tran_ref we cannot query -> ACK only.
     if (!tranRef) {
@@ -285,6 +286,8 @@ export async function POST(req: Request) {
     }
 
     const q = await queryPaytabsByTranRef(tranRef).catch(() => null);
+    payloadForOrder = JSON.stringify(q);
+    signatureForOrder = ""; // no signature; we verified via query
     if (!q) {
       // Can't verify now; ACK to stop retries; admin can reconcile later.
       return NextResponse.json({ ok: true, accepted: true, verified: false }, { status: 200 });
@@ -315,7 +318,7 @@ export async function POST(req: Request) {
             status = case when status = any($7::text[]) then $8::text else status end,
             updated_at = now()
       where cart_id = $1::text`,
-    [cartId, tranRef, rawBody, sigHeader, respStatus, respMessage, allowedFrom, nextStatus]
+    [cartId, tranRef, payloadForOrder, signatureForOrder, respStatus, respMessage, allowedFrom, nextStatus]
   );
 
   if (nextStatus === "PAID") {
