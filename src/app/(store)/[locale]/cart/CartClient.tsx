@@ -33,6 +33,11 @@ function toNum(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** ✅ keep keying consistent with cartStore.ts ("base") */
+function cartKey(slug: string, variantId?: number | null): string {
+  return `${slug}::${variantId ?? "base"}`;
+}
+
 function readReorderPayload(): ReorderPayload | null {
   try {
     const raw = sessionStorage.getItem(REORDER_KEY);
@@ -52,9 +57,12 @@ function readReorderPayload(): ReorderPayload | null {
         const slug = String(item["slug"] || "").trim();
         if (!slug) return null;
         const qty = Math.max(1, Math.min(99, Math.trunc(toNum(item["qty"]) || 1)));
-        const variantSource = item["variantId"];
+
+        // ✅ accept both keys (variantId / variant_id) so we don't accidentally create "base" lines
+        const variantSource = (item as Record<string, unknown>)["variantId"] ?? (item as Record<string, unknown>)["variant_id"];
         const variantNum = toNum(variantSource);
         const variantId = Number.isFinite(variantNum) && variantNum > 0 ? Math.trunc(variantNum) : null;
+
         return { slug, name: slug, priceJod: 0, qty, variantId };
       })
       .filter((entry): entry is CartItem => entry !== null);
@@ -99,8 +107,8 @@ async function fetchReorderPayloadFromOrder(orderId: string, mode: "replace" | "
     const data: unknown = await res.json().catch(() => null);
     if (!res.ok || !isRecord(data) || data.ok !== true || !isRecord(data.order)) return null;
 
-    const lineItems = data.order.line_items;
-    const legacyItems = data.order.items;
+    const lineItems = (data.order as Record<string, unknown>).line_items;
+    const legacyItems = (data.order as Record<string, unknown>).items;
     const source = Array.isArray(lineItems) ? lineItems : Array.isArray(legacyItems) ? legacyItems : [];
 
     const items = source
@@ -127,11 +135,10 @@ function readCart(): CartItem[] {
   return normalizeCartItems(readLocalCart());
 }
 
-
 function collapseCartItems(items: CartItem[]): CartItem[] {
   const map = new Map<string, CartItem>();
   for (const it of normalizeCartItems(items)) {
-    const key = `${it.slug}::${it.variantId ?? 0}`;
+    const key = cartKey(it.slug, it.variantId ?? null);
     const prev = map.get(key);
     if (!prev) {
       map.set(key, { ...it, qty: Math.max(1, Math.min(99, Math.trunc(it.qty || 1))) });
@@ -141,6 +148,7 @@ function collapseCartItems(items: CartItem[]): CartItem[] {
   }
   return Array.from(map.values());
 }
+
 function writeCart(items: CartItem[]) {
   writeLocalCart(normalizeCartItems(items));
 }
@@ -185,7 +193,7 @@ type QuotePayload = {
 };
 
 function buildKey(slug: string, requestedVariantId: number | null | undefined): string {
-  return `${slug}::${requestedVariantId ?? 0}`;
+  return cartKey(slug, requestedVariantId ?? null);
 }
 
 export default function CartClient({ locale }: { locale: Locale }) {
@@ -241,7 +249,11 @@ export default function CartClient({ locale }: { locale: Locale }) {
 
       if (reorderPayload) {
         reorderAppliedRef.current = true;
-        const nextItems = reorderPayload.mode === "replace" ? reorderPayload.items : mergeCartSum(current, reorderPayload.items);
+
+        // ✅ minimal + robust: merge then normalize (prevents any duplicate lines)
+        const merged = reorderPayload.mode === "replace" ? reorderPayload.items : mergeCartSum(current, reorderPayload.items);
+        const nextItems = normalizeCartItems(merged);
+
         writeCart(nextItems);
         bestEffortSync(nextItems);
         setItems(nextItems);
@@ -408,17 +420,17 @@ export default function CartClient({ locale }: { locale: Locale }) {
   }
 
   function inc(slugKey: string) {
-    const next = items.map((i) => (`${i.slug}::${i.variantId ?? 0}` === slugKey ? { ...i, qty: Math.min(99, i.qty + 1) } : i));
+    const next = items.map((i) => (cartKey(i.slug, i.variantId ?? null) === slugKey ? { ...i, qty: Math.min(99, i.qty + 1) } : i));
     setAndSync(next);
   }
 
   function dec(slugKey: string) {
-    const next = items.map((i) => (`${i.slug}::${i.variantId ?? 0}` === slugKey ? { ...i, qty: Math.max(1, i.qty - 1) } : i));
+    const next = items.map((i) => (cartKey(i.slug, i.variantId ?? null) === slugKey ? { ...i, qty: Math.max(1, i.qty - 1) } : i));
     setAndSync(next);
   }
 
   function remove(slugKey: string) {
-    const next = items.filter((i) => `${i.slug}::${i.variantId ?? 0}` !== slugKey);
+    const next = items.filter((i) => cartKey(i.slug, i.variantId ?? null) !== slugKey);
     setAndSync(next);
   }
 
@@ -483,7 +495,7 @@ export default function CartClient({ locale }: { locale: Locale }) {
 
           <div className="panel" style={{ display: "grid", gap: 12 }}>
             {items.map((i) => {
-              const key = `${i.slug}::${i.variantId ?? 0}`;
+              const key = cartKey(i.slug, i.variantId ?? null);
               const live = lineMap.get(key);
               const unit = live ? live.unitPriceJod : Number(i.priceJod || 0);
               const lineTotal = live ? live.lineTotalJod : Number((unit * Number(i.qty || 1)).toFixed(2));

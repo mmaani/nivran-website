@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { db, type DbExecutor } from "@/lib/db";
 import { requireAdminOrSales } from "@/lib/guards";
-import { evaluatePromoCodeForLines, type PricedOrderLine } from "@/lib/promotions";
+import { evaluateAutoPromotionForLines, evaluatePromoCodeForLines, type PricedOrderLine } from "@/lib/promotions";
 import { hashPassword } from "@/lib/identity";
 import { sendOrderThankYouEmail, sendSalesWelcomeEmail } from "@/lib/email";
 
@@ -215,19 +215,24 @@ export async function POST(req: Request) {
 
     let discountJod = 0;
     let promotionId: number | null = null;
-    if (applyPromotion && promoCode) {
-      const promo = await evaluatePromoCodeForLines(trx as unknown as DbExecutor, promoCode, lines, subtotal);
+    if (applyPromotion) {
+      const promo = promoCode
+        ? await evaluatePromoCodeForLines(trx as unknown as DbExecutor, promoCode, lines, subtotal)
+        : await evaluateAutoPromotionForLines(trx as unknown as DbExecutor, lines, subtotal);
       if (!promo.ok) {
-        return {
-          ok: false as const,
-          status: 400,
-          error: promo.error,
-          missingProductIds: [] as number[],
-          staleCart: false,
-        };
+        if (promoCode) {
+          return {
+            ok: false as const,
+            status: 400,
+            error: promo.error,
+            missingProductIds: [] as number[],
+            staleCart: false,
+          };
+        }
+      } else {
+        discountJod = round2(promo.discountJod);
+        promotionId = promo.promotionId;
       }
-      discountJod = round2(promo.discountJod);
-      promotionId = promo.promotionId;
     }
 
     let customerId: number | null = null;
