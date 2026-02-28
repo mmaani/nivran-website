@@ -16,7 +16,7 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// PayTabs signature header (common patterns vary by integration)
+// PayTabs signature header (may be absent depending on account/integration)
 const SIG_HEADER = "x-paytabs-signature";
 
 type PaytabsCallbackPayload = {
@@ -28,6 +28,18 @@ type PaytabsCallbackPayload = {
     response_status?: string;
     response_message?: string;
   };
+};
+
+type PaytabsQueryResponse = {
+  tran_ref?: string;
+  cart_id?: string;
+  cartId?: string;
+  payment_result?: {
+    response_status?: string;
+    response_message?: string;
+  };
+  response_status?: string;
+  response_message?: string;
 };
 
 async function hasPayloadColumn(): Promise<boolean> {
@@ -98,8 +110,6 @@ async function tryConsumeCodePromoOnPaid(cartId: string): Promise<void> {
       return;
     }
 
-    // Do not alter financial totals after payment.
-    // Mark for admin review.
     await trx.query(
       `update orders
           set promo_consume_failed = true,
@@ -118,8 +128,6 @@ async function tryCommitInventoryOnPaid(cartId: string): Promise<void> {
     await commitInventoryForPaidCart(trx, cartId);
   });
 }
-
-
 
 type OrderEmailRow = {
   cart_id: string;
@@ -140,6 +148,7 @@ async function trySendPaidOrderThankYouEmail(cartId: string): Promise<void> {
 
   const order = orderRes.rows[0];
   if (!order) return;
+
   const to = String(order.customer_email || "").trim().toLowerCase();
   if (!to) return;
 
@@ -173,12 +182,36 @@ async function trySendPaidOrderThankYouEmail(cartId: string): Promise<void> {
     cartId,
   });
 }
+
+async function queryPaytabsByTranRef(tranRef: string): Promise<PaytabsQueryResponse | null> {
+  if (!tranRef) return null;
+
+  const { profileId, serverKey, apiBase } = getPaytabsEnv();
+
+  const res = await fetch(`${apiBase}/payment/query`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      authorization: serverKey,
+    },
+    body: JSON.stringify({
+      profile_id: profileId,
+      tran_ref: tranRef,
+    }),
+    cache: "no-store",
+  });
+
+  const json = (await res.json().catch(() => null)) as PaytabsQueryResponse | null;
+  if (!json) return null;
+  return json;
+}
+
 export async function POST(req: Request) {
   await ensureOrdersTables();
   const { serverKey } = getPaytabsEnv();
 
   const rawBody = await req.text();
-  const sigHeader = req.headers.get(SIG_HEADER) || "";
+  const sigHeader = (req.headers.get(SIG_HEADER) || "").trim();
 
   const computed = computePaytabsSignature(rawBody, serverKey);
   const sigValid = !!sigHeader && safeEqualHex(sigHeader, computed);
@@ -190,13 +223,13 @@ export async function POST(req: Request) {
     payload = null;
   }
 
-  const cartId = String(payload?.cart_id || payload?.cartId || "").trim() || "";
-  const tranRef = String(payload?.tran_ref || "").trim() || "";
-  const respStatus = String(payload?.payment_result?.response_status || "").trim();
-  const respMessage =
+  const cartIdFromBody = String(payload?.cart_id || payload?.cartId || "").trim();
+  const tranRefFromBody = String(payload?.tran_ref || "").trim();
+  const respStatusFromBody = String(payload?.payment_result?.response_status || "").trim();
+  const respMessageFromBody =
     String(payload?.payment_result?.response_message || payload?.message || "").trim() || "";
 
-  // Always record callback (even invalid signature) for auditability
+  // Always record callback (even unsigned) for auditability
   try {
     const _hasPayload = await hasPayloadColumn();
     if (_hasPayload) {
@@ -206,8 +239,8 @@ export async function POST(req: Request) {
          values
           ($1,$2,$3,$4,$5,$6,$7)`,
         [
-          cartId || null,
-          tranRef || null,
+          cartIdFromBody || null,
+          tranRefFromBody || null,
           sigHeader || null,
           computed,
           sigValid,
@@ -221,19 +254,45 @@ export async function POST(req: Request) {
           (cart_id, tran_ref, signature_header, signature_computed, signature_valid, raw_body)
          values
           ($1,$2,$3,$4,$5,$6)`,
-        [cartId || null, tranRef || null, sigHeader || null, computed, sigValid, rawBody]
+        [cartIdFromBody || null, tranRefFromBody || null, sigHeader || null, computed, sigValid, rawBody]
       );
     }
   } catch {
-    // ignore logging errors (should not block callback)
+    // ignore logging errors
   }
 
+  // Decide verification source:
+  // - If signature is valid => trust callback payload.
+  // - If signature missing/invalid => do NOT trust payload; verify via PayTabs query using tran_ref.
+let cartId = cartIdFromBody;
+const tranRef = tranRefFromBody;
+let respStatus = respStatusFromBody;
+let respMessage = respMessageFromBody;
+  
+
   if (!sigValid) {
-    return NextResponse.json({ ok: false, error: "Invalid signature" }, { status: 400 });
+    // If we don't even have tran_ref, we can’t verify; just ACK to stop retries.
+    if (!tranRef) {
+      return NextResponse.json({ ok: true, accepted: true, verified: false }, { status: 200 });
+    }
+
+    const q = await queryPaytabsByTranRef(tranRef).catch(() => null);
+    if (!q) {
+      // Can't verify right now; ACK to stop retries. Admin can reconcile with /query later.
+      return NextResponse.json({ ok: true, accepted: true, verified: false }, { status: 200 });
+    }
+
+    cartId = String(q.cart_id || q.cartId || cartIdFromBody || "").trim();
+    const pr = q.payment_result || {};
+    respStatus = String(pr.response_status || q.response_status || "").trim();
+    respMessage = String(pr.response_message || q.response_message || "").trim();
+
+    // We verified by query, so treat as verified for DB update.
   }
 
   if (!cartId) {
-    return NextResponse.json({ ok: false, error: "Missing cart_id" }, { status: 400 });
+    // ACK to stop retries
+    return NextResponse.json({ ok: true, accepted: true, error: "Missing cart_id" }, { status: 200 });
   }
 
   const nextStatus = mapPaytabsResponseStatusToOrderStatus(respStatus);
@@ -252,24 +311,20 @@ export async function POST(req: Request) {
     [cartId, tranRef, rawBody, sigHeader, respStatus, respMessage, allowedFrom, nextStatus]
   );
 
-  // If payment succeeded, commit inventory and consume CODE promo usage now (one-time).
   if (nextStatus === "PAID") {
     try {
       await tryCommitInventoryOnPaid(cartId);
-    } catch {
-      // ignore inventory errors
-    }
+    } catch {}
+
     try {
       await tryConsumeCodePromoOnPaid(cartId);
-    } catch {
-      // ignore consume errors
-    }
+    } catch {}
+
     try {
       await trySendPaidOrderThankYouEmail(cartId);
-    } catch {
-      // ignore email errors
-    }
+    } catch {}
   }
 
-  return NextResponse.json({ ok: true });
+  // Always ACK 200 so PayTabs stops retrying.
+  return NextResponse.json({ ok: true, accepted: true, signatureValid: sigValid }, { status: 200 });
 }
