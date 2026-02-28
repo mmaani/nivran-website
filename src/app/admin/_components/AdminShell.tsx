@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { adminFetch } from "@/app/admin/_components/adminClient";
-import BrandLogo from "@/components/brand/BrandLogo";
+import HeaderLogo from "@/components/brand/HeaderLogo";
 
 function T({ en, ar }: { en: string; ar: string }) {
   return (
@@ -121,7 +121,7 @@ export default function AdminShell({
           <div className="admin-topbar-head">
             <div className="admin-brand">
               <div className="admin-logo" style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-                <BrandLogo href={authed ? (isSales ? "/admin/sales" : "/admin") : "/admin/login"} />
+                <HeaderLogo href={authed ? (isSales ? "/admin/sales" : "/admin") : "/admin/login"} heightDesktop={56} heightMobile={28} />
               </div>
             </div>
 

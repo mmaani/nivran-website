@@ -310,9 +310,9 @@ export async function POST(req: Request) {
         round2(subtotal - discountJod),
         shippingJod,
         total,
-        promoCode || null,
+        applyPromotion && promoCode ? promoCode : null,
         promotionId,
-        applyPromotion && promoCode ? "CODE" : null,
+        applyPromotion && promoCode && discountJod > 0 ? "CODE" : null,
         JSON.stringify(
           lines.map((line) => ({
             productId: line.product_id,
