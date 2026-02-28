@@ -7,6 +7,7 @@ import {
   catalogSavedRedirect,
   catalogUnauthorizedRedirect,
 } from "../redirects";
+import type { DbTx } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,6 +63,118 @@ function mergeCategoryKeySql(fromKey: string, toKey: string): {
       [fromKey, toKey],
     ],
   };
+}
+
+async function normalizeAllCategories(trx: DbTx): Promise<void> {
+  const catsRes = await trx.query<CategoryRow>(
+    `select key, name_en, name_ar, sort_order, is_active, is_promoted
+       from categories
+      order by sort_order asc, key asc`
+  );
+
+  const groups = new Map<string, CategoryRow[]>();
+  for (const row of catsRes.rows) {
+    const target = normalizeKey(row.key);
+    if (!target) continue;
+    const list = groups.get(target) || [];
+    list.push(row);
+    groups.set(target, list);
+  }
+
+  for (const [target, rows] of groups.entries()) {
+    if (!target) continue;
+    if (rows.length === 1 && String(rows[0].key) === target) continue;
+
+    const targetExists = rows.some((r) => String(r.key) === target);
+    if (!targetExists && rows.length) {
+      const firstKey = String(rows[0].key);
+      if (firstKey && firstKey !== target) {
+        await trx.query(`update categories set key=$2 where key=$1`, [firstKey, target]);
+      }
+    }
+
+    for (const r of rows) {
+      const oldKey = String(r.key);
+      if (!oldKey || oldKey === target) continue;
+
+      const merge = mergeCategoryKeySql(oldKey, target);
+      await trx.query(merge.updateProducts[0], merge.updateProducts[1]);
+      await trx.query(merge.updatePromotions[0], merge.updatePromotions[1]);
+      await trx.query(`delete from categories where key=$1`, [oldKey]);
+    }
+
+    const mergedNameEn = pickFirstNonEmpty(
+      rows.map((r) => (String(r.key) === target ? r.name_en : "")).concat(rows.map((r) => r.name_en))
+    );
+    const mergedNameAr = pickFirstNonEmpty(
+      rows.map((r) => (String(r.key) === target ? r.name_ar : "")).concat(rows.map((r) => r.name_ar))
+    );
+
+    const mergedSort = Math.min(...rows.map((r) => Number.isFinite(r.sort_order) ? r.sort_order : 0));
+    const mergedActive = rows.some((r) => r.is_active === true);
+    const mergedPromoted = rows.some((r) => r.is_promoted === true);
+
+    await trx.query(
+      `update categories
+          set name_en=$2,
+              name_ar=$3,
+              sort_order=$4,
+              is_active=$5,
+              is_promoted=$6,
+              updated_at=now()
+        where key=$1`,
+      [target, mergedNameEn || target, mergedNameAr || target, mergedSort, mergedActive, mergedPromoted]
+    );
+  }
+
+  const prodKeysRes = await trx.query<{ category_key: string }>(`select distinct category_key from products`);
+
+  for (const r of prodKeysRes.rows) {
+    const oldKey = String(r.category_key || "").trim();
+    if (!oldKey) continue;
+    const nk = normalizeKey(oldKey);
+    if (!nk || nk === oldKey) continue;
+
+    await trx.query(
+      `update products
+          set category_key=$2,
+              updated_at=now()
+        where category_key=$1`,
+      [oldKey, nk]
+    );
+  }
+
+  const promoRes = await trx.query<PromoKeysRow>(
+    `select id::int as id, category_keys
+       from promotions
+      where category_keys is not null`
+  );
+
+  for (const pr of promoRes.rows) {
+    const raw = Array.isArray(pr.category_keys) ? pr.category_keys : [];
+    const normalized = uniqPreserveOrder(
+      raw.map((k) => normalizeKey(k)).filter((k) => !!k)
+    );
+
+    if (normalized.length === 0) {
+      await trx.query(
+        `update promotions
+            set category_keys=null,
+                updated_at=now()
+          where id=$1`,
+        [pr.id]
+      );
+      continue;
+    }
+
+    await trx.query(
+      `update promotions
+          set category_keys=$2::text[],
+              updated_at=now()
+        where id=$1`,
+      [pr.id, normalized]
+    );
+  }
 }
 
 type CategoryRow = {
@@ -120,136 +233,7 @@ export async function POST(req: Request) {
     // ONE-CLICK NORMALIZE ALL
     // ============================================================
     if (action === "normalize-all") {
-      await db.query("begin");
-      try {
-        // 1) Load all categories, group by normalized key
-        const catsRes = await db.query<CategoryRow>(
-          `select key, name_en, name_ar, sort_order, is_active, is_promoted
-             from categories
-            order by sort_order asc, key asc`
-        );
-
-        const groups = new Map<string, CategoryRow[]>();
-        for (const row of catsRes.rows) {
-          const target = normalizeKey(row.key);
-          if (!target) continue;
-          const list = groups.get(target) || [];
-          list.push(row);
-          groups.set(target, list);
-        }
-
-        // 2) For each normalized group: ensure target exists, merge others, update metadata
-        for (const [target, rows] of groups.entries()) {
-          if (!target) continue;
-
-          // already normalized and no duplicates
-          if (rows.length === 1 && String(rows[0].key) === target) continue;
-
-          const targetExists = rows.some((r) => String(r.key) === target);
-
-          // If target doesn't exist, rename the first row to target
-          if (!targetExists && rows.length) {
-            const firstKey = String(rows[0].key);
-            if (firstKey && firstKey !== target) {
-              await db.query(`update categories set key=$2 where key=$1`, [firstKey, target]);
-            }
-          }
-
-          // Merge all other keys into target
-          for (const r of rows) {
-            const oldKey = String(r.key);
-            if (!oldKey || oldKey === target) continue;
-
-            const merge = mergeCategoryKeySql(oldKey, target);
-            await db.query(merge.updateProducts[0], merge.updateProducts[1]);
-            await db.query(merge.updatePromotions[0], merge.updatePromotions[1]);
-            await db.query(`delete from categories where key=$1`, [oldKey]);
-          }
-
-          // Update metadata on the target row (keep best-of merged)
-          const mergedNameEn = pickFirstNonEmpty(
-            rows.map((r) => (String(r.key) === target ? r.name_en : "")).concat(rows.map((r) => r.name_en))
-          );
-          const mergedNameAr = pickFirstNonEmpty(
-            rows.map((r) => (String(r.key) === target ? r.name_ar : "")).concat(rows.map((r) => r.name_ar))
-          );
-
-          const mergedSort = Math.min(...rows.map((r) => Number.isFinite(r.sort_order) ? r.sort_order : 0));
-          const mergedActive = rows.some((r) => r.is_active === true);
-          const mergedPromoted = rows.some((r) => r.is_promoted === true);
-
-          await db.query(
-            `update categories
-                set name_en=$2,
-                    name_ar=$3,
-                    sort_order=$4,
-                    is_active=$5,
-                    is_promoted=$6,
-                    updated_at=now()
-              where key=$1`,
-            [target, mergedNameEn || target, mergedNameAr || target, mergedSort, mergedActive, mergedPromoted]
-          );
-        }
-
-        // 3) Normalize products.category_key values (even if they point to old variants)
-        const prodKeysRes = await db.query<{ category_key: string }>(
-          `select distinct category_key from products`
-        );
-
-        for (const r of prodKeysRes.rows) {
-          const oldKey = String(r.category_key || "").trim();
-          if (!oldKey) continue;
-          const nk = normalizeKey(oldKey);
-          if (!nk || nk === oldKey) continue;
-
-          await db.query(
-            `update products
-                set category_key=$2,
-                    updated_at=now()
-              where category_key=$1`,
-            [oldKey, nk]
-          );
-        }
-
-        // 4) Normalize promotions.category_keys arrays (dedupe + normalize)
-        const promoRes = await db.query<PromoKeysRow>(
-          `select id::int as id, category_keys
-             from promotions
-            where category_keys is not null`
-        );
-
-        for (const pr of promoRes.rows) {
-          const raw = Array.isArray(pr.category_keys) ? pr.category_keys : [];
-          const normalized = uniqPreserveOrder(
-            raw.map((k) => normalizeKey(k)).filter((k) => !!k)
-          );
-
-          // If array becomes empty, store NULL for cleanliness
-          if (normalized.length === 0) {
-            await db.query(
-              `update promotions
-                  set category_keys=null,
-                      updated_at=now()
-                where id=$1`,
-              [pr.id]
-            );
-            continue;
-          }
-
-          await db.query(
-            `update promotions
-                set category_keys=$2::text[],
-                    updated_at=now()
-              where id=$1`,
-            [pr.id, normalized]
-          );
-        }
-
-        await db.query("commit");
-      } catch (e: unknown) {
-        await db.query("rollback");
-        throw e;
-      }
+      await db.withTransaction(normalizeAllCategories);
 
       return catalogSavedRedirect(req, form);
     }
@@ -287,31 +271,25 @@ export async function POST(req: Request) {
           .filter((k) => !!k && k !== key);
 
         if (existingKeys.length) {
-          await db.query("begin");
-          try {
-            const target = await db.query(`select 1 from categories where key=$1 limit 1`, [key]);
+          await db.withTransaction(async (trx) => {
+            const target = await trx.query(`select 1 from categories where key=$1 limit 1`, [key]);
             const hasTarget = (target.rowCount ?? 0) > 0;
 
             const remaining = existingKeys.slice();
             if (!hasTarget) {
               const first = remaining.shift();
               if (first) {
-                await db.query(`update categories set key=$2 where key=$1`, [first, key]);
+                await trx.query(`update categories set key=$2 where key=$1`, [first, key]);
               }
             }
 
             for (const oldKey of remaining) {
               const merge = mergeCategoryKeySql(oldKey, key);
-              await db.query(merge.updateProducts[0], merge.updateProducts[1]);
-              await db.query(merge.updatePromotions[0], merge.updatePromotions[1]);
-              await db.query(`delete from categories where key=$1`, [oldKey]);
+              await trx.query(merge.updateProducts[0], merge.updateProducts[1]);
+              await trx.query(merge.updatePromotions[0], merge.updatePromotions[1]);
+              await trx.query(`delete from categories where key=$1`, [oldKey]);
             }
-
-            await db.query("commit");
-          } catch (e: unknown) {
-            await db.query("rollback");
-            throw e;
-          }
+          });
         }
       }
 
@@ -379,11 +357,10 @@ export async function POST(req: Request) {
 
       let deleted = false;
       for (const key of candidates) {
-        await db.query("begin");
-        try {
-          await db.query(`update products set category_key='perfume' where category_key=$1`, [key]);
+        const removed = await db.withTransaction(async (trx) => {
+          await trx.query(`update products set category_key='perfume' where category_key=$1`, [key]);
 
-          await db.query(
+          await trx.query(
             `update promotions
                 set category_keys = array_remove(category_keys, $1::text)
               where category_keys is not null
@@ -391,16 +368,12 @@ export async function POST(req: Request) {
             [key]
           );
 
-          const r = await db.query(`delete from categories where key=$1`, [key]);
-
-          await db.query("commit");
-          if ((r.rowCount ?? 0) === 1) {
-            deleted = true;
-            break;
-          }
-        } catch (e: unknown) {
-          await db.query("rollback");
-          throw e;
+          const r = await trx.query(`delete from categories where key=$1`, [key]);
+          return (r.rowCount ?? 0) === 1;
+        });
+        if (removed) {
+          deleted = true;
+          break;
         }
       }
 
