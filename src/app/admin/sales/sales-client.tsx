@@ -50,6 +50,13 @@ type OrdersResponse = {
   };
 };
 
+type PromoQuoteState = {
+  checking: boolean;
+  discountJod: number;
+  subtotalAfterDiscountJod: number;
+  error: string | null;
+};
+
 function money(n: number): string {
   return `${n.toFixed(2)} JOD`;
 }
@@ -76,6 +83,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
   const [ordersFrom, setOrdersFrom] = useState("");
   const [ordersTo, setOrdersTo] = useState("");
   const [promoCode, setPromoCode] = useState("");
+  const [applyPromotion, setApplyPromotion] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -86,6 +94,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
   const [accountPassword, setAccountPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
+  const [promoQuote, setPromoQuote] = useState<PromoQuoteState>({ checking: false, discountJod: 0, subtotalAfterDiscountJod: 0, error: null });
 
   useEffect(() => {
     setLang(readAdminLangCookie());
@@ -210,6 +219,66 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
   const itemCount = useMemo(() => cart.reduce((sum, line) => sum + line.qty, 0), [cart]);
   const subtotal = useMemo(() => cartRows.reduce((sum, row) => sum + row.lineTotal, 0), [cartRows]);
 
+  useEffect(() => {
+    const normalizedCode = promoCode.trim();
+    if (!applyPromotion || !normalizedCode || cartRows.length === 0) {
+      setPromoQuote({ checking: false, discountJod: 0, subtotalAfterDiscountJod: subtotal, error: null });
+      return;
+    }
+
+    const controller = new AbortController();
+    setPromoQuote((prev) => ({ ...prev, checking: true, error: null }));
+
+    const run = async () => {
+      try {
+        const response = await fetch('/api/promotions/validate', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          signal: controller.signal,
+          body: JSON.stringify({
+            mode: 'CODE',
+            promoCode: normalizedCode,
+            locale: lang,
+            items: cartRows.map((row) => ({ slug: row.productSlug, qty: row.qty, variantId: row.variantId })),
+          }),
+        });
+        const payload = (await response.json()) as {
+          ok?: boolean;
+          error?: string;
+          promo?: { discountJod?: number; subtotalAfterDiscountJod?: number } | null;
+        };
+
+        if (controller.signal.aborted) return;
+
+        if (!payload.ok || !payload.promo) {
+          setPromoQuote({
+            checking: false,
+            discountJod: 0,
+            subtotalAfterDiscountJod: subtotal,
+            error: payload.error || (isAr ? 'لا يمكن تطبيق العرض على السلة الحالية.' : 'Promotion cannot be applied to this cart.'),
+          });
+          return;
+        }
+
+        const discount = Number(payload.promo.discountJod || 0);
+        const afterDiscount = Number(payload.promo.subtotalAfterDiscountJod || subtotal);
+        setPromoQuote({ checking: false, discountJod: discount, subtotalAfterDiscountJod: afterDiscount, error: null });
+      } catch (error: unknown) {
+        if (controller.signal.aborted) return;
+        setPromoQuote({
+          checking: false,
+          discountJod: 0,
+          subtotalAfterDiscountJod: subtotal,
+          error: error instanceof Error ? error.message : (isAr ? 'تعذر التحقق من العرض.' : 'Failed to validate promotion.'),
+        });
+      }
+    };
+
+    void run();
+    return () => controller.abort();
+  }, [applyPromotion, promoCode, cartRows, subtotal, lang, isAr]);
+
   function updateQty(productId: number, variantId: number | null, nextQty: number) {
     const qty = Math.max(0, Math.trunc(nextQty));
     setCart((prev) => {
@@ -224,7 +293,11 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
   }
 
   function add(productId: number) {
-    const selectedVariant = variantSelection[productId] ?? null;
+    const product = productById.get(productId);
+    const fallbackVariant = product?.variants?.find((variant) => variant.is_default)?.id
+      ?? product?.variants?.[0]?.id
+      ?? null;
+    const selectedVariant = variantSelection[productId] ?? fallbackVariant;
     const existing = cart.find((line) => line.productId === productId && line.variantId === selectedVariant);
     updateQty(productId, selectedVariant, (existing?.qty || 0) + 1);
   }
@@ -260,11 +333,13 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
     const next = String(code || "").trim();
     if (!next) return;
     setPromoCode(next);
+    setApplyPromotion(true);
     setMsg(isAr ? `تم تطبيق رمز العرض: ${next}` : `Promotion code applied: ${next}`);
   };
 
   const clearPromotionCode = () => {
     setPromoCode("");
+    setApplyPromotion(false);
     setMsg(isAr ? "تمت إزالة رمز العرض من الطلب." : "Promotion code removed from checkout.");
   };
 
@@ -306,7 +381,8 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
         credentials: "include",
         body: JSON.stringify({
           items: cart.map((line) => ({ productId: line.productId, productSlug: line.productSlug, variantId: line.variantId, qty: line.qty })),
-          promoCode: promoCode.trim() || undefined,
+          promoCode: applyPromotion ? (promoCode.trim() || undefined) : undefined,
+          applyPromotion,
           customer: { name, email, phone, city, address, country: "Jordan" },
           paymentMethod,
           createAccount,
@@ -370,6 +446,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
       );
       setCart([]);
       setPromoCode("");
+      setApplyPromotion(false);
       await load();
     } catch (error: unknown) {
       setMsg(error instanceof Error ? error.message : isAr ? "فشلت عملية الإتمام" : "Checkout failed");
@@ -480,6 +557,10 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
           <input className="admin-input" placeholder={isAr ? "المدينة" : "City"} value={city} onChange={(event) => setCity(event.target.value)} />
           <input className="admin-input" placeholder={isAr ? "العنوان" : "Address"} value={address} onChange={(event) => setAddress(event.target.value)} />
           <input className="admin-input" placeholder={isAr ? "رمز الخصم" : "Promo code"} value={promoCode} onChange={(event) => setPromoCode(event.target.value)} list="promo-list" />
+          <label className="admin-row" style={{ gap: 8 }}>
+            <input type="checkbox" checked={applyPromotion} onChange={(event) => setApplyPromotion(event.target.checked)} />
+            {isAr ? "تطبيق العرض على الطلب" : "Apply promotion to this order"}
+          </label>
           <select className="admin-select" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as "CARD_POS" | "CARD_ONLINE" | "CASH")}>
             <option value="CARD_POS">{isAr ? "بطاقة نقطة بيع" : "Card POS"}</option>
             <option value="CARD_ONLINE">{isAr ? "بطاقة أونلاين" : "Card Online"}</option>
@@ -495,13 +576,13 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
         <div className="admin-card" style={{ marginTop: 10, padding: 10, background: "#fffaf2" }}>
           <div className="admin-row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
             <b>{isAr ? "العروض النشطة في المتجر" : "Active website promotions"}</b>
-            {promoCode ? <button className="btn" type="button" onClick={clearPromotionCode}>{isAr ? "حذف العرض" : "Remove promo"}</button> : null}
+            {promoCode || applyPromotion ? <button className="btn" type="button" onClick={clearPromotionCode}>{isAr ? "حذف العرض" : "Remove promo"}</button> : null}
           </div>
           <div className="admin-row" style={{ gap: 8 }}>
             {promos.map((promo) => {
               const code = String(promo.code || "").trim();
               const title = isAr ? (promo.title_ar || promo.title_en || "عرض") : (promo.title_en || promo.title_ar || "Promotion");
-              const active = code && promoCode.trim().toLowerCase() === code.toLowerCase();
+              const active = applyPromotion && code && promoCode.trim().toLowerCase() === code.toLowerCase();
               return (
                 <div key={promo.id} className="admin-row" style={{ gap: 6, border: "1px solid rgba(0,0,0,.1)", borderRadius: 999, padding: "6px 10px", background: active ? "#f0f7ef" : "#fff" }}>
                   <span style={{ fontSize: 12 }}><b>{title}</b>{code ? ` (${code})` : ""}</span>
@@ -519,10 +600,22 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
         <datalist id="promo-list">{promos.map((promo) => (<option key={promo.id} value={promo.code || ""}>{isAr ? (promo.title_ar || promo.title_en || "عرض") : (promo.title_en || promo.title_ar || "Promotion")}</option>))}</datalist>
 
         <div className="admin-row" style={{ justifyContent: "space-between", marginTop: 12 }}>
-          <b>{isAr ? "الإجمالي" : "Amount"}</b>
+          <b>{isAr ? "المجموع الفرعي" : "Subtotal"}</b>
           <b>{money(subtotal)}</b>
         </div>
-        <button className="btn btn-primary" onClick={checkout} disabled={loading || cartRows.length === 0} style={{ marginTop: 8 }}>
+        {applyPromotion ? (
+          <div className="admin-row" style={{ justifyContent: "space-between", marginTop: 6 }}>
+            <b>{isAr ? "الخصم" : "Discount"}</b>
+            <b>-{money(promoQuote.discountJod)}</b>
+          </div>
+        ) : null}
+        <div className="admin-row" style={{ justifyContent: "space-between", marginTop: 6 }}>
+          <b>{isAr ? "الإجمالي بعد الخصم" : "Total after discount"}</b>
+          <b>{money(applyPromotion ? promoQuote.subtotalAfterDiscountJod : subtotal)}</b>
+        </div>
+        {applyPromotion && promoQuote.checking ? <p className="admin-muted" style={{ marginTop: 8 }}>{isAr ? "جارٍ التحقق من العرض..." : "Validating promotion..."}</p> : null}
+        {applyPromotion && promoQuote.error ? <p className="admin-muted" style={{ marginTop: 8, color: "#b91c1c" }}>{promoQuote.error}</p> : null}
+        <button className="btn btn-primary" onClick={checkout} disabled={loading || cartRows.length === 0 || (applyPromotion && promoQuote.checking)} style={{ marginTop: 8 }}>
           {loading ? (isAr ? "جارٍ المعالجة..." : "Processing...") : (isAr ? "تأكيد البيع" : "Confirm Sale")}
         </button>
         {msg ? <p className="admin-muted" style={{ marginTop: 10 }}>{msg}</p> : null}
