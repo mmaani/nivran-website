@@ -252,7 +252,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
 
   useEffect(() => {
     const normalizedCode = promoCode.trim();
-    if (!applyPromotion || !normalizedCode || cartRows.length === 0) {
+    if (!applyPromotion || cartRows.length === 0) {
       setPromoQuote({ checking: false, discountJod: 0, subtotalAfterDiscountJod: subtotal, error: null });
       return;
     }
@@ -262,14 +262,16 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
 
     const run = async () => {
       try {
+        const mode = normalizedCode ? 'CODE' : 'AUTO';
+
         const response = await fetch('/api/promotions/validate', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           credentials: 'include',
           signal: controller.signal,
           body: JSON.stringify({
-            mode: 'CODE',
-            promoCode: normalizedCode,
+            mode,
+            promoCode: normalizedCode || undefined,
             locale: lang,
             items: cartRows.map((row) => ({ slug: row.productSlug, qty: row.qty, variantId: row.variantId })),
           }),
@@ -281,6 +283,16 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
         };
 
         if (controller.signal.aborted) return;
+
+        if (payload.ok && !payload.promo) {
+          setPromoQuote({
+            checking: false,
+            discountJod: 0,
+            subtotalAfterDiscountJod: subtotal,
+            error: null,
+          });
+          return;
+        }
 
         if (!payload.ok || !payload.promo) {
           setPromoQuote({
@@ -596,7 +608,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
           <input className="admin-input" placeholder={isAr ? "الهاتف" : "Phone"} value={phone} onChange={(event) => setPhone(event.target.value)} />
           <input className="admin-input" placeholder={isAr ? "المدينة" : "City"} value={city} onChange={(event) => setCity(event.target.value)} />
           <input className="admin-input" placeholder={isAr ? "العنوان" : "Address"} value={address} onChange={(event) => setAddress(event.target.value)} />
-          <input className="admin-input" placeholder={isAr ? "رمز الخصم" : "Promo code"} value={promoCode} onChange={(event) => setPromoCode(event.target.value)} list="promo-list" />
+          <input className="admin-input" placeholder={isAr ? "رمز الخصم (اختياري)" : "Promo code (optional)"} value={promoCode} onChange={(event) => setPromoCode(event.target.value)} list="promo-list" />
           <label className="admin-row" style={{ gap: 8 }}>
             <input type="checkbox" checked={applyPromotion} onChange={(event) => setApplyPromotion(event.target.checked)} />
             {isAr ? "تطبيق العرض على الطلب" : "Apply promotion to this order"}
