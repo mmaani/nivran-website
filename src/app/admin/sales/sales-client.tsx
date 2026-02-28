@@ -25,7 +25,7 @@ type Product = {
 
 type Promo = { id: number; code: string | null; title_en: string | null; title_ar: string | null; discount_type: string; discount_value: string };
 
-type CartLine = { productId: number; variantId: number | null; productSlug: string; qty: number };
+type CartLine = { productId: number; variantId: number | null; productSlug: string; qty: number; unitPriceJod: number; variantLabel: string };
 
 type OrderRow = {
   id: number;
@@ -75,6 +75,20 @@ function normalizeVariantId(value: unknown): number | null {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return null;
   return Math.trunc(n);
+}
+
+function resolveCartLinePricing(product: Product, variantId: number | null, isAr: boolean): { unitPriceJod: number; variantLabel: string } {
+  if (variantId) {
+    const selectedVariant = product.variants?.find((entry) => normalizeId(entry.id) === variantId) || null;
+    if (selectedVariant) {
+      const unitPriceJod = Number(selectedVariant.price_jod || product.price_jod || 0);
+      const variantLabel = `${selectedVariant.label}${selectedVariant.size_ml ? ` (${selectedVariant.size_ml}ml)` : ""}`;
+      return { unitPriceJod, variantLabel };
+    }
+  }
+
+  const fallbackUnitPrice = Number(product.price_jod || 0);
+  return { unitPriceJod: fallbackUnitPrice, variantLabel: isAr ? "أساسي" : "Base" };
 }
 
 export default function SalesClient({ initialLang = "en" }: { initialLang?: "en" | "ar" }) {
@@ -219,22 +233,18 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
         .map((line) => {
           const product = productById.get(line.productId);
           if (!product) return null;
-          const variant = line.variantId ? product.variants?.find((entry) => entry.id === line.variantId) || null : null;
-          const unitPrice = Number(variant?.price_jod ?? product.price_jod);
-          const variantLabel = variant ? `${variant.label}${variant.size_ml ? ` (${variant.size_ml}ml)` : ""}` : isAr ? "أساسي" : "Base";
+          const unitPrice = Number(line.unitPriceJod || 0);
 
           return {
             ...line,
             key: cartKey(line.productId, line.variantId),
             product,
-            variant,
-            variantLabel,
             unitPrice,
             lineTotal: unitPrice * line.qty,
           };
         })
         .filter((row): row is NonNullable<typeof row> => row !== null),
-    [cart, productById, isAr]
+    [cart, productById]
   );
 
   const itemCount = useMemo(() => cart.reduce((sum, line) => sum + line.qty, 0), [cart]);
@@ -311,7 +321,9 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
       const found = prev.find((line) => line.productId === productId && line.variantId === variantId);
       if (!found) {
         const product = productById.get(productId);
-        return [...prev, { productId, variantId, productSlug: product?.slug || "", qty }];
+        if (!product) return prev;
+        const pricing = resolveCartLinePricing(product, variantId, isAr);
+        return [...prev, { productId, variantId, productSlug: product.slug || "", qty, unitPriceJod: pricing.unitPriceJod, variantLabel: pricing.variantLabel }];
       }
       return prev.map((line) => (line.productId === productId && line.variantId === variantId ? { ...line, qty } : line));
     });
@@ -552,7 +564,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
           <div key={row.key} className="admin-row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
             <div style={{ flex: 1 }}>
               <b>{isAr ? row.product.name_ar || row.product.name_en : row.product.name_en}</b>
-              <div style={{ fontSize: 12, opacity: 0.8 }}>{row.variantLabel}</div>
+              <div style={{ fontSize: 12, opacity: 0.8 }}>{row.variantLabel || (isAr ? "أساسي" : "Base")}</div>
               <div style={{ fontSize: 12, opacity: 0.8 }}>{money(row.unitPrice)} {isAr ? "لكل قطعة" : "each"}</div>
             </div>
             <div className="admin-row" style={{ gap: 6 }}>
