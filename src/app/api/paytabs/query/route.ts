@@ -1,3 +1,4 @@
+// src/app/api/paytabs/query/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureOrdersTables } from "@/lib/orders";
@@ -8,13 +9,19 @@ import {
 } from "@/lib/paytabs";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 type PaytabsQueryResponse = {
   cart_id?: string;
+  cartId?: string;
   tran_ref?: string;
+  tranRef?: string;
   payment_result?: {
     response_status?: string;
+    response_message?: string;
   };
+  response_status?: string;
+  response_message?: string;
 };
 
 function readInput(input: Record<string, unknown>) {
@@ -44,31 +51,46 @@ async function handleQuery(input: Record<string, unknown>) {
   });
 
   const data = (await res.json().catch(() => ({}))) as PaytabsQueryResponse;
+
   if (!res.ok) {
     return NextResponse.json({ ok: false, error: "PayTabs query failed", paytabs: data }, { status: 502 });
   }
 
-  const responseStatus = String(data?.payment_result?.response_status || "");
+  const resolvedCartId = String(data?.cart_id || data?.cartId || cartId || "").trim();
+  const resolvedTranRef = String(data?.tran_ref || data?.tranRef || tranRef || "").trim();
+
+  const pr = data?.payment_result || {};
+  const responseStatus = String(pr.response_status || data?.response_status || "").trim();
+  const responseMessage = String(pr.response_message || data?.response_message || "").trim();
+
   const nextStatus = mapPaytabsResponseStatusToOrderStatus(responseStatus);
   const allowedFrom = paymentStatusTransitionAllowedFrom(nextStatus);
-  const resolvedCartId = String(data?.cart_id || cartId || "");
-  const resolvedTranRef = String(data?.tran_ref || tranRef || "");
 
   let transitioned = false;
 
   if (resolvedCartId) {
     const result = await db.query<{ status: string }>(
       `update orders
-          set status=case when status = any($5::text[]) then $2 else status end,
-              paytabs_tran_ref=coalesce(nullif($3,''), paytabs_tran_ref),
-              paytabs_last_payload=$4,
-              updated_at=now()
-        where cart_id=$1
+          set status = case when status = any($6::text[]) then $2 else status end,
+              paytabs_tran_ref = coalesce(nullif($3::text,''), paytabs_tran_ref),
+              paytabs_last_payload = $4::text,
+              paytabs_response_status = $5::text,
+              paytabs_response_message = $7::text,
+              updated_at = now()
+        where cart_id = $1::text
         returning status`,
-      [resolvedCartId, nextStatus, resolvedTranRef, JSON.stringify(data), allowedFrom]
+      [
+        resolvedCartId,
+        nextStatus,
+        resolvedTranRef,
+        JSON.stringify(data),
+        responseStatus,
+        allowedFrom,
+        responseMessage,
+      ]
     );
 
-    transitioned = result.rows.length > 0 && result.rows[0].status === nextStatus;
+    transitioned = result.rows.length > 0 && String(result.rows[0].status || "").toUpperCase() === nextStatus;
   }
 
   return NextResponse.json({
@@ -76,6 +98,9 @@ async function handleQuery(input: Record<string, unknown>) {
     cartId: resolvedCartId,
     tranRef: resolvedTranRef,
     transitioned,
+    responseStatus,
+    responseMessage,
+    nextStatus,
     paytabs: data,
   });
 }
