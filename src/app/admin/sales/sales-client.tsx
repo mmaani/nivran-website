@@ -234,11 +234,15 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
           const product = productById.get(line.productId);
           if (!product) return null;
           const pricing = resolveCartLinePricing(product, line.variantId, isAr);
-          const unitPrice = Number(pricing.unitPriceJod || 0);
+          const hasRequestedVariant = line.variantId !== null;
+          const variantFound = hasRequestedVariant && product.variants.some((variant) => normalizeId(variant.id) === line.variantId);
+          const unitPrice = hasRequestedVariant && !variantFound
+            ? Number(line.unitPriceJod || pricing.unitPriceJod || 0)
+            : Number(pricing.unitPriceJod || line.unitPriceJod || 0);
 
           return {
             ...line,
-            variantLabel: pricing.variantLabel,
+            variantLabel: hasRequestedVariant && !variantFound ? line.variantLabel : pricing.variantLabel,
             key: cartKey(line.productId, line.variantId),
             product,
             unitPrice,
@@ -328,7 +332,13 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
         const pricing = resolveCartLinePricing(product, variantId, isAr);
         return [...prev, { productId, variantId, productSlug: product.slug || "", qty, unitPriceJod: pricing.unitPriceJod, variantLabel: pricing.variantLabel }];
       }
-      return prev.map((line) => (line.productId === productId && line.variantId === variantId ? { ...line, qty } : line));
+      return prev.map((line) => {
+        if (!(line.productId === productId && line.variantId === variantId)) return line;
+        const product = productById.get(productId);
+        if (!product) return { ...line, qty };
+        const pricing = resolveCartLinePricing(product, variantId, isAr);
+        return { ...line, qty, unitPriceJod: pricing.unitPriceJod, variantLabel: pricing.variantLabel };
+      });
     });
   }
 
