@@ -52,16 +52,26 @@ type OrderInsight = {
 type CartReorderItem = { slug: string; qty: number; variantId: number | null };
 type ReorderMode = "replace" | "add";
 
+/** ✅ consistent key: base is "base", and variantId <= 0 is treated as base */
+function reorderKey(slug: string, variantId: number | null): string {
+  const v = typeof variantId === "number" && Number.isFinite(variantId) && variantId > 0 ? Math.trunc(variantId) : null;
+  return `${slug}::${v ?? "base"}`;
+}
+
 function collapseReorderItems(items: CartReorderItem[]): CartReorderItem[] {
   const map = new Map<string, CartReorderItem>();
   for (const it of items) {
-    const key = `${it.slug}::${it.variantId ?? 0}`;
+    const safeVariantId =
+      typeof it.variantId === "number" && Number.isFinite(it.variantId) && it.variantId > 0 ? Math.trunc(it.variantId) : null;
+
+    const key = reorderKey(it.slug, safeVariantId);
     const prev = map.get(key);
+
     if (!prev) {
-      map.set(key, { ...it, qty: toQty(it.qty) });
+      map.set(key, { ...it, qty: toQty(it.qty), variantId: safeVariantId });
       continue;
     }
-    map.set(key, { ...prev, qty: toQty(prev.qty + it.qty) });
+    map.set(key, { ...prev, qty: toQty(prev.qty + it.qty), variantId: safeVariantId });
   }
   return Array.from(map.values());
 }
@@ -286,13 +296,7 @@ export default function AccountClient({ locale }: { locale: string }) {
     const c = (profile.country || "").trim();
     const d = (profile.address_line1 || "").trim();
     const e = (profile.city || "").trim();
-    return (
-      a !== fullName.trim() ||
-      b !== phone.trim() ||
-      c !== country.trim() ||
-      d !== addressLine1.trim() ||
-      e !== city.trim()
-    );
+    return a !== fullName.trim() || b !== phone.trim() || c !== country.trim() || d !== addressLine1.trim() || e !== city.trim();
   }, [profile, fullName, phone, country, addressLine1, city]);
 
   const countryOptions = useMemo(() => {
@@ -378,7 +382,6 @@ export default function AccountClient({ locale }: { locale: string }) {
     syncCountryQueryFromValue();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAr]);
-
 
   useEffect(() => {
     if (!reorderOpen) return;
@@ -521,7 +524,7 @@ export default function AccountClient({ locale }: { locale: string }) {
       }));
 
       const currentCart = normalizeCartItems(readLocalCart());
-      const nextCart = mode === "replace" ? mappedCartItems : mergeCartSum(currentCart, mappedCartItems);
+      const nextCart = normalizeCartItems(mode === "replace" ? mappedCartItems : mergeCartSum(currentCart, mappedCartItems));
       writeLocalCart(nextCart);
 
       fetch("/api/cart/sync", {
@@ -642,7 +645,9 @@ export default function AccountClient({ locale }: { locale: string }) {
     return (
       <div className="account-shell">
         <div className="panel">
-          <p className="muted" style={{ margin: 0 }}>{isAr ? "جارٍ التحميل..." : "Loading..."}</p>
+          <p className="muted" style={{ margin: 0 }}>
+            {isAr ? "جارٍ التحميل..." : "Loading..."}
+          </p>
         </div>
       </div>
     );
@@ -652,7 +657,9 @@ export default function AccountClient({ locale }: { locale: string }) {
     return (
       <div className="account-shell">
         <div className="panel">
-          <p className="muted" style={{ margin: 0 }}>{isAr ? "يرجى تسجيل الدخول أولاً." : "Please log in first."}</p>
+          <p className="muted" style={{ margin: 0 }}>
+            {isAr ? "يرجى تسجيل الدخول أولاً." : "Please log in first."}
+          </p>
           <div style={{ marginTop: 12 }}>
             <a className="btn primary" href={`/${locale}/account/login`}>
               {isAr ? "تسجيل الدخول" : "Login"}
@@ -671,9 +678,7 @@ export default function AccountClient({ locale }: { locale: string }) {
             <div>
               <h1 className="account-title">{COPY.accountTitle}</h1>
               <p className="account-subtitle" style={{ marginBottom: 0 }}>
-                <span className={"badge " + (verified ? "badge-verified" : "")}>
-                  {verified ? COPY.verified : COPY.unverified}
-                </span>
+                <span className={"badge " + (verified ? "badge-verified" : "")}>{verified ? COPY.verified : COPY.unverified}</span>
               </p>
             </div>
             <div className="account-actions">
@@ -690,7 +695,9 @@ export default function AccountClient({ locale }: { locale: string }) {
 
           {msg ? (
             <div className="account-feedback" role="status" aria-live="polite">
-              <p className="muted" style={{ margin: 0 }}>{msg}</p>
+              <p className="muted" style={{ margin: 0 }}>
+                {msg}
+              </p>
               <button type="button" className="btn btn-quiet" onClick={() => setMsg(null)}>
                 {COPY.close}
               </button>
@@ -766,7 +773,9 @@ export default function AccountClient({ locale }: { locale: string }) {
                           onClick={() => chooseCountry(opt.label, opt.code)}
                         >
                           <span>{opt.label}</span>
-                          <span className="muted" style={{ fontSize: ".82rem" }}>{opt.code}</span>
+                          <span className="muted" style={{ fontSize: ".82rem" }}>
+                            {opt.code}
+                          </span>
                         </button>
                       ))
                     )}
@@ -787,11 +796,7 @@ export default function AccountClient({ locale }: { locale: string }) {
           </div>
 
           <div className="actions-row" style={{ marginTop: 14 }}>
-            <button
-              className={"btn primary" + (!canSave || !isDirty || saving ? " btn-disabled" : "")}
-              disabled={!canSave || !isDirty || saving}
-              onClick={saveProfile}
-            >
+            <button className={"btn primary" + (!canSave || !isDirty || saving ? " btn-disabled" : "")} disabled={!canSave || !isDirty || saving} onClick={saveProfile}>
               {saving ? COPY.updating : COPY.update}
             </button>
           </div>
@@ -814,7 +819,9 @@ export default function AccountClient({ locale }: { locale: string }) {
           </div>
 
           {orders.length === 0 ? (
-            <p className="muted" style={{ margin: 0 }}>{COPY.emptyOrders}</p>
+            <p className="muted" style={{ margin: 0 }}>
+              {COPY.emptyOrders}
+            </p>
           ) : (
             <div className="table-wrap">
               <table className="table">
@@ -838,12 +845,14 @@ export default function AccountClient({ locale }: { locale: string }) {
                       o.discount_source && String(o.discount_source).toUpperCase() === "CODE"
                         ? (o.promo_code || "").toString().trim() || COPY.none
                         : discount > 0
-                          ? `-${discount.toFixed(2)} JOD`
-                          : COPY.none;
+                        ? `-${discount.toFixed(2)} JOD`
+                        : COPY.none;
 
                     return (
                       <tr key={o.id}>
-                        <td data-label={COPY.id}><strong>#{o.id}</strong></td>
+                        <td data-label={COPY.id}>
+                          <strong>#{o.id}</strong>
+                        </td>
                         <td data-label={COPY.created}>
                           <span className="muted">{new Date(o.created_at).toLocaleString()}</span>
                         </td>
@@ -896,20 +905,18 @@ export default function AccountClient({ locale }: { locale: string }) {
               <div className="reorder-selected-order">
                 <span className="muted">{COPY.selectedOrder}</span>
                 <strong>
-                  #{selectedReorderOrder.id} • {formatDate(selectedReorderOrder.created_at)} • {Number(selectedReorderOrder.total_jod ?? selectedReorderOrder.amount_jod ?? 0).toFixed(2)} JOD
+                  #{selectedReorderOrder.id} • {formatDate(selectedReorderOrder.created_at)} •{" "}
+                  {Number(selectedReorderOrder.total_jod ?? selectedReorderOrder.amount_jod ?? 0).toFixed(2)} JOD
                 </strong>
               </div>
             ) : null}
 
-            <p className="muted" style={{ marginTop: 0 }}>{COPY.reorderHint}</p>
+            <p className="muted" style={{ marginTop: 0 }}>
+              {COPY.reorderHint}
+            </p>
 
             <div className="reorder-choice-grid">
-              <button
-                className={"reorder-choice" + (reorderMode === "add" ? " is-selected" : "")}
-                onClick={() => setReorderMode("add")}
-                disabled={reorderBusy}
-                aria-pressed={reorderMode === "add"}
-              >
+              <button className={"reorder-choice" + (reorderMode === "add" ? " is-selected" : "")} onClick={() => setReorderMode("add")} disabled={reorderBusy} aria-pressed={reorderMode === "add"}>
                 <strong>{COPY.addToCart}</strong>
                 <span className="muted">{COPY.addToCartDesc}</span>
               </button>
