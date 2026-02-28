@@ -108,6 +108,33 @@ function toDatetimeLocalValue(value: string | null): string {
   return d.toISOString().slice(0, 16);
 }
 
+function normalizeTextArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    const raw = value.trim();
+    if (!raw) return [];
+
+    // Handle Postgres array text form like: {a,b,c}
+    if (raw.startsWith("{") && raw.endsWith("}")) {
+      return raw
+        .slice(1, -1)
+        .split(",")
+        .map((item) => item.replace(/^"|"$/g, "").trim())
+        .filter(Boolean);
+    }
+
+    return raw
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
 function promoEstimatedCoverage(row: PromoRow, products: ProductRow[]): number {
   const productSlugs = row.product_slugs || [];
   const categoryKeys = row.category_keys || [];
@@ -238,12 +265,25 @@ async function loadCatalogPageData(): Promise<CatalogPageData> {
       readFreeShippingThresholdJod(),
     ]);
 
+    const safeProducts = productsRes.rows.map((row) => ({
+      ...row,
+      wear_times: normalizeTextArray(row.wear_times),
+      seasons: normalizeTextArray(row.seasons),
+      audiences: normalizeTextArray(row.audiences),
+    }));
+
+    const safePromos = promosRes.rows.map((row) => ({
+      ...row,
+      category_keys: normalizeTextArray(row.category_keys),
+      product_slugs: normalizeTextArray(row.product_slugs),
+    }));
+
     return {
       health: "db",
       categories: categoriesRes.rows,
-      products: productsRes.rows,
+      products: safeProducts,
       variants: variantsRes.rows,
-      promos: promosRes.rows,
+      promos: safePromos,
       freeShippingThresholdJod: shippingThreshold.value,
       bootstrapNote,
     };
@@ -1015,9 +1055,7 @@ export default async function AdminCatalogPage({
                               <input type="hidden" name="return_to" value={returnTo} />
                               <input type="hidden" name="action" value="delete" />
                               <input type="hidden" name="id" value={p.id} />
-                              <button className={UI.btn} type="submit" onClick={(e) => {
-                                if (!confirm(isAr ? "هل تريد حذف هذا المنتج؟" : "Delete this product?")) e.preventDefault();
-                              }}>{L.del}</button>
+                              <button className={UI.btn} type="submit">{L.del}</button>
                             </form>
                           </div>
 

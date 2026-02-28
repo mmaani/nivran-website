@@ -76,6 +76,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
   const [ordersFrom, setOrdersFrom] = useState("");
   const [ordersTo, setOrdersTo] = useState("");
   const [promoCode, setPromoCode] = useState("");
+  const [applyPromotion, setApplyPromotion] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -260,11 +261,13 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
     const next = String(code || "").trim();
     if (!next) return;
     setPromoCode(next);
+    setApplyPromotion(true);
     setMsg(isAr ? `تم تطبيق رمز العرض: ${next}` : `Promotion code applied: ${next}`);
   };
 
   const clearPromotionCode = () => {
     setPromoCode("");
+    setApplyPromotion(false);
     setMsg(isAr ? "تمت إزالة رمز العرض من الطلب." : "Promotion code removed from checkout.");
   };
 
@@ -306,7 +309,8 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
         credentials: "include",
         body: JSON.stringify({
           items: cart.map((line) => ({ productId: line.productId, productSlug: line.productSlug, variantId: line.variantId, qty: line.qty })),
-          promoCode: promoCode.trim() || undefined,
+          promoCode: applyPromotion ? (promoCode.trim() || undefined) : undefined,
+          applyPromotion,
           customer: { name, email, phone, city, address, country: "Jordan" },
           paymentMethod,
           createAccount,
@@ -370,6 +374,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
       );
       setCart([]);
       setPromoCode("");
+      setApplyPromotion(false);
       await load();
     } catch (error: unknown) {
       setMsg(error instanceof Error ? error.message : isAr ? "فشلت عملية الإتمام" : "Checkout failed");
@@ -480,6 +485,10 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
           <input className="admin-input" placeholder={isAr ? "المدينة" : "City"} value={city} onChange={(event) => setCity(event.target.value)} />
           <input className="admin-input" placeholder={isAr ? "العنوان" : "Address"} value={address} onChange={(event) => setAddress(event.target.value)} />
           <input className="admin-input" placeholder={isAr ? "رمز الخصم" : "Promo code"} value={promoCode} onChange={(event) => setPromoCode(event.target.value)} list="promo-list" />
+          <label className="admin-row" style={{ gap: 8 }}>
+            <input type="checkbox" checked={applyPromotion} onChange={(event) => setApplyPromotion(event.target.checked)} />
+            {isAr ? "تطبيق العرض على الطلب" : "Apply promotion to this order"}
+          </label>
           <select className="admin-select" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as "CARD_POS" | "CARD_ONLINE" | "CASH")}>
             <option value="CARD_POS">{isAr ? "بطاقة نقطة بيع" : "Card POS"}</option>
             <option value="CARD_ONLINE">{isAr ? "بطاقة أونلاين" : "Card Online"}</option>
@@ -495,13 +504,13 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
         <div className="admin-card" style={{ marginTop: 10, padding: 10, background: "#fffaf2" }}>
           <div className="admin-row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
             <b>{isAr ? "العروض النشطة في المتجر" : "Active website promotions"}</b>
-            {promoCode ? <button className="btn" type="button" onClick={clearPromotionCode}>{isAr ? "حذف العرض" : "Remove promo"}</button> : null}
+            {promoCode || applyPromotion ? <button className="btn" type="button" onClick={clearPromotionCode}>{isAr ? "حذف العرض" : "Remove promo"}</button> : null}
           </div>
           <div className="admin-row" style={{ gap: 8 }}>
             {promos.map((promo) => {
               const code = String(promo.code || "").trim();
               const title = isAr ? (promo.title_ar || promo.title_en || "عرض") : (promo.title_en || promo.title_ar || "Promotion");
-              const active = code && promoCode.trim().toLowerCase() === code.toLowerCase();
+              const active = applyPromotion && code && promoCode.trim().toLowerCase() === code.toLowerCase();
               return (
                 <div key={promo.id} className="admin-row" style={{ gap: 6, border: "1px solid rgba(0,0,0,.1)", borderRadius: 999, padding: "6px 10px", background: active ? "#f0f7ef" : "#fff" }}>
                   <span style={{ fontSize: 12 }}><b>{title}</b>{code ? ` (${code})` : ""}</span>

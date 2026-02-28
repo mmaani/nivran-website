@@ -10,6 +10,7 @@ type CheckoutItem = { productId: number; qty: number; variantId?: number | null;
 type CheckoutBody = {
   items: CheckoutItem[];
   promoCode?: string;
+  applyPromotion?: boolean;
   paymentMethod?: "CARD_ONLINE" | "CARD_POS" | "CASH";
   customer: { name: string; email: string; phone: string; city: string; address: string; country?: string };
   createAccount?: boolean;
@@ -209,11 +210,12 @@ export async function POST(req: Request) {
     }
 
     const subtotal = round2(lines.reduce((sum, line) => sum + line.line_total_jod, 0));
-    const promoCode = String(body.promoCode || "").trim().toUpperCase();
+    const applyPromotion = body.applyPromotion === true;
+    const promoCode = applyPromotion ? String(body.promoCode || "").trim().toUpperCase() : "";
 
     let discountJod = 0;
     let promotionId: number | null = null;
-    if (promoCode) {
+    if (applyPromotion && promoCode) {
       const promo = await evaluatePromoCodeForLines(trx as unknown as DbExecutor, promoCode, lines, subtotal);
       if (!promo.ok) {
         return {
@@ -310,7 +312,7 @@ export async function POST(req: Request) {
         total,
         promoCode || null,
         promotionId,
-        promoCode ? "CODE" : null,
+        applyPromotion && promoCode ? "CODE" : null,
         JSON.stringify(
           lines.map((line) => ({
             productId: line.product_id,
