@@ -8,9 +8,16 @@ export const metadata: Metadata = {
   description: "Clean, minimalist, unisex fragrance brand.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://www.nivran.com"),
   icons: {
-    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
-    apple: [{ url: "/icon.svg" }],
+    // Classic set (most compatible)
+    icon: [
+      { url: "/brand/favicon.ico" }, // legacy
+      { url: "/brand/favicon-96x96.png", type: "image/png", sizes: "96x96" },
+      { url: "/brand/favicon.svg", type: "image/svg+xml" }
+    ],
+    shortcut: [{ url: "/brand/favicon.ico" }],
+    apple: [{ url: "/brand/apple-touch-icon.png", sizes: "180x180", type: "image/png" }]
   },
+  manifest: "/brand/site.webmanifest",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -20,6 +27,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${inter.variable} ${cairoArabic.variable} ${playfairDisplay.variable}`}
     >
       <head>
+        {/* Required by RealFaviconGenerator guidance */}
+        <meta name="apple-mobile-web-app-title" content="NIVRAN" />
+
         {/* Google tag (gtag.js) */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-RSBL7QC85M"
