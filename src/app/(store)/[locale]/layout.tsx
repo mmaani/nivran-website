@@ -1,9 +1,9 @@
 import Link from "next/link";
-import Image from "next/image";
 import CartHeaderIcon from "@/components/CartHeaderIcon";
 import CartHydrator from "@/components/CartHydrator";
 import LocaleSwitchLink from "@/components/site/LocaleSwitchLink";
 import Footer from "@/components/site/Footer";
+import BrandLogo from "@/components/brand/BrandLogo";
 const LINKS = {
   en: { home: "Home", story: "Story", product: "Shop", faq: "FAQ", contact: "Contact", checkout: "Checkout", account: "Account", admin: "Admin", menu: "Menu", lang: "العربية" },
   ar: { home: "الرئيسية", story: "قصتنا", product: "المتجر", faq: "الأسئلة", contact: "تواصل", checkout: "الدفع", account: "حسابي", admin: "الإدارة", menu: "القائمة", lang: "English" },
@@ -21,13 +21,9 @@ export default async function StoreLocaleLayout({ children, params }: { children
       <CartHydrator />
       <header className="site-header" style={{ position: "relative" }}>
         <div className="shell topbar">
-          <a className="brand" href={href("")} style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
-            <Image src="/brand/logo.svg" alt="NIVRAN" width={44} height={44} style={{ borderRadius: "50%", border: "1px solid rgba(200,163,100,.6)" }} />
-            <span style={{ display: "inline-grid" }}>
-              <strong>{isAr ? "نيفـران" : "NIVRAN"}</strong>
-              <span>{isAr ? "ارتدِ الهدوء" : "Wear the calm."}</span>
-            </span>
-          </a>
+          <div className="brand" style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
+            <BrandLogo href={href("")} />
+          </div>
 
           <nav className="main-nav desktop-nav">
             <a href={href("")}>{t.home}</a>
