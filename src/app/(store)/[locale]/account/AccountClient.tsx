@@ -52,6 +52,20 @@ type OrderInsight = {
 type CartReorderItem = { slug: string; qty: number; variantId: number | null };
 type ReorderMode = "replace" | "add";
 
+function collapseReorderItems(items: CartReorderItem[]): CartReorderItem[] {
+  const map = new Map<string, CartReorderItem>();
+  for (const it of items) {
+    const key = `${it.slug}::${it.variantId ?? 0}`;
+    const prev = map.get(key);
+    if (!prev) {
+      map.set(key, { ...it, qty: toQty(it.qty) });
+      continue;
+    }
+    map.set(key, { ...prev, qty: toQty(prev.qty + it.qty) });
+  }
+  return Array.from(map.values());
+}
+
 function toInt(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) return Math.trunc(value);
   if (typeof value === "string") {
@@ -491,7 +505,7 @@ export default function AccountClient({ locale }: { locale: string }) {
         })
         .filter((entry): entry is CartReorderItem => entry !== null);
 
-      const mapped = mappedNormalized.length ? mappedNormalized : mappedLegacy;
+      const mapped = collapseReorderItems(mappedNormalized.length ? mappedNormalized : mappedLegacy);
 
       if (!mapped.length) {
         setMsg(COPY.reorderNoItems);

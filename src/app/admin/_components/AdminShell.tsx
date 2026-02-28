@@ -2,9 +2,9 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { adminFetch } from "@/app/admin/_components/adminClient";
+import BrandLogo from "@/components/brand/BrandLogo";
 
 function T({ en, ar }: { en: string; ar: string }) {
   return (
@@ -120,10 +120,10 @@ export default function AdminShell({
         <div className="admin-topbar-inner admin-topbar-compact">
           <div className="admin-topbar-head">
             <div className="admin-brand">
-              <Link className="admin-logo" href={authed ? (isSales ? "/admin/sales" : "/admin") : "/admin/login"}>
-                <Image src="/brand/logo.svg" alt="NIVRAN" width={34} height={34} priority />
+              <div className="admin-logo" style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+                <BrandLogo href={authed ? (isSales ? "/admin/sales" : "/admin") : "/admin/login"} />
                 <span>NIVRAN</span>
-              </Link>
+              </div>
               <p className="admin-subtitle">
                 <T en="Luxury Admin Console" ar="منصة الإدارة الفاخرة" />
               </p>
