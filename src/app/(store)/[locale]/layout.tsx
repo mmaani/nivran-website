@@ -3,7 +3,7 @@ import CartHeaderIcon from "@/components/CartHeaderIcon";
 import CartHydrator from "@/components/CartHydrator";
 import LocaleSwitchLink from "@/components/site/LocaleSwitchLink";
 import Footer from "@/components/site/Footer";
-import BrandLogo from "@/components/brand/BrandLogo";
+import HeaderLogo from "@/components/brand/HeaderLogo";
 const LINKS = {
   en: { home: "Home", story: "Story", product: "Shop", faq: "FAQ", contact: "Contact", checkout: "Checkout", account: "Account", admin: "Admin", menu: "Menu", lang: "العربية" },
   ar: { home: "الرئيسية", story: "قصتنا", product: "المتجر", faq: "الأسئلة", contact: "تواصل", checkout: "الدفع", account: "حسابي", admin: "الإدارة", menu: "القائمة", lang: "English" },
@@ -22,7 +22,7 @@ export default async function StoreLocaleLayout({ children, params }: { children
       <header className="site-header" style={{ position: "relative" }}>
         <div className="shell topbar">
           <div className="brand" style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
-            <BrandLogo href={href("")} />
+            <HeaderLogo href={href("")} heightDesktop={56} heightMobile={28} />
           </div>
 
           <nav className="main-nav desktop-nav">

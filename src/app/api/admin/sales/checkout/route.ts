@@ -310,9 +310,9 @@ export async function POST(req: Request) {
         round2(subtotal - discountJod),
         shippingJod,
         total,
-        promoCode || null,
+        applyPromotion && promoCode ? promoCode : null,
         promotionId,
-        applyPromotion && promoCode ? "CODE" : null,
+        applyPromotion && promoCode && discountJod > 0 ? "CODE" : null,
         JSON.stringify(
           lines.map((line) => ({
             productId: line.product_id,
@@ -411,14 +411,18 @@ export async function POST(req: Request) {
     }).catch(() => null);
   }
 
-  if (response.customerMatched && response.createdAccountEmail) {
+  const shouldSendOrderThankYou = Boolean(
+    response.createdAccountEmail && (response.customerMatched || !response.customerCreated)
+  );
+
+  if (shouldSendOrderThankYou && response.createdAccountEmail) {
     await sendOrderThankYouEmail({
       to: String(response.createdAccountEmail),
       customerName: String(response.createdAccountName || body.customer?.name || "Customer"),
       items: Array.isArray(response.welcomeOrderItems) ? response.welcomeOrderItems : [],
       totalJod: Number(response.totalJod || 0),
       accountUrl: "https://www.nivran.com/en/account",
-      returningCustomer: true,
+      returningCustomer: response.customerMatched === true,
       cartId: String(response.orderId || ""),
     }).catch(() => null);
   }

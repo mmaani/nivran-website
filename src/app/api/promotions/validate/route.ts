@@ -136,16 +136,8 @@ if (mode === "AUTO" && promoCode) {
               p.slug,
               p.category_key,
               p.is_active,
-              coalesce(v.price_jod, p.price_jod)::text as unit_price_jod
+              p.price_jod::text as unit_price_jod
          from products p
-         left join lateral (
-           select pv.price_jod
-             from product_variants pv
-            where pv.product_id=p.id
-              and pv.is_active=true
-            order by pv.is_default desc, pv.price_jod asc, pv.sort_order asc, pv.id asc
-            limit 1
-         ) v on true
         where p.slug = any($1::text[])`,
       [slugs]
     );
