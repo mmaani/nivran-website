@@ -1,5 +1,16 @@
+// src/lib/db.ts
 import "server-only";
-import { Pool, PoolClient, QueryResult, QueryResultRow } from "pg";
+
+import WebSocket from "ws";
+import {
+  Pool,
+  neonConfig,
+  type PoolClient,
+  type QueryResult,
+  type QueryResultRow,
+} from "@neondatabase/serverless";
+
+neonConfig.webSocketConstructor = WebSocket;
 
 let pool: Pool | null = null;
 
@@ -8,16 +19,14 @@ function normalizeDatabaseUrl(connectionString: string): string {
     const url = new URL(connectionString);
 
     const sslmode = (url.searchParams.get("sslmode") || "").toLowerCase();
-    if (!sslmode) {
-      url.searchParams.set("sslmode", "require");
-    }
+    if (!sslmode) url.searchParams.set("sslmode", "require");
 
-    // Silence pg/pg-connection-string compatibility warning while keeping current behavior.
+    // Keep your existing compat param (harmless; kept for parity with your current setup)
     if (!url.searchParams.get("uselibpqcompat")) {
       url.searchParams.set("uselibpqcompat", "true");
     }
 
-    // Node postgres does not understand sslrootcert=system as a cert path.
+    // If present, remove sslrootcert=system (not meaningful here, and can confuse)
     if ((url.searchParams.get("sslrootcert") || "").toLowerCase() === "system") {
       url.searchParams.delete("sslrootcert");
     }
@@ -27,7 +36,6 @@ function normalizeDatabaseUrl(connectionString: string): string {
     return connectionString;
   }
 }
-
 
 function getPool(): Pool {
   if (pool) return pool;
@@ -107,14 +115,22 @@ export function isDbConnectivityError(error: unknown): boolean {
   if (code === "ECONNREFUSED") return true;
   if (code === "ETIMEDOUT") return true;
   if (code === "ENOTFOUND") return true;
+  if (code === "ENETUNREACH") return true;
+  if (code === "EAI_AGAIN") return true;
+
   if (code === "57P01") return true;
   if (code === "57P02") return true;
   if (code === "57P03") return true;
+
   if (msg.includes("terminating connection")) return true;
   if (msg.includes("no pg_hba.conf entry")) return true;
   if (msg.includes("self signed certificate")) return true;
   if (msg.includes("certificate has expired")) return true;
   if (msg.includes("unable to verify the first certificate")) return true;
+
+  // Neon serverless driver can surface websocket-related connectivity messages
+  if (msg.includes("websocket")) return true;
+  if (msg.includes("fetch failed")) return true;
 
   return false;
 }

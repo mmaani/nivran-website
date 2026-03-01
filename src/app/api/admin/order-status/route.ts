@@ -12,19 +12,21 @@ export const runtime = "nodejs";
  */
 const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   PENDING_PAYMENT: ["PAID", "FAILED", "CANCELED"],
-  PAID: ["PROCESSING", "REFUND_PENDING"],
-  PROCESSING: ["SHIPPED", "REFUND_PENDING"],
-  SHIPPED: ["DELIVERED", "REFUND_PENDING"],
-  DELIVERED: ["REFUND_PENDING"],
+  PAID: ["PROCESSING", "REFUND_REQUESTED", "REFUND_PENDING"],
+  PROCESSING: ["SHIPPED", "REFUND_REQUESTED", "REFUND_PENDING"],
+  SHIPPED: ["DELIVERED", "REFUND_REQUESTED", "REFUND_PENDING"],
+  DELIVERED: ["REFUND_REQUESTED", "REFUND_PENDING"],
   FAILED: [],
   CANCELED: [],
 
   // COD flow
   PENDING_COD_CONFIRM: ["PAID_COD", "CANCELED"],
-  PAID_COD: ["PROCESSING", "REFUND_PENDING"],
+  PAID_COD: ["PROCESSING", "REFUND_REQUESTED", "REFUND_PENDING"],
 
   // Refund flow
-  REFUND_PENDING: ["REFUNDED"],
+  REFUND_REQUESTED: ["REFUND_PENDING", "REFUND_FAILED", "REFUNDED"],
+  REFUND_PENDING: ["REFUND_FAILED", "REFUNDED"],
+  REFUND_FAILED: [],
   REFUNDED: [],
 };
 
@@ -49,6 +51,7 @@ type OrderRow = {
   id: number;
   status: string;
   payment_method: string;
+  inventory_committed_at: string | null;
 };
 
 type OrderPromoRow = {
@@ -64,6 +67,11 @@ function isPaidStatus(status: string): boolean {
   return s === "PAID" || s === "PAID_COD";
 }
 
+function isPaidPipelineStatus(status: string): boolean {
+  const s = normStr(status);
+  return s === "PAID" || s === "PAID_COD" || s === "PROCESSING" || s === "SHIPPED" || s === "DELIVERED";
+}
+
 function isAllowedByMap(current: string, next: string): boolean {
   const cur = normStr(current);
   const nxt = normStr(next);
@@ -76,9 +84,6 @@ function extraGuards(paymentMethod: string, current: string, next: string): stri
   const cur = normStr(current);
   const nxt = normStr(next);
 
-  // Always allow cancel ONLY if map allows it (strict), so we don’t bypass the map.
-  // (If you want “cancel anytime”, add "CANCELED" to every state in ALLOWED_TRANSITIONS.)
-
   // Never allow “shipping pipeline” steps unless order is paid (PAYTABS + COD)
   if (nxt === "PROCESSING" || nxt === "SHIPPED" || nxt === "DELIVERED") {
     if (!isPaidStatus(cur)) return "Cannot move to PROCESSING/SHIPPED/DELIVERED unless the order is PAID.";
@@ -86,28 +91,21 @@ function extraGuards(paymentMethod: string, current: string, next: string): stri
 
   // PayTabs additional guardrails (optional but safe)
   if (pm === "PAYTABS") {
-    // If PayTabs order, PAID_COD doesn’t make sense
     if (nxt === "PAID_COD") return "PAYTABS orders cannot be marked PAID_COD.";
-    // COD confirm doesn’t make sense
     if (nxt === "PENDING_COD_CONFIRM") return "PAYTABS orders cannot be set to PENDING_COD_CONFIRM.";
   }
 
   // COD additional guardrails
   if (pm === "COD") {
-    // COD orders shouldn’t be set to PAID (online). They should be PAID_COD.
     if (nxt === "PAID") return "COD orders should be marked PAID_COD (not PAID).";
-    // PAYTABS pending payment shouldn’t be used for COD (but allow if already in it)
   }
 
   // Refund guardrails
-  if (nxt === "REFUND_PENDING" || nxt === "REFUNDED") {
-    if (!isPaidStatus(cur) && cur !== "REFUND_PENDING") {
+  if (nxt === "REFUND_REQUESTED" || nxt === "REFUND_PENDING" || nxt === "REFUNDED" || nxt === "REFUND_FAILED") {
+    if (!isPaidStatus(cur) && cur !== "REFUND_REQUESTED" && cur !== "REFUND_PENDING") {
       return "Refund is only allowed for PAID / PAID_COD orders.";
     }
   }
-
-  // Don’t allow moving into PAID/PAID_COD from non-payment states except those in map
-  // (Handled by ALLOWED_TRANSITIONS)
 
   return null;
 }
@@ -199,7 +197,7 @@ export async function POST(req: Request) {
   // Transaction: lock the order row, validate transition, update status
   const result = await db.withTransaction(async (trx) => {
     const { rows } = await trx.query<OrderRow>(
-      `select id, status, payment_method
+      `select id, status, payment_method, inventory_committed_at
          from orders
         where id = $1
         for update`,
@@ -225,6 +223,21 @@ export async function POST(req: Request) {
     const guard = extraGuards(pm, current, nextStatus);
     if (guard) {
       return { ok: false as const, status: 400, error: guard };
+    }
+
+    // CRITICAL invariant:
+    // If inventory was committed, don't allow paid pipeline -> FAILED/CANCELED.
+    // Must go through refund flow.
+    if (
+      order.inventory_committed_at &&
+      isPaidPipelineStatus(current) &&
+      (nextStatus === "FAILED" || nextStatus === "CANCELED")
+    ) {
+      return {
+        ok: false as const,
+        status: 400,
+        error: "Inventory already committed. Use refund flow (REFUND_REQUESTED/REFUND_PENDING) instead of FAILED/CANCELED.",
+      };
     }
 
     await trx.query(`update orders set status = $2, updated_at = now() where id = $1`, [id, nextStatus]);

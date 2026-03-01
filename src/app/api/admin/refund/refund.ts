@@ -3,27 +3,16 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/guards";
 import { ensureRefundTablesSafe } from "@/lib/refundsSchema";
-import {
-  createRefundRecord,
-  markRefundFailed,
-  markRefundRequested,
-  markRefundSucceeded,
-  restockDueRefunds,
-  type RestockPolicy,
-} from "@/lib/refunds";
+import { createRefundRecord, markRefundFailed, markRefundSucceeded, scheduleRestockAfter48h } from "@/lib/refunds";
 import { requestPaytabsRefund } from "@/lib/paytabsRefund";
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+type JsonRecord = Record<string, unknown>;
+function isRecord(v: unknown): v is JsonRecord {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-function toInt(v: unknown): number | null {
-  if (typeof v === "number" && Number.isFinite(v) && v > 0) return Math.trunc(v);
-  if (typeof v === "string") {
-    const n = Number(v.trim());
-    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
-  }
-  return null;
+function toStr(v: unknown): string {
+  return typeof v === "string" ? v : v == null ? "" : String(v);
 }
 
 function toNum(v: unknown): number {
@@ -31,13 +20,14 @@ function toNum(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function toStr(v: unknown): string {
-  return typeof v === "string" ? v : v == null ? "" : String(v);
+function toInt(v: unknown): number {
+  const n = toNum(v);
+  return Number.isFinite(n) ? Math.trunc(n) : 0;
 }
 
-function toRestockPolicy(v: unknown): RestockPolicy {
-  const s = toStr(v).trim().toUpperCase();
-  return s === "IMMEDIATE" ? "IMMEDIATE" : "DELAYED";
+function modeToMethod(modeRaw: unknown): "PAYTABS" | "MANUAL" {
+  const s = toStr(modeRaw).trim().toUpperCase();
+  return s === "MANUAL" ? "MANUAL" : "PAYTABS";
 }
 
 export const runtime = "nodejs";
@@ -51,81 +41,71 @@ export async function POST(req: Request) {
   const parsed: unknown = await req.json().catch(() => ({}));
   const body = isRecord(parsed) ? parsed : {};
 
-  const orderId = toInt(body["orderId"] ?? body["id"]);
-  const amountJod = toNum(body["amountJod"] ?? body["amount"]);
+  const orderId = toInt(body["orderId"]);
+  const amountJod = toNum(body["amountJod"]);
   const reason = toStr(body["reason"]);
-  const idempotencyKey = toStr(body["idempotencyKey"] ?? body["idemKey"] ?? "admin_manual");
-  const refundMethod = toStr(body["refundMethod"] ?? "PAYTABS").trim().toUpperCase() === "MANUAL" ? "MANUAL" : "PAYTABS";
-  const restockPolicy = toRestockPolicy(body["restockPolicy"] ?? "DELAYED");
+  const idempotencyKey = toStr(body["idempotencyKey"]);
+  const mode = toStr(body["mode"]);
+  const method = modeToMethod(mode);
 
-  if (!orderId) return NextResponse.json({ ok: false, error: "orderId is required" }, { status: 400 });
+  if (!(orderId > 0)) return NextResponse.json({ ok: false, error: "orderId is required" }, { status: 400 });
   if (!(amountJod > 0)) return NextResponse.json({ ok: false, error: "amountJod must be > 0" }, { status: 400 });
   if (!idempotencyKey) return NextResponse.json({ ok: false, error: "idempotencyKey is required" }, { status: 400 });
 
-  // Phase 1: prepare refund record (idempotent)
+  // Phase 1: create refund row idempotently + move order to REFUND_PENDING
   const prep = await db.withTransaction(async (trx) => {
     return createRefundRecord(trx, {
       orderId,
       amountJod,
       reason,
+      method,
       idempotencyKey,
-      refundMethod,
-      restockPolicy,
     });
   });
 
-  // Manual refunds: no PayTabs call
-  if (refundMethod === "MANUAL") {
+  // Manual: no PayTabs call. Keep refund PENDING until confirm endpoint.
+  if (method === "MANUAL") {
     return NextResponse.json({
       ok: true,
-      refundId: prep.refundId,
-      mode: "MANUAL_REQUIRED",
-      restockPolicy: prep.restockPolicy,
-      restockAt: prep.restockAt,
+      mode: "MANUAL",
+      refundId: prep.refund.id,
+      refundStatus: prep.refund.status,
     });
   }
 
-  // Phase 2: PayTabs refund request
-  const paytabs = await requestPaytabsRefund({
-    tranRef: prep.paytabsTranRef || "",
-    amountJod,
-    reason,
-  });
+  // Auto PayTabs refund
+  const tranRef = prep.refund.paytabs_tran_ref || "";
+  const paytabs = await requestPaytabsRefund({ tranRef, amountJod, reason });
 
   if (!paytabs.ok) {
     await db.withTransaction(async (trx) => {
-      await markRefundFailed(trx, prep.refundId, paytabs.message || "Refund failed", paytabs.payload);
+      await markRefundFailed(trx, {
+        refundId: prep.refund.id,
+        message: paytabs.message || "PayTabs refund failed",
+        payload: paytabs.payload,
+      });
     });
+
     return NextResponse.json(
-      { ok: false, error: paytabs.message || "Refund failed", refundId: prep.refundId, paytabs: paytabs.payload },
+      { ok: false, error: paytabs.message || "PayTabs refund failed", refundId: prep.refund.id, paytabs: paytabs.payload },
       { status: 502 }
     );
   }
 
-  // Mark requested + succeeded (some PayTabs accounts return success synchronously)
+  // Success: mark SUCCEEDED + order REFUNDED + schedule restock +48h
   await db.withTransaction(async (trx) => {
-    await markRefundRequested(trx, prep.refundId);
-    await markRefundSucceeded(trx, prep.refundId, paytabs.status, paytabs.message, paytabs.payload);
+    const r = await markRefundSucceeded(trx, {
+      refundId: prep.refund.id,
+      paytabsRefundReference: null,
+      payload: paytabs.payload,
+    });
+    await scheduleRestockAfter48h(trx, { orderId: r.orderId, refundId: prep.refund.id });
   });
 
   return NextResponse.json({
     ok: true,
-    refundId: prep.refundId,
-    restockPolicy: prep.restockPolicy,
-    restockAt: prep.restockAt,
+    mode: "AUTO",
+    refundId: prep.refund.id,
     paytabs: paytabs.payload,
   });
-}
-
-// Optional helper endpoint to run restocks manually from admin tools
-export async function PUT(req: Request) {
-  const auth = requireAdmin(req);
-  if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
-
-  await ensureRefundTablesSafe();
-
-  const nowIso = new Date().toISOString();
-  const result = await db.withTransaction(async (trx) => restockDueRefunds(trx, nowIso));
-
-  return NextResponse.json({ ok: true, ...result });
 }

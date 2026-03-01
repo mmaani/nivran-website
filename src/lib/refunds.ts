@@ -2,45 +2,61 @@
 import "server-only";
 import type { DbTx } from "@/lib/db";
 
-export type RefundStatus =
-  | "PREPARED"
-  | "REQUESTED"
-  | "SUCCEEDED"
-  | "FAILED"
-  | "MANUAL_REQUIRED";
+export type OrderRefundStatus =
+  | "REFUND_REQUESTED"
+  | "REFUND_PENDING"
+  | "REFUNDED"
+  | "REFUND_FAILED";
 
-export type RestockPolicy = "IMMEDIATE" | "DELAYED";
+export type RefundMethod = "PAYTABS" | "MANUAL";
 
-export type CreateRefundInput = {
-  orderId: number;
-  amountJod: number;
-  reason: string;
-  idempotencyKey: string;
-  refundMethod: "PAYTABS" | "MANUAL";
-  restockPolicy: RestockPolicy;
-};
-
-export type RefundPrepared = {
-  refundId: number;
-  orderId: number;
-  cartId: string | null;
-  paymentMethod: string | null;
-  paytabsTranRef: string | null;
-  restockPolicy: RestockPolicy;
-  restockAt: string | null;
+export type RefundRow = {
+  id: number;
+  order_id: number;
+  method: RefundMethod;
+  amount_jod: string | number;
+  currency: string;
+  reason: string | null;
+  idempotency_key: string;
+  status: "PENDING" | "SUCCEEDED" | "FAILED";
+  paytabs_tran_ref: string | null;
+  paytabs_refund_reference: string | null;
+  requested_at: string;
+  succeeded_at: string | null;
+  failed_at: string | null;
+  last_error: string | null;
+  payload: unknown;
 };
 
 type OrderForRefund = {
   id: number;
-  cart_id: string | null;
   status: string;
-  payment_method: string | null;
+  payment_method: string;
   paytabs_tran_ref: string | null;
-  refunded_amount_jod: string | number | null;
-  amount: string | number | null;
   items: unknown;
   inventory_committed_at: string | null;
 };
+
+type RestockJobRow = {
+  id: number;
+  order_id: number;
+  refund_id: number;
+  status: string;
+  run_at: string;
+  attempts: number;
+};
+
+type ProductRow = {
+  id: number;
+  slug: string;
+  inventory_qty: number | null;
+};
+
+type JsonRecord = Record<string, unknown>;
+
+function isRecord(v: unknown): v is JsonRecord {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
 
 function toNum(v: unknown): number {
   if (typeof v === "number") return Number.isFinite(v) ? v : 0;
@@ -51,19 +67,73 @@ function toNum(v: unknown): number {
   return 0;
 }
 
-function addDaysIso(days: number): string {
+function toInt(v: unknown): number {
+  const n = toNum(v);
+  return Number.isFinite(n) ? Math.trunc(n) : 0;
+}
+
+function nowPlusHoursIso(hours: number): string {
   const d = new Date();
-  d.setUTCDate(d.getUTCDate() + days);
+  d.setUTCHours(d.getUTCHours() + hours);
   return d.toISOString();
 }
 
-export async function createRefundRecord(trx: DbTx, input: CreateRefundInput): Promise<RefundPrepared> {
-  const { orderId, amountJod, reason, idempotencyKey, refundMethod, restockPolicy } = input;
+function normalizeStatus(s: unknown): string {
+  return String(s || "").trim().toUpperCase();
+}
 
-  // Lock the order row
+function isRefundableOrderStatus(status: string): boolean {
+  const s = normalizeStatus(status);
+  return s === "PAID" || s === "PAID_COD" || s === "PROCESSING" || s === "SHIPPED" || s === "DELIVERED";
+}
+
+/**
+ * Order items format (based on your codebase):
+ * - stored in orders.items jsonb
+ * - each item usually includes { slug, qty } (slug is used elsewhere for inventory commit)
+ */
+function extractRestockDeltas(items: unknown): Array<{ slug: string; qty: number }> {
+  if (!Array.isArray(items)) return [];
+
+  const out: Array<{ slug: string; qty: number }> = [];
+
+  for (const it of items) {
+    if (!isRecord(it)) continue;
+
+    const slugRaw = it["slug"];
+    const qtyRaw = it["qty"] ?? it["requested_qty"] ?? 1;
+
+    const slug = typeof slugRaw === "string" ? slugRaw.trim() : "";
+    const qty = Math.max(0, toInt(qtyRaw));
+
+    if (slug && qty > 0) out.push({ slug, qty });
+  }
+
+  return out;
+}
+
+export async function createRefundRecord(
+  trx: DbTx,
+  input: {
+    orderId: number;
+    amountJod: number;
+    reason: string;
+    method: RefundMethod;
+    idempotencyKey: string;
+  }
+): Promise<{ refund: RefundRow; order: OrderForRefund }> {
+  const orderId = input.orderId;
+  const amountJod = input.amountJod;
+  const reason = input.reason;
+  const method = input.method;
+  const idem = input.idempotencyKey;
+
+  if (!(orderId > 0)) throw new Error("ORDER_ID_INVALID");
+  if (!(amountJod > 0)) throw new Error("AMOUNT_INVALID");
+  if (!idem) throw new Error("IDEMPOTENCY_KEY_REQUIRED");
+
   const orderRes = await trx.query<OrderForRefund>(
-    `select id, cart_id, status, payment_method, paytabs_tran_ref,
-            refunded_amount_jod, amount, items, inventory_committed_at
+    `select id, status, payment_method, paytabs_tran_ref, items, inventory_committed_at
        from orders
       where id = $1
       for update`,
@@ -73,199 +143,211 @@ export async function createRefundRecord(trx: DbTx, input: CreateRefundInput): P
   const order = orderRes.rows[0];
   if (!order) throw new Error("ORDER_NOT_FOUND");
 
-  const orderTotal = toNum(order.amount);
-  const alreadyRefunded = toNum(order.refunded_amount_jod);
+  if (!isRefundableOrderStatus(order.status)) throw new Error("ORDER_NOT_REFUNDABLE_STATUS");
 
-  if (!(amountJod > 0)) throw new Error("AMOUNT_INVALID");
-  if (amountJod + alreadyRefunded > orderTotal + 0.00001) throw new Error("REFUND_EXCEEDS_ORDER_TOTAL");
-
-  // For PayTabs refunds, we require tran_ref
   const paytabsTranRef = (order.paytabs_tran_ref || "").trim() || null;
-  if (refundMethod === "PAYTABS" && !paytabsTranRef) {
-    throw new Error("MISSING_PAYTABS_TRAN_REF");
-  }
+  if (method === "PAYTABS" && !paytabsTranRef) throw new Error("MISSING_PAYTABS_TRAN_REF");
 
-  const restockAt =
-    restockPolicy === "IMMEDIATE" ? new Date().toISOString() : addDaysIso(2);
-
-  // Insert (idempotent)
-  const ins = await trx.query<{ id: string }>(
+  // Insert idempotently (status starts PENDING)
+  const ins = await trx.query<RefundRow>(
     `insert into refunds
-      (order_id, cart_id, payment_method, refund_method, amount_jod, reason,
-       idempotency_key, status, paytabs_tran_ref, restock_policy, restock_at, updated_at)
+      (order_id, method, amount_jod, currency, reason, idempotency_key, status, paytabs_tran_ref, requested_at)
      values
-      ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, now())
+      ($1,$2,$3,'JOD',$4,$5,'PENDING',$6, now())
      on conflict (order_id, idempotency_key)
-     do update set updated_at = now()
-     returning id`,
-    [
-      orderId,
-      order.cart_id,
-      order.payment_method,
-      refundMethod,
-      amountJod,
-      reason,
-      idempotencyKey,
-      refundMethod === "MANUAL" ? "MANUAL_REQUIRED" : "PREPARED",
-      paytabsTranRef,
-      restockPolicy,
-      restockAt,
-    ]
+     do update set
+       reason = excluded.reason,
+       updated_at = now()
+     returning
+       id, order_id, method, amount_jod, currency, reason, idempotency_key, status,
+       paytabs_tran_ref, paytabs_refund_reference,
+       requested_at, succeeded_at, failed_at, last_error, payload`,
+    [orderId, method, amountJod, reason || null, idem, paytabsTranRef]
   );
 
-  const refundId = Number(ins.rows[0]?.id || 0);
-  if (!refundId) throw new Error("REFUND_INSERT_FAILED");
+  const refund = ins.rows[0];
+  if (!refund) throw new Error("REFUND_INSERT_FAILED");
 
-  // Mark order refund status (for admin UI)
+  // Move order into refund flow immediately
   await trx.query(
     `update orders
-        set refund_status = $2,
-            refund_updated_at = now(),
+        set status = $2,
             updated_at = now()
       where id = $1`,
-    [orderId, refundMethod === "MANUAL" ? "MANUAL_REQUIRED" : "REFUND_PENDING"]
+    [orderId, "REFUND_PENDING"]
   );
 
-  return {
-    refundId,
-    orderId,
-    cartId: order.cart_id || null,
-    paymentMethod: order.payment_method || null,
-    paytabsTranRef,
-    restockPolicy,
-    restockAt,
-  };
+  return { refund, order };
 }
 
-export async function markRefundRequested(trx: DbTx, refundId: number): Promise<void> {
+export async function markRefundFailed(
+  trx: DbTx,
+  input: { refundId: number; message: string; payload: unknown }
+): Promise<void> {
+  const refundId = input.refundId;
+  const message = input.message || "Refund failed";
+
   await trx.query(
     `update refunds
-        set status = 'REQUESTED',
-            updated_at = now()
+        set status = 'FAILED',
+            failed_at = now(),
+            last_error = $2,
+            payload = $3::jsonb
       where id = $1`,
+    [refundId, message, JSON.stringify(input.payload ?? {})]
+  );
+
+  // reflect in order status (best-effort)
+  await trx.query(
+    `update orders
+        set status = 'REFUND_FAILED',
+            updated_at = now()
+      where id = (select order_id from refunds where id=$1)`,
     [refundId]
   );
 }
 
-export async function markRefundFailed(trx: DbTx, refundId: number, message: string, payload: unknown): Promise<void> {
-  await trx.query(
-    `update refunds
-        set status = 'FAILED',
-            error_message = $2,
-            provider_payload = $3::jsonb,
-            updated_at = now()
-      where id = $1`,
-    [refundId, message || "Refund failed", JSON.stringify(payload ?? {})]
-  );
-}
+export async function markRefundSucceeded(
+  trx: DbTx,
+  input: { refundId: number; paytabsRefundReference: string | null; payload: unknown }
+): Promise<{ orderId: number }> {
+  const refundId = input.refundId;
 
-export async function markRefundSucceeded(trx: DbTx, refundId: number, providerStatus: string, providerMessage: string, payload: unknown): Promise<void> {
-  await trx.query(
+  const upd = await trx.query<{ order_id: number }>(
     `update refunds
         set status = 'SUCCEEDED',
-            provider_status = $2,
-            provider_message = $3,
-            provider_payload = $4::jsonb,
+            succeeded_at = now(),
+            paytabs_refund_reference = $2,
+            payload = $3::jsonb
+      where id = $1
+      returning order_id`,
+    [refundId, input.paytabsRefundReference, JSON.stringify(input.payload ?? {})]
+  );
+
+  const orderId = Number(upd.rows[0]?.order_id || 0);
+  if (!(orderId > 0)) throw new Error("REFUND_UPDATE_FAILED");
+
+  await trx.query(
+    `update orders
+        set status = 'REFUNDED',
             updated_at = now()
       where id = $1`,
-    [refundId, providerStatus || "", providerMessage || "", JSON.stringify(payload ?? {})]
+    [orderId]
+  );
+
+  return { orderId };
+}
+
+export async function scheduleRestockAfter48h(
+  trx: DbTx,
+  input: { orderId: number; refundId: number }
+): Promise<void> {
+  const runAt = nowPlusHoursIso(48);
+
+  await trx.query(
+    `insert into restock_jobs (order_id, refund_id, status, run_at, updated_at)
+     values ($1,$2,'SCHEDULED',$3::timestamptz, now())
+     on conflict (refund_id)
+     do update set
+       run_at = excluded.run_at,
+       status = case when restock_jobs.status in ('DONE','CANCELED') then restock_jobs.status else 'SCHEDULED' end,
+       updated_at = now()`,
+    [input.orderId, input.refundId, runAt]
   );
 }
 
-type RefundRowForRestock = {
-  id: number;
-  order_id: number;
-  status: string;
-  restock_at: string | null;
-  restocked_at: string | null;
-};
+export async function runDueRestocks(
+  trx: DbTx,
+  input: { limit: number }
+): Promise<{ ok: true; processed: number; done: number; failed: number }> {
+  const limit = Math.max(1, Math.min(200, Math.trunc(input.limit || 50)));
 
-type OrderItemsRow = {
-  id: number;
-  items: unknown;
-};
-
-type ProductRow = {
-  id: number;
-  inventory_qty: number | null;
-};
-
-// Extract deltas from your existing order items format
-function extractDeltas(items: unknown): Array<{ productId: number; qty: number }> {
-  if (!Array.isArray(items)) return [];
-  const out: Array<{ productId: number; qty: number }> = [];
-  for (const it of items) {
-    if (!it || typeof it !== "object") continue;
-    const row = it as Record<string, unknown>;
-    const pidRaw = row.productId ?? row.product_id ?? row.id;
-    const qtyRaw = row.requested_qty ?? row.qty ?? 1;
-    const pid = typeof pidRaw === "number" ? Math.trunc(pidRaw) : typeof pidRaw === "string" ? Math.trunc(Number(pidRaw)) : 0;
-    const qty = typeof qtyRaw === "number" ? Math.trunc(qtyRaw) : typeof qtyRaw === "string" ? Math.trunc(Number(qtyRaw)) : 0;
-    if (pid > 0 && qty > 0) out.push({ productId: pid, qty });
-  }
-  return out;
-}
-
-// Restock due refunds (run manually or via cron later)
-export async function restockDueRefunds(trx: DbTx, nowIso: string): Promise<{ restocked: number }> {
-  const due = await trx.query<RefundRowForRestock>(
-    `select id, order_id, status, restock_at, restocked_at
-       from refunds
-      where status = 'SUCCEEDED'
-        and restocked_at is null
-        and restock_at is not null
-        and restock_at <= $1::timestamptz
-      order by id asc
-      for update`,
-    [nowIso]
+  // Lock jobs safely (skip locked for concurrency)
+  const jobsRes = await trx.query<RestockJobRow>(
+    `select id, order_id, refund_id, status, run_at, attempts
+       from restock_jobs
+      where status = 'SCHEDULED'
+        and run_at <= now()
+      order by run_at asc, id asc
+      for update skip locked
+      limit $1`,
+    [limit]
   );
 
-  let restocked = 0;
+  let done = 0;
+  let failed = 0;
 
-  for (const r of due.rows) {
-    const orderRes = await trx.query<OrderItemsRow>(
-      `select id, items
-         from orders
-        where id = $1
-        for update`,
-      [r.order_id]
-    );
-
-    const order = orderRes.rows[0];
-    if (!order) continue;
-
-    const deltas = extractDeltas(order.items);
-
-    for (const d of deltas) {
-      // Lock product row then add back qty
-      const p = await trx.query<ProductRow>(
-        `select id, inventory_qty
-           from products
+  for (const job of jobsRes.rows) {
+    try {
+      // Lock related order to read items safely
+      const orderRes = await trx.query<{ items: unknown }>(
+        `select items
+           from orders
           where id = $1
           for update`,
-        [d.productId]
+        [job.order_id]
       );
-      if (!p.rows.length) continue;
+
+      const items = orderRes.rows[0]?.items;
+      const deltas = extractRestockDeltas(items);
+
+      // If no deltas, treat as done (idempotent)
+      if (deltas.length > 0) {
+        for (const d of deltas) {
+          const p = await trx.query<ProductRow>(
+            `select id, slug, inventory_qty
+               from products
+              where slug = $1
+              for update`,
+            [d.slug]
+          );
+
+          if (!p.rows.length) continue;
+
+          await trx.query(
+            `update products
+                set inventory_qty = coalesce(inventory_qty, 0) + $2::int,
+                    updated_at = now()
+              where slug = $1`,
+            [d.slug, d.qty]
+          );
+        }
+      }
+
+      // Mark refund as restocked (best-effort; not required for correctness)
+      await trx.query(
+        `update refunds
+            set restocked = true
+          where id = $1`,
+        [job.refund_id]
+      );
 
       await trx.query(
-        `update products
-            set inventory_qty = coalesce(inventory_qty, 0) + $2
+        `update restock_jobs
+            set status = 'DONE',
+                done_at = now(),
+                updated_at = now()
           where id = $1`,
-        [d.productId, d.qty]
+        [job.id]
       );
+
+      done += 1;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err || "RESTOCK_FAILED");
+
+      await trx.query(
+        `update restock_jobs
+            set status = 'FAILED',
+                attempts = attempts + 1,
+                last_error = $2,
+                updated_at = now()
+          where id = $1`,
+        [job.id, msg]
+      );
+
+      failed += 1;
     }
-
-    await trx.query(
-      `update refunds
-          set restocked_at = now(),
-              updated_at = now()
-        where id = $1
-          and restocked_at is null`,
-      [r.id]
-    );
-
-    restocked += 1;
   }
 
-  return { restocked };
+  return { ok: true, processed: jobsRes.rows.length, done, failed };
 }

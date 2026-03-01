@@ -21,7 +21,6 @@ function toNum(value: unknown): number {
 
 function clampMoneyJod(v: number): number {
   if (!Number.isFinite(v)) return 0;
-  // 2 decimals, >=0
   return Math.max(0, Math.round(v * 100) / 100);
 }
 
@@ -69,7 +68,9 @@ const STATUS_OPTIONS = [
   "SHIPPED",
   "DELIVERED",
   "PAID_COD",
+  "REFUND_REQUESTED",
   "REFUND_PENDING",
+  "REFUND_FAILED",
   "REFUNDED",
 ] as const;
 
@@ -83,7 +84,9 @@ const STATUS_AR: Record<string, string> = {
   SHIPPED: "تم الشحن",
   DELIVERED: "تم التسليم",
   PAID_COD: "مدفوع (عند الاستلام)",
+  REFUND_REQUESTED: "طلب استرجاع",
   REFUND_PENDING: "قيد الاسترجاع",
+  REFUND_FAILED: "فشل الاسترجاع",
   REFUNDED: "تم الاسترجاع",
 };
 
@@ -118,10 +121,18 @@ function isPaidStatus(status: string): boolean {
 
 function canRefundOrder(r: Row): boolean {
   const status = String(r.status || "").toUpperCase();
-  if (!isPaidStatus(status)) return false;
-  // Don’t offer refund after shipped/delivered via this quick action (you can relax later).
-  // If you want to allow it later, remove this guard.
-  return true;
+  return isPaidStatus(status);
+}
+
+function genIdempotencyKey(orderId: number): string {
+  const t = Date.now();
+  const rand =
+    typeof window !== "undefined" &&
+    typeof window.crypto !== "undefined" &&
+    typeof window.crypto.randomUUID === "function"
+      ? window.crypto.randomUUID()
+      : `${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`;
+  return `refund-${orderId}-${t}-${rand}`;
 }
 
 export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]; lang: "en" | "ar" }) {
@@ -133,6 +144,9 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
   const [err, setErr] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
+  // Track latest refundId per order (so we can confirm/fail manual refunds without changing orders API)
+  const [refundIdByOrder, setRefundIdByOrder] = useState<Record<number, number>>({});
+
   // Refund modal state
   const [refundOpenFor, setRefundOpenFor] = useState<Row | null>(null);
   const [refundBusy, setRefundBusy] = useState(false);
@@ -142,8 +156,9 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
   const [refundReason, setRefundReason] = useState<string>("");
   // Hybrid: PayTabs online, Manual POS/Cash
   const [refundMode, setRefundMode] = useState<"AUTO" | "MANUAL">("AUTO");
-  // Your preference: restock later (2 days) instead of immediate
-  const [restockPolicy, setRestockPolicy] = useState<"DELAYED_2D" | "IMMEDIATE">("DELAYED_2D");
+
+  // Policy locked: restock after 2 days (no immediate)
+  const restockPolicyLocked = "DELAYED_2D" as const;
 
   const L = useMemo(() => {
     if (isAr) {
@@ -185,15 +200,16 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
         refundMode: "طريقة الاسترجاع",
         refundModeAuto: "PayTabs (أونلاين)",
         refundModeManual: "يدوي (POS/كاش)",
-        restock: "تحديث المخزون",
-        restockDelayed: "بعد يومين",
-        restockImmediate: "فوراً",
+        restockNote: "المخزون سيتم تحديثه تلقائياً بعد يومين (48 ساعة).",
         cancel: "إلغاء",
         submit: "تنفيذ",
         close: "إغلاق",
-        refundedOk: "تم إرسال الاسترجاع بنجاح",
+        refundedOk: "تم إنشاء طلب الاسترجاع",
         autoNoteMissingTran: "لا يوجد tran_ref — استخدم الاسترجاع اليدوي",
         invalidAmount: "المبلغ غير صالح",
+
+        confirmManual: "تأكيد الاسترجاع اليدوي",
+        failManual: "فشل الاسترجاع اليدوي",
       };
     }
 
@@ -235,15 +251,16 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
       refundMode: "Refund mode",
       refundModeAuto: "PayTabs (online)",
       refundModeManual: "Manual (POS/Cash)",
-      restock: "Restock",
-      restockDelayed: "After 2 days",
-      restockImmediate: "Immediately",
+      restockNote: "Inventory will be restocked automatically after 2 days (48 hours).",
       cancel: "Cancel",
       submit: "Submit",
       close: "Close",
-      refundedOk: "Refund request sent",
+      refundedOk: "Refund request created",
       autoNoteMissingTran: "No tran_ref — use manual refund",
       invalidAmount: "Invalid amount",
+
+      confirmManual: "Confirm manual refund",
+      failManual: "Mark manual refund failed",
     };
   }, [isAr]);
 
@@ -304,8 +321,6 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
     // AUTO only if PayTabs tran_ref exists; else default to MANUAL
     if (r.paytabs_tran_ref) setRefundMode("AUTO");
     else setRefundMode("MANUAL");
-
-    setRestockPolicy("DELAYED_2D");
   }
 
   function closeRefund() {
@@ -316,7 +331,6 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
     setRefundAmount("");
     setRefundReason("");
     setRefundMode("AUTO");
-    setRestockPolicy("DELAYED_2D");
   }
 
   async function submitRefund() {
@@ -335,13 +349,13 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
         throw new Error(L.autoNoteMissingTran);
       }
 
-      // API contract: keep it flexible; backend can accept these fields.
       const payload = {
         orderId: refundOpenFor.id,
         amountJod: amount,
         reason: String(refundReason || "").trim(),
         mode: refundMode, // AUTO | MANUAL
-        restockPolicy, // DELAYED_2D | IMMEDIATE
+        idempotencyKey: genIdempotencyKey(refundOpenFor.id),
+        restockPolicy: restockPolicyLocked, // backend can ignore; policy is locked here
       };
 
       const res = await adminFetch("/api/admin/refund", {
@@ -357,10 +371,20 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
         throw new Error(data.error || (isAr ? "فشل الاسترجاع" : "Refund failed"));
       }
 
-      // UI: mark order as REFUND_PENDING optimistically (backend should do it anyway)
-      setRows((prev) =>
-        prev.map((r) => (r.id === refundOpenFor.id ? { ...r, status: "REFUND_PENDING" } : r))
-      );
+      // Store refundId for later manual confirm/fail actions
+      const refundIdNum =
+        typeof data.refundId === "number"
+          ? data.refundId
+          : typeof data.refundId === "string"
+            ? Number(data.refundId)
+            : NaN;
+
+      if (Number.isFinite(refundIdNum) && refundIdNum > 0) {
+        setRefundIdByOrder((prev) => ({ ...prev, [refundOpenFor.id]: Math.trunc(refundIdNum) }));
+      }
+
+      // UI: mark order as REFUND_PENDING optimistically
+      setRows((prev) => prev.map((r) => (r.id === refundOpenFor.id ? { ...r, status: "REFUND_PENDING" } : r)));
 
       setRefundOk(L.refundedOk);
     } catch (e: unknown) {
@@ -368,6 +392,74 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
       setRefundErr(msg || (isAr ? "حدث خطأ" : "Error"));
     } finally {
       setRefundBusy(false);
+    }
+  }
+
+  async function confirmManualRefund(orderId: number) {
+    const refundId = refundIdByOrder[orderId];
+    if (!(refundId > 0)) {
+      setErr(isAr ? "لا يوجد refundId لهذا الطلب. أنشئ الاسترجاع أولاً." : "No refundId for this order. Create a refund first.");
+      return;
+    }
+
+    setErr(null);
+    setBusyId(orderId);
+
+    try {
+      const res = await adminFetch("/api/admin/refund/confirm", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ refundId, note: "confirmed in admin" }),
+      });
+
+      const raw: unknown = await res.json().catch(() => null);
+      const ok = isRecord(raw) && raw["ok"] === true;
+
+      if (!res.ok || !ok) {
+        const msg = isRecord(raw) ? String(raw["error"] || "") : "";
+        throw new Error(msg || (isAr ? "فشل تأكيد الاسترجاع" : "Confirm refund failed"));
+      }
+
+      setRows((prev) => prev.map((r) => (r.id === orderId ? { ...r, status: "REFUNDED" } : r)));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setErr(msg || (isAr ? "حدث خطأ" : "Error"));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function failManualRefund(orderId: number) {
+    const refundId = refundIdByOrder[orderId];
+    if (!(refundId > 0)) {
+      setErr(isAr ? "لا يوجد refundId لهذا الطلب. أنشئ الاسترجاع أولاً." : "No refundId for this order. Create a refund first.");
+      return;
+    }
+
+    setErr(null);
+    setBusyId(orderId);
+
+    try {
+      const res = await adminFetch("/api/admin/refund/fail", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ refundId, message: "manual refund failed in admin" }),
+      });
+
+      const raw: unknown = await res.json().catch(() => null);
+      const ok = isRecord(raw) && raw["ok"] === true;
+
+      if (!res.ok || !ok) {
+        const msg = isRecord(raw) ? String(raw["error"] || "") : "";
+        throw new Error(msg || (isAr ? "فشل تحديث حالة الاسترجاع" : "Mark refund failed failed"));
+      }
+
+      setRows((prev) => prev.map((r) => (r.id === orderId ? { ...r, status: "REFUND_FAILED" } : r)));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setErr(msg || (isAr ? "حدث خطأ" : "Error"));
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -405,6 +497,11 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
               const items = normalizeItems(r.items);
               const opened = !!expanded[r.id];
               const showRefund = canRefundOrder(r);
+
+              const statusUpper = String(r.status || "").toUpperCase();
+              const paymentUpper = String(r.payment_method || "").toUpperCase();
+              const canConfirmManual =
+                statusUpper === "REFUND_PENDING" && paymentUpper !== "PAYTABS" && (refundIdByOrder[r.id] || 0) > 0;
 
               return (
                 <Fragment key={`row-${r.id}`}>
@@ -459,6 +556,29 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                           {L.refund}
                         </button>
                       ) : null}
+
+                      {canConfirmManual ? (
+                        <>
+                          <button
+                            className="btn"
+                            type="button"
+                            onClick={() => confirmManualRefund(r.id)}
+                            disabled={busyId === r.id}
+                            title={L.confirmManual}
+                          >
+                            {L.confirmManual}
+                          </button>
+                          <button
+                            className="btn"
+                            type="button"
+                            onClick={() => failManualRefund(r.id)}
+                            disabled={busyId === r.id}
+                            title={L.failManual}
+                          >
+                            {L.failManual}
+                          </button>
+                        </>
+                      ) : null}
                     </td>
 
                     <td data-label={L.update}>
@@ -493,9 +613,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                                 {items.map((item) => (
                                   <li key={`${r.id}-${item.slug}`}>
                                     <span>
-                                      {isAr
-                                        ? item.name_ar || item.name_en || item.slug
-                                        : item.name_en || item.name_ar || item.slug}
+                                      {isAr ? item.name_ar || item.name_en || item.slug : item.name_en || item.name_ar || item.slug}
                                     </span>
                                     <span className="mono">
                                       {" "}
@@ -514,9 +632,8 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                               {toNum(r.discount_jod).toFixed(2)} JOD • {L.shipping}: {toNum(r.shipping_jod).toFixed(2)} JOD •{" "}
                               {L.total}: {toNum(r.total_jod ?? r.amount).toFixed(2)} JOD
                               <br />
-                              {L.promo}: {String(r.discount_source || L.dash)}{" "}
-                              {r.promo_code ? `(${r.promo_code})` : ""} {r.promotion_id ? `#${r.promotion_id}` : ""} •{" "}
-                              {L.consumed}: {r.promo_consumed ? L.yes : L.no}
+                              {L.promo}: {String(r.discount_source || L.dash)} {r.promo_code ? `(${r.promo_code})` : ""}{" "}
+                              {r.promotion_id ? `#${r.promotion_id}` : ""} • {L.consumed}: {r.promo_consumed ? L.yes : L.no}
                               {r.promo_consume_failed
                                 ? ` • ${L.consumeFailed}: ${String(r.promo_consume_error || "").trim() || L.yes}`
                                 : ""}
@@ -557,7 +674,6 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
             zIndex: 50,
           }}
           onClick={(e) => {
-            // close when clicking backdrop
             if (e.target === e.currentTarget) closeRefund();
           }}
         >
@@ -629,18 +745,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                 ) : null}
               </div>
 
-              <div style={{ display: "grid", gap: 8 }}>
-                <label style={{ fontSize: 12, opacity: 0.8 }}>{L.restock}</label>
-                <select
-                  className="admin-select"
-                  value={restockPolicy}
-                  onChange={(e) => setRestockPolicy(e.target.value === "IMMEDIATE" ? "IMMEDIATE" : "DELAYED_2D")}
-                  disabled={refundBusy}
-                >
-                  <option value="DELAYED_2D">{L.restockDelayed}</option>
-                  <option value="IMMEDIATE">{L.restockImmediate}</option>
-                </select>
-              </div>
+              <div style={{ fontSize: 12, opacity: 0.8 }}>{L.restockNote}</div>
 
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 6 }}>
                 <button className="btn" type="button" onClick={closeRefund} disabled={refundBusy}>
