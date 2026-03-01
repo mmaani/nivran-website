@@ -102,25 +102,8 @@ export async function POST(req: Request) {
     )
   );
 
-  const response = await db.withTransaction(async (trx) => {
-    const productsRes = await trx.query<{
-      id: number;
-      slug: string;
-      name_en: string;
-      name_ar: string | null;
-      category_key: string | null;
-      price_jod: string;
-      inventory_qty: number;
-    }>(
-      `
-       select id::int as id, slug, name_en, name_ar, category_key, price_jod::text, inventory_qty::int as inventory_qty
-         from products
-        where id = any($1::bigint[])
-        for update`,
-      [productIds]
-    );
-
-const fallbackBySlugRes = productSlugs.length
+const response = await db.withTransaction(async (trx) => {
+  const productsRes = productIds.length
   ? await trx.query<{
       id: number;
       slug: string;
@@ -130,16 +113,20 @@ const fallbackBySlugRes = productSlugs.length
       price_jod: string;
       inventory_qty: number;
     }>(
-      `select id::int as id,
-              slug,
-              name_en,
-              name_ar,
-              category_key,
-              price_jod::text,
-              inventory_qty::int as inventory_qty
-         from products
-        where lower(slug) = any($1::text[])`,
-      [productSlugs]
+      `
+      select
+        id::int as id,
+        slug,
+        name_en,
+        name_ar,
+        category_key,
+        price_jod::text,
+        inventory_qty::int as inventory_qty
+      from products
+      where id = any($1::bigint[])
+      for update
+      `,
+      [productIds]
     )
   : {
       rows: [] as Array<{
@@ -153,7 +140,43 @@ const fallbackBySlugRes = productSlugs.length
       }>,
     };
 
-const variantRes = variantIds.length
+const fallbackBySlugRes = productSlugs.length
+  ? await trx.query<{
+      id: number;
+      slug: string;
+      name_en: string;
+      name_ar: string | null;
+      category_key: string | null;
+      price_jod: string;
+      inventory_qty: number;
+    }>(
+      `
+      select
+        id::int as id,
+        slug,
+        name_en,
+        name_ar,
+        category_key,
+        price_jod::text,
+        inventory_qty::int as inventory_qty
+      from products
+      where lower(slug) = any($1::text[])
+      for update
+      `,
+      [productSlugs]
+    )
+  : {
+      rows: [] as Array<{
+        id: number;
+        slug: string;
+        name_en: string;
+        name_ar: string | null;
+        category_key: string | null;
+        price_jod: string;
+        inventory_qty: number;
+      }>,
+    };
+  const variantRes = variantIds.length
   ? await trx.query<{
       id: number;
       product_id: number;
