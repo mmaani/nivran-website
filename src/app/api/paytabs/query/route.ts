@@ -67,18 +67,28 @@ async function handleQuery(input: Record<string, unknown>) {
   const allowedFrom = paymentStatusTransitionAllowedFrom(nextStatus);
 
   let transitioned = false;
+  let correctedPaid = false;
 
   if (resolvedCartId) {
-    const result = await db.query<{ status: string }>(
+    // We allow correction of PAID => FAILED/CANCELED ONLY if fulfillment did not start.
+    // (Avoid auto-downgrading shipped/fulfilled orders.)
+    const result = await db.query<{ status: string; inventory_committed_at: string | null }>(
       `update orders
-          set status = case when status = any($6::text[]) then $2 else status end,
+          set status = case
+                         when status = any($6::text[]) then $2
+                         when status = 'PAID'
+                          and $2 in ('FAILED','CANCELED')
+                          and inventory_committed_at is null
+                          then $2
+                         else status
+                       end,
               paytabs_tran_ref = coalesce(nullif($3::text,''), paytabs_tran_ref),
               paytabs_last_payload = $4::text,
               paytabs_response_status = $5::text,
               paytabs_response_message = $7::text,
               updated_at = now()
         where cart_id = $1::text
-        returning status`,
+        returning status, inventory_committed_at`,
       [
         resolvedCartId,
         nextStatus,
@@ -90,7 +100,11 @@ async function handleQuery(input: Record<string, unknown>) {
       ]
     );
 
-    transitioned = result.rows.length > 0 && String(result.rows[0].status || "").toUpperCase() === nextStatus;
+    if (result.rows.length > 0) {
+      const newStatus = String(result.rows[0].status || "").toUpperCase();
+      transitioned = newStatus === nextStatus;
+      correctedPaid = newStatus === nextStatus && (nextStatus === "FAILED" || nextStatus === "CANCELED");
+    }
   }
 
   return NextResponse.json({
@@ -98,6 +112,7 @@ async function handleQuery(input: Record<string, unknown>) {
     cartId: resolvedCartId,
     tranRef: resolvedTranRef,
     transitioned,
+    correctedPaid,
     responseStatus,
     responseMessage,
     nextStatus,
