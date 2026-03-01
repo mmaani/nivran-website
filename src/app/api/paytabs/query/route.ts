@@ -30,6 +30,16 @@ function readInput(input: Record<string, unknown>) {
   return { cartId, tranRef };
 }
 
+function normalizePaytabsPayload(raw: unknown): PaytabsQueryResponse {
+  if (Array.isArray(raw)) {
+    const first = raw[0];
+    if (first && typeof first === "object") return first as PaytabsQueryResponse;
+    return {};
+  }
+  if (raw && typeof raw === "object") return raw as PaytabsQueryResponse;
+  return {};
+}
+
 async function handleQuery(input: Record<string, unknown>) {
   await ensureOrdersTables();
   const { apiBase, profileId, serverKey } = getPaytabsEnv();
@@ -50,10 +60,11 @@ async function handleQuery(input: Record<string, unknown>) {
     cache: "no-store",
   });
 
-  const data = (await res.json().catch(() => ({}))) as PaytabsQueryResponse;
+  const raw = (await res.json().catch(() => ({}))) as unknown;
+  const data = normalizePaytabsPayload(raw);
 
   if (!res.ok) {
-    return NextResponse.json({ ok: false, error: "PayTabs query failed", paytabs: data }, { status: 502 });
+    return NextResponse.json({ ok: false, error: "PayTabs query failed", paytabs: raw }, { status: 502 });
   }
 
   const resolvedCartId = String(data?.cart_id || data?.cartId || cartId || "").trim();
@@ -93,7 +104,7 @@ async function handleQuery(input: Record<string, unknown>) {
         resolvedCartId,
         nextStatus,
         resolvedTranRef,
-        JSON.stringify(data),
+        JSON.stringify(raw), // keep the full original payload (object OR array) for debugging
         responseStatus,
         allowedFrom,
         responseMessage,
@@ -103,7 +114,7 @@ async function handleQuery(input: Record<string, unknown>) {
     if (result.rows.length > 0) {
       const newStatus = String(result.rows[0].status || "").toUpperCase();
       transitioned = newStatus === nextStatus;
-      correctedPaid = newStatus === nextStatus && (nextStatus === "FAILED" || nextStatus === "CANCELED");
+      correctedPaid = transitioned && (nextStatus === "FAILED" || nextStatus === "CANCELED");
     }
   }
 
@@ -116,7 +127,7 @@ async function handleQuery(input: Record<string, unknown>) {
     responseStatus,
     responseMessage,
     nextStatus,
-    paytabs: data,
+    paytabs: raw, // return the full raw payload so you see what PayTabs sent
   });
 }
 
