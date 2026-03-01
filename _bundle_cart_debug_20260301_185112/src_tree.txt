@@ -1,0 +1,268 @@
+src
+├── app
+│   ├── admin
+│   │   ├── admin.css
+│   │   ├── catalog
+│   │   │   ├── page.module.css
+│   │   │   └── page.tsx
+│   │   ├── _components
+│   │   │   ├── adminClient.ts
+│   │   │   ├── AdminShell.tsx
+│   │   │   └── RequireAdmin.tsx
+│   │   ├── customers
+│   │   │   ├── [id]
+│   │   │   │   └── page.tsx
+│   │   │   └── page.tsx
+│   │   ├── inbox
+│   │   │   ├── InboxClient.tsx
+│   │   │   └── page.tsx
+│   │   ├── inventory
+│   │   │   ├── page.tsx
+│   │   │   └── ui.tsx
+│   │   ├── layout.tsx
+│   │   ├── login
+│   │   │   ├── LoginClient.tsx
+│   │   │   └── page.tsx
+│   │   ├── orders
+│   │   │   ├── [id]
+│   │   │   │   └── page.tsx
+│   │   │   ├── page.tsx
+│   │   │   └── ui.tsx
+│   │   ├── page.tsx
+│   │   ├── sales
+│   │   │   ├── page.tsx
+│   │   │   └── sales-client.tsx
+│   │   └── staff
+│   │       └── page.tsx
+│   ├── api
+│   │   ├── admin
+│   │   │   ├── catalog
+│   │   │   │   ├── categories
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── product-images
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── products
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── promotions
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── redirects.ts
+│   │   │   │   ├── settings
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── variants
+│   │   │   │       └── route.ts
+│   │   │   ├── customers
+│   │   │   │   ├── export
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── route.ts
+│   │   │   ├── inbox
+│   │   │   │   └── route.ts
+│   │   │   ├── inventory
+│   │   │   │   └── reconcile
+│   │   │   │       └── route.ts
+│   │   │   ├── lang
+│   │   │   │   └── route.ts
+│   │   │   ├── login
+│   │   │   │   └── route.ts
+│   │   │   ├── logout
+│   │   │   │   └── route.ts
+│   │   │   ├── orders
+│   │   │   │   └── route.ts
+│   │   │   ├── order-status
+│   │   │   │   └── route.ts
+│   │   │   ├── sales
+│   │   │   │   ├── catalog
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── checkout
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── login
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── orders
+│   │   │   │       └── route.ts
+│   │   │   └── staff
+│   │   │       └── route.ts
+│   │   ├── auth
+│   │   │   ├── forgot-password
+│   │   │   │   └── route.ts
+│   │   │   ├── login
+│   │   │   │   └── route.ts
+│   │   │   ├── logout
+│   │   │   │   └── route.ts
+│   │   │   ├── profile
+│   │   │   │   └── route.ts
+│   │   │   ├── reset-password
+│   │   │   │   └── route.ts
+│   │   │   ├── signup
+│   │   │   │   └── route.ts
+│   │   │   └── verify
+│   │   │       ├── confirm
+│   │   │       │   └── route.ts
+│   │   │       └── start
+│   │   │           └── route.ts
+│   │   ├── cart
+│   │   │   ├── route.ts
+│   │   │   └── sync
+│   │   │       └── route.ts
+│   │   ├── catalog
+│   │   │   ├── product
+│   │   │   │   └── route.ts
+│   │   │   ├── product-by-slug
+│   │   │   │   └── route.ts
+│   │   │   └── product-image
+│   │   │       └── [id]
+│   │   │           └── route.ts
+│   │   ├── contact
+│   │   │   └── route.ts
+│   │   ├── health
+│   │   │   └── route.ts
+│   │   ├── newsletter
+│   │   │   └── route.ts
+│   │   ├── orders
+│   │   │   ├── route.ts
+│   │   │   └── status
+│   │   │       └── route.ts
+│   │   ├── order-status
+│   │   │   └── route.ts
+│   │   ├── paytabs
+│   │   │   ├── callback
+│   │   │   │   └── route.ts
+│   │   │   ├── initiate
+│   │   │   │   └── route.ts
+│   │   │   └── query
+│   │   │       └── route.ts
+│   │   ├── pricing
+│   │   │   └── quote
+│   │   │       └── route.ts
+│   │   ├── promotions
+│   │   │   └── validate
+│   │   │       └── route.ts
+│   │   └── shipping-config
+│   │       └── route.ts
+│   ├── globals.css
+│   ├── layout.tsx
+│   ├── page.tsx
+│   ├── robots.ts
+│   ├── sitemap.ts
+│   ├── (store)
+│   │   ├── en
+│   │   │   └── checkout
+│   │   │       └── result
+│   │   │           └── page.tsx
+│   │   └── [locale]
+│   │       ├── account
+│   │       │   ├── AccountClient.tsx
+│   │       │   ├── forgot-password
+│   │       │   │   └── page.tsx
+│   │       │   ├── login
+│   │       │   │   └── page.tsx
+│   │       │   ├── orders
+│   │       │   │   └── [id]
+│   │       │   ├── page.tsx
+│   │       │   ├── reset-password
+│   │       │   │   └── page.tsx
+│   │       │   ├── signup
+│   │       │   │   └── page.tsx
+│   │       │   └── verify
+│   │       │       └── page.tsx
+│   │       ├── cart
+│   │       │   ├── CartClient.tsx
+│   │       │   └── page.tsx
+│   │       ├── checkout
+│   │       │   ├── CheckoutClient.tsx
+│   │       │   ├── page.tsx
+│   │       │   └── result
+│   │       │       └── page.tsx
+│   │       ├── compliance
+│   │       │   └── page.tsx
+│   │       ├── contact
+│   │       │   ├── ContactForm.tsx
+│   │       │   └── page.tsx
+│   │       ├── faq
+│   │       │   ├── FAQAccordion.tsx
+│   │       │   └── page.tsx
+│   │       ├── layout.tsx
+│   │       ├── page.tsx
+│   │       ├── policies
+│   │       │   ├── compliance
+│   │       │   │   └── page.tsx
+│   │       │   ├── privacy
+│   │       │   │   └── page.tsx
+│   │       │   ├── returns
+│   │       │   │   └── page.tsx
+│   │       │   ├── shipping
+│   │       │   │   └── page.tsx
+│   │       │   └── terms
+│   │       │       └── page.tsx
+│   │       ├── privacy
+│   │       │   └── page.tsx
+│   │       ├── product
+│   │       │   ├── page.tsx
+│   │       │   ├── ProductCatalogClient.tsx
+│   │       │   ├── ProductGridClient.tsx
+│   │       │   └── [slug]
+│   │       │       ├── page.module.css
+│   │       │       ├── page.tsx
+│   │       │       ├── ProductImageGallery.tsx
+│   │       │       └── ProductPurchasePanel.tsx
+│   │       ├── QuickFactsRotator.tsx
+│   │       ├── returns
+│   │       │   └── page.tsx
+│   │       ├── shipping
+│   │       │   └── page.tsx
+│   │       ├── story
+│   │       │   └── page.tsx
+│   │       └── terms
+│   │           └── page.tsx
+│   ├── styleguide
+│   │   └── page.tsx
+│   └── ui
+│       └── fonts.ts
+├── components
+│   ├── AddToCartButton.tsx
+│   ├── brand
+│   │   ├── BrandLogo.tsx
+│   │   └── HeaderLogo.tsx
+│   ├── CartHeaderIcon.tsx
+│   ├── CartHydrator.tsx
+│   ├── SafeImg.tsx
+│   ├── site
+│   │   ├── Footer.tsx
+│   │   ├── Header.tsx
+│   │   └── LocaleSwitchLink.tsx
+│   └── ui
+│       ├── Button.tsx
+│       ├── Card.tsx
+│       └── Input.tsx
+├── lib
+│   ├── adminCustomers.ts
+│   ├── admin-lang.ts
+│   ├── admin-page.ts
+│   ├── adminSession.ts
+│   ├── cartStore.server.ts
+│   ├── cartStore.ts
+│   ├── catalogFallback.ts
+│   ├── catalog.ts
+│   ├── customerAuth.ts
+│   ├── dbSchema.ts
+│   ├── db.ts
+│   ├── emailLog.ts
+│   ├── email.ts
+│   ├── guards.ts
+│   ├── homeCopy.ts
+│   ├── http-client.ts
+│   ├── http.ts
+│   ├── identity.ts
+│   ├── inbox.ts
+│   ├── locale.ts
+│   ├── ordersSchema.ts
+│   ├── orders.ts
+│   ├── paytabs.ts
+│   ├── pricing.ts
+│   ├── promotions.ts
+│   ├── rateLimit.ts
+│   ├── safe.ts
+│   ├── shipping.ts
+│   ├── siteContent.ts
+│   └── stock.ts
+└── middleware.ts
+
+110 directories, 156 files

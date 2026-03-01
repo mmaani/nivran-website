@@ -11,16 +11,11 @@ export type CartSnapshot = {
 
 function pickCartId(input: unknown): string {
   if (typeof input === "string") return input;
-  if (typeof input === "number" && Number.isFinite(input) && input > 0) return String(Math.trunc(input));
-
   if (input && typeof input === "object") {
     const obj = input as Record<string, unknown>;
     const v = obj.cartId ?? obj.cart_id ?? obj.id ?? obj.token;
-
     if (typeof v === "string") return v;
-    if (typeof v === "number" && Number.isFinite(v) && v > 0) return String(Math.trunc(v));
   }
-
   return "";
 }
 
