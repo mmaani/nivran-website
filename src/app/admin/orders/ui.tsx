@@ -19,6 +19,12 @@ function toNum(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function clampMoneyJod(v: number): number {
+  if (!Number.isFinite(v)) return 0;
+  // 2 decimals, >=0
+  return Math.max(0, Math.round(v * 100) / 100);
+}
+
 type OrderItem = {
   slug: string;
   name_en: string;
@@ -35,7 +41,7 @@ type Row = {
   amount: string | number;
   currency: string;
   locale: string;
-  payment_method: string;
+  payment_method: string; // PAYTABS | COD | CARD_POS | CASH | ...
   paytabs_tran_ref: string | null;
   created_at: string;
   customer: unknown;
@@ -63,6 +69,8 @@ const STATUS_OPTIONS = [
   "SHIPPED",
   "DELIVERED",
   "PAID_COD",
+  "REFUND_PENDING",
+  "REFUNDED",
 ] as const;
 
 const STATUS_AR: Record<string, string> = {
@@ -75,9 +83,14 @@ const STATUS_AR: Record<string, string> = {
   SHIPPED: "تم الشحن",
   DELIVERED: "تم التسليم",
   PAID_COD: "مدفوع (عند الاستلام)",
+  REFUND_PENDING: "قيد الاسترجاع",
+  REFUNDED: "تم الاسترجاع",
 };
 
 type UpdateStatusResponse = { ok?: boolean; error?: string };
+
+// Refund API response (keep loose to avoid type churn)
+type RefundResponse = { ok?: boolean; error?: string; refundId?: number | string; paytabs?: unknown };
 
 function normalizeItems(items: unknown): OrderItem[] {
   if (!Array.isArray(items)) return [];
@@ -98,6 +111,19 @@ function normalizeItems(items: unknown): OrderItem[] {
     .filter((item): item is OrderItem => item !== null);
 }
 
+function isPaidStatus(status: string): boolean {
+  const s = String(status || "").toUpperCase();
+  return s === "PAID" || s === "PAID_COD";
+}
+
+function canRefundOrder(r: Row): boolean {
+  const status = String(r.status || "").toUpperCase();
+  if (!isPaidStatus(status)) return false;
+  // Don’t offer refund after shipped/delivered via this quick action (you can relax later).
+  // If you want to allow it later, remove this guard.
+  return true;
+}
+
 export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]; lang: "en" | "ar" }) {
   const isAr = lang === "ar";
 
@@ -106,6 +132,18 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
   const [busyId, setBusyId] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+
+  // Refund modal state
+  const [refundOpenFor, setRefundOpenFor] = useState<Row | null>(null);
+  const [refundBusy, setRefundBusy] = useState(false);
+  const [refundErr, setRefundErr] = useState<string | null>(null);
+  const [refundOk, setRefundOk] = useState<string | null>(null);
+  const [refundAmount, setRefundAmount] = useState<string>("");
+  const [refundReason, setRefundReason] = useState<string>("");
+  // Hybrid: PayTabs online, Manual POS/Cash
+  const [refundMode, setRefundMode] = useState<"AUTO" | "MANUAL">("AUTO");
+  // Your preference: restock later (2 days) instead of immediate
+  const [restockPolicy, setRestockPolicy] = useState<"DELAYED_2D" | "IMMEDIATE">("DELAYED_2D");
 
   const L = useMemo(() => {
     if (isAr) {
@@ -139,6 +177,23 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
         yes: "نعم",
         no: "لا",
         dash: "—",
+
+        refund: "استرجاع",
+        refundTitle: "إنشاء عملية استرجاع",
+        refundAmount: "المبلغ (JOD)",
+        refundReason: "السبب",
+        refundMode: "طريقة الاسترجاع",
+        refundModeAuto: "PayTabs (أونلاين)",
+        refundModeManual: "يدوي (POS/كاش)",
+        restock: "تحديث المخزون",
+        restockDelayed: "بعد يومين",
+        restockImmediate: "فوراً",
+        cancel: "إلغاء",
+        submit: "تنفيذ",
+        close: "إغلاق",
+        refundedOk: "تم إرسال الاسترجاع بنجاح",
+        autoNoteMissingTran: "لا يوجد tran_ref — استخدم الاسترجاع اليدوي",
+        invalidAmount: "المبلغ غير صالح",
       };
     }
 
@@ -172,6 +227,23 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
       yes: "yes",
       no: "no",
       dash: "—",
+
+      refund: "Refund",
+      refundTitle: "Create Refund",
+      refundAmount: "Amount (JOD)",
+      refundReason: "Reason",
+      refundMode: "Refund mode",
+      refundModeAuto: "PayTabs (online)",
+      refundModeManual: "Manual (POS/Cash)",
+      restock: "Restock",
+      restockDelayed: "After 2 days",
+      restockImmediate: "Immediately",
+      cancel: "Cancel",
+      submit: "Submit",
+      close: "Close",
+      refundedOk: "Refund request sent",
+      autoNoteMissingTran: "No tran_ref — use manual refund",
+      invalidAmount: "Invalid amount",
     };
   }, [isAr]);
 
@@ -220,6 +292,85 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   }
 
+  function openRefund(r: Row) {
+    setRefundErr(null);
+    setRefundOk(null);
+    setRefundOpenFor(r);
+
+    const total = clampMoneyJod(toNum(r.total_jod ?? r.amount));
+    setRefundAmount(total > 0 ? total.toFixed(2) : "");
+    setRefundReason("");
+
+    // AUTO only if PayTabs tran_ref exists; else default to MANUAL
+    if (r.paytabs_tran_ref) setRefundMode("AUTO");
+    else setRefundMode("MANUAL");
+
+    setRestockPolicy("DELAYED_2D");
+  }
+
+  function closeRefund() {
+    if (refundBusy) return;
+    setRefundOpenFor(null);
+    setRefundErr(null);
+    setRefundOk(null);
+    setRefundAmount("");
+    setRefundReason("");
+    setRefundMode("AUTO");
+    setRestockPolicy("DELAYED_2D");
+  }
+
+  async function submitRefund() {
+    if (!refundOpenFor) return;
+
+    setRefundErr(null);
+    setRefundOk(null);
+    setRefundBusy(true);
+
+    try {
+      const amount = clampMoneyJod(Number(String(refundAmount || "").trim()));
+      if (!(amount > 0)) throw new Error(L.invalidAmount);
+
+      const wantsAuto = refundMode === "AUTO";
+      if (wantsAuto && !refundOpenFor.paytabs_tran_ref) {
+        throw new Error(L.autoNoteMissingTran);
+      }
+
+      // API contract: keep it flexible; backend can accept these fields.
+      const payload = {
+        orderId: refundOpenFor.id,
+        amountJod: amount,
+        reason: String(refundReason || "").trim(),
+        mode: refundMode, // AUTO | MANUAL
+        restockPolicy, // DELAYED_2D | IMMEDIATE
+      };
+
+      const res = await adminFetch("/api/admin/refund", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const raw: unknown = await res.json().catch(() => null);
+      const data: RefundResponse = isRecord(raw) ? (raw as RefundResponse) : {};
+
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || (isAr ? "فشل الاسترجاع" : "Refund failed"));
+      }
+
+      // UI: mark order as REFUND_PENDING optimistically (backend should do it anyway)
+      setRows((prev) =>
+        prev.map((r) => (r.id === refundOpenFor.id ? { ...r, status: "REFUND_PENDING" } : r))
+      );
+
+      setRefundOk(L.refundedOk);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setRefundErr(msg || (isAr ? "حدث خطأ" : "Error"));
+    } finally {
+      setRefundBusy(false);
+    }
+  }
+
   return (
     <div className="admin-grid">
       <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={L.search} className="admin-input" />
@@ -248,11 +399,12 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
               const cphone = readString(r.customer, "phone") || L.dash;
               const customer = `${cname} / ${cphone}`;
 
-              const amountValue = toNum(r.total_jod ?? r.amount);
+              const amountValue = clampMoneyJod(toNum(r.total_jod ?? r.amount));
               const amount = `${Number.isFinite(amountValue) ? amountValue.toFixed(2) : "0.00"} ${r.currency}`;
 
               const items = normalizeItems(r.items);
               const opened = !!expanded[r.id];
+              const showRefund = canRefundOrder(r);
 
               return (
                 <Fragment key={`row-${r.id}`}>
@@ -291,10 +443,22 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                       {new Date(r.created_at).toLocaleString(isAr ? "ar-JO" : undefined)}
                     </td>
 
-                    <td data-label={L.details}>
+                    <td data-label={L.details} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button className="btn" type="button" onClick={() => toggleDetails(r.id)}>
                         {opened ? L.hideDetails : L.showDetails}
                       </button>
+
+                      {showRefund ? (
+                        <button
+                          className="btn"
+                          type="button"
+                          onClick={() => openRefund(r)}
+                          disabled={busyId === r.id}
+                          title={L.refund}
+                        >
+                          {L.refund}
+                        </button>
+                      ) : null}
                     </td>
 
                     <td data-label={L.update}>
@@ -328,7 +492,11 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                               <ul style={{ margin: "6px 0 0", paddingInlineStart: 18 }}>
                                 {items.map((item) => (
                                   <li key={`${r.id}-${item.slug}`}>
-                                    <span>{isAr ? item.name_ar || item.name_en || item.slug : item.name_en || item.name_ar || item.slug}</span>
+                                    <span>
+                                      {isAr
+                                        ? item.name_ar || item.name_en || item.slug
+                                        : item.name_en || item.name_ar || item.slug}
+                                    </span>
                                     <span className="mono">
                                       {" "}
                                       — {item.qty} × {item.unit_price_jod.toFixed(2)} = {item.line_total_jod.toFixed(2)} JOD
@@ -343,8 +511,8 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                             <strong>{L.totals}</strong>
                             <div className="mono" style={{ marginTop: 4 }}>
                               {L.subtotal}: {toNum(r.subtotal_before_discount_jod).toFixed(2)} JOD • {L.discount}:{" "}
-                              {toNum(r.discount_jod).toFixed(2)} JOD • {L.shipping}: {toNum(r.shipping_jod).toFixed(2)} JOD • {L.total}:{" "}
-                              {toNum(r.total_jod ?? r.amount).toFixed(2)} JOD
+                              {toNum(r.discount_jod).toFixed(2)} JOD • {L.shipping}: {toNum(r.shipping_jod).toFixed(2)} JOD •{" "}
+                              {L.total}: {toNum(r.total_jod ?? r.amount).toFixed(2)} JOD
                               <br />
                               {L.promo}: {String(r.discount_source || L.dash)}{" "}
                               {r.promo_code ? `(${r.promo_code})` : ""} {r.promotion_id ? `#${r.promotion_id}` : ""} •{" "}
@@ -372,6 +540,120 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
           </tbody>
         </table>
       </div>
+
+      {/* Refund modal (simple, no external deps) */}
+      {refundOpenFor ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.35)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 50,
+          }}
+          onClick={(e) => {
+            // close when clicking backdrop
+            if (e.target === e.currentTarget) closeRefund();
+          }}
+        >
+          <div
+            style={{
+              width: "min(720px, 100%)",
+              background: "var(--cream, #fff)",
+              color: "var(--ink, #111)",
+              borderRadius: 16,
+              boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+              padding: 16,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700 }}>{L.refundTitle}</div>
+                <div className="mono" style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
+                  #{refundOpenFor.id} • {refundOpenFor.cart_id}
+                </div>
+              </div>
+              <button className="btn" type="button" onClick={closeRefund} disabled={refundBusy}>
+                {L.close}
+              </button>
+            </div>
+
+            <div className="admin-grid" style={{ gap: 10, marginTop: 12 }}>
+              {refundErr ? <p style={{ color: "crimson", margin: 0 }}>{refundErr}</p> : null}
+              {refundOk ? <p style={{ color: "seagreen", margin: 0 }}>{refundOk}</p> : null}
+
+              <div style={{ display: "grid", gap: 8 }}>
+                <label style={{ fontSize: 12, opacity: 0.8 }}>{L.refundAmount}</label>
+                <input
+                  className="admin-input ltr"
+                  value={refundAmount}
+                  onChange={(e) => setRefundAmount(e.target.value)}
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  disabled={refundBusy}
+                />
+              </div>
+
+              <div style={{ display: "grid", gap: 8 }}>
+                <label style={{ fontSize: 12, opacity: 0.8 }}>{L.refundReason}</label>
+                <input
+                  className="admin-input"
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                  placeholder={isAr ? "مثال: إرجاع العميل" : "e.g. customer return"}
+                  disabled={refundBusy}
+                />
+              </div>
+
+              <div style={{ display: "grid", gap: 8 }}>
+                <label style={{ fontSize: 12, opacity: 0.8 }}>{L.refundMode}</label>
+                <select
+                  className="admin-select"
+                  value={refundMode}
+                  onChange={(e) => setRefundMode(e.target.value === "MANUAL" ? "MANUAL" : "AUTO")}
+                  disabled={refundBusy}
+                >
+                  <option value="AUTO" disabled={!refundOpenFor.paytabs_tran_ref}>
+                    {L.refundModeAuto}
+                  </option>
+                  <option value="MANUAL">{L.refundModeManual}</option>
+                </select>
+
+                {!refundOpenFor.paytabs_tran_ref && refundMode === "AUTO" ? (
+                  <div style={{ fontSize: 12, opacity: 0.75 }}>{L.autoNoteMissingTran}</div>
+                ) : null}
+              </div>
+
+              <div style={{ display: "grid", gap: 8 }}>
+                <label style={{ fontSize: 12, opacity: 0.8 }}>{L.restock}</label>
+                <select
+                  className="admin-select"
+                  value={restockPolicy}
+                  onChange={(e) => setRestockPolicy(e.target.value === "IMMEDIATE" ? "IMMEDIATE" : "DELAYED_2D")}
+                  disabled={refundBusy}
+                >
+                  <option value="DELAYED_2D">{L.restockDelayed}</option>
+                  <option value="IMMEDIATE">{L.restockImmediate}</option>
+                </select>
+              </div>
+
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 6 }}>
+                <button className="btn" type="button" onClick={closeRefund} disabled={refundBusy}>
+                  {L.cancel}
+                </button>
+                <button className="btn" type="button" onClick={submitRefund} disabled={refundBusy}>
+                  {refundBusy ? "…" : L.submit}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

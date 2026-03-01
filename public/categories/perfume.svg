@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000" flood-opacity="0.16"/>
+    </filter>
+    <style>
+      .en { font-family: Inter, system-ui, -apple-system, Segoe UI, Arial, sans-serif; }
+      .ar { font-family: Cairo, "Noto Sans Arabic", "Segoe UI", Arial, sans-serif; }
+    </style>
+  </defs>
+
+  <rect width="1024" height="1024" fill="#F5F2EC"/>
+  <rect x="112" y="112" width="800" height="800" rx="48" fill="#FFFFFF" filter="url(#shadow)"/>
+
+  <text x="176" y="198" class="en" fill="#1B1B1B" font-size="28" letter-spacing="8">NIVRAN</text>
+
+  <!-- Icon -->
+  <g transform="translate(512 338)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <g stroke="#1B1B1B" stroke-width="8">
+      <rect x="-44" y="-170" width="88" height="66" rx="12"/>
+      <path d="M-28 -104 h56 v30 c0 18-14 32-32 32h- -?"/>
+      <!-- (cap/neck simplified cleanly, like sample) -->
+      <rect x="-46" y="-104" width="92" height="40" rx="12"/>
+      <rect x="-120" y="-64" width="240" height="220" rx="42"/>
+      <path d="M-120 0 h240" opacity="0.35"/>
+    </g>
+
+    <!-- gold mist lines on one side -->
+    <g stroke="#C9A46A" stroke-width="6">
+      <path d="M-190 -10 l-52 0"/>
+      <path d="M-190 14 l-62 10"/>
+      <path d="M-190 38 l-52 20"/>
+    </g>
+  </g>
+
+  <line x1="272" y1="564" x2="752" y2="564" stroke="#D8D1C6" stroke-width="3" stroke-linecap="round"/>
+
+  <g text-anchor="middle" fill="#1B1B1B">
+    <text x="512" y="638" class="en" font-size="62" font-weight="500" letter-spacing="12">NIVRAN</text>
+    <text x="512" y="708" class="en" font-size="46" font-weight="700">Perfume</text>
+    <text x="512" y="772" class="ar" font-size="46" font-weight="700" direction="rtl" unicode-bidi="bidi-override">عطور</text>
+    <text x="512" y="832" class="en" font-size="30" font-weight="500" opacity="0.9">Wear the calm.</text>
+  </g>
+</svg>

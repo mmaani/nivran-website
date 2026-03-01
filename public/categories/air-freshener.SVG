@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000" flood-opacity="0.16"/>
+    </filter>
+    <style>
+      .en { font-family: Inter, system-ui, -apple-system, Segoe UI, Arial, sans-serif; }
+      .ar { font-family: Cairo, "Noto Sans Arabic", "Segoe UI", Arial, sans-serif; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" fill="#F5F2EC"/>
+
+  <!-- Panel -->
+  <rect x="112" y="112" width="800" height="800" rx="48" fill="#FFFFFF" filter="url(#shadow)"/>
+
+  <!-- Small brand label -->
+  <text x="176" y="198" class="en" fill="#1B1B1B" font-size="28" letter-spacing="8">NIVRAN</text>
+
+  <!-- Icon (upper half) -->
+  <g transform="translate(512 338)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- spray bottle -->
+    <g stroke="#1B1B1B" stroke-width="8">
+      <rect x="-70" y="-10" width="140" height="200" rx="26"/>
+      <path d="M-30 -10 v-52 c0-10 8-18 18-18h24c10 0 18 8 18 18v52"/>
+      <path d="M-26 -80 h52"/>
+      <path d="M10 -80 v-22"/>
+      <path d="M10 -102 h70 c12 0 22 10 22 22v6H10"/>
+      <path d="M102 -74 h38"/>
+      <path d="M0 30 v120" opacity="0.35"/>
+    </g>
+
+    <!-- gold mist lines -->
+    <g stroke="#C9A46A" stroke-width="6">
+      <path d="M150 -78 l44 -14"/>
+      <path d="M150 -54 l54 0"/>
+      <path d="M150 -30 l44 14"/>
+    </g>
+  </g>
+
+  <!-- Divider line -->
+  <line x1="272" y1="564" x2="752" y2="564" stroke="#D8D1C6" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Text stack (lower half) -->
+  <g text-anchor="middle" fill="#1B1B1B">
+    <text x="512" y="638" class="en" font-size="62" font-weight="500" letter-spacing="12">NIVRAN</text>
+    <text x="512" y="708" class="en" font-size="46" font-weight="700">Air Freshener</text>
+    <text x="512" y="772" class="ar" font-size="46" font-weight="700" direction="rtl" unicode-bidi="bidi-override">معطر جو</text>
+    <text x="512" y="832" class="en" font-size="30" font-weight="500" opacity="0.9">Wear the calm.</text>
+  </g>
+</svg>

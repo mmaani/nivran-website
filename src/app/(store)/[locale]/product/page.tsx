@@ -62,10 +62,17 @@ const FALLBACK_CATS: Record<string, { en: string; ar: string }> = {
   soap: { en: "Soap", ar: "صابون" },
 };
 
-function fallbackFromSlug(slug: string) {
-  const s = String(slug || "").toLowerCase();
-  const family = s.includes("noir") ? "noir" : s.includes("bloom") ? "bloom" : "calm";
-  return `/products/${family}-1.svg`;
+const CATEGORY_PLACEHOLDERS: Record<string, string> = {
+  perfume: "/categories/perfume.svg",
+  "hand-gel": "/categories/hand-gel.svg",
+  cream: "/categories/cream.svg",
+  "air-freshener": "/categories/air-freshener.svg",
+  soap: "/categories/soap.svg",
+};
+
+function fallbackFromCategoryKey(categoryKey: string): string {
+  const key = String(categoryKey || "").trim().toLowerCase();
+  return CATEGORY_PLACEHOLDERS[key] || CATEGORY_PLACEHOLDERS.perfume;
 }
 
 function toSafeNumber(value: string | number | null | undefined): number {
@@ -289,7 +296,7 @@ export default async function ProductCatalogPage({ params }: { params: Promise<{
     const hasPromo = p.promo_type != null && promoValue > 0;
 
     const apiSrc = p.image_id ? `/api/catalog/product-image/${p.image_id}` : "";
-    const fallbackSrc = fallbackFromSlug(p.slug);
+    const fallbackSrc = fallbackFromCategoryKey(p.category_key);
 
     const tags = Array.from(new Set([...p.wear_times, ...p.seasons, ...p.audiences]))
       .map((chip) => tagLabel(locale, chip))

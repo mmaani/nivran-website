@@ -39,10 +39,17 @@ type RelatedProductRow = {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function fallbackFromSlug(slug: string) {
-  const s = String(slug || "").toLowerCase();
-  const family = s.includes("noir") ? "noir" : s.includes("bloom") ? "bloom" : "calm";
-  return `/products/${family}-1.svg`;
+const CATEGORY_PLACEHOLDERS: Record<string, string> = {
+  perfume: "/categories/perfume.svg",
+  "hand-gel": "/categories/hand-gel.svg",
+  cream: "/categories/cream.svg",
+  "air-freshener": "/categories/air-freshener.svg",
+  soap: "/categories/soap.svg",
+};
+
+function fallbackFromCategoryKey(categoryKey: string): string {
+  const key = String(categoryKey || "").trim().toLowerCase();
+  return CATEGORY_PLACEHOLDERS[key] || CATEGORY_PLACEHOLDERS.perfume;
 }
 
 
@@ -151,7 +158,7 @@ export default async function ProductDetailPage({
       ? variants
       : [{ id: syntheticVariantId(fallback.slug), label: isAr ? "القياسي" : "Standard", priceJod: Number(fallback.priceJod || 0), compareAtPriceJod: null, isDefault: true }];
 
-    const fallbackSrc = fallback.images?.[0] || fallbackFromSlug(fallback.slug);
+    const fallbackSrc = fallback.images?.[0] || fallbackFromCategoryKey(fallback.category);
     const fallbackRelatedPool = fallbackCatalogRows().filter((item) => item.slug !== fallback.slug);
     const fallbackRelated = shuffle(fallbackRelatedPool).slice(0, 3);
 
@@ -188,13 +195,13 @@ export default async function ProductDetailPage({
               {fallbackRelated.map((r) => {
                 const rName = locale === "ar" ? r.name_ar : r.name_en;
                 const rPrice = Number(r.min_variant_price_jod || r.price_jod || 0);
-                const rImage = fallbackFromSlug(r.slug);
+                const rImage = fallbackFromCategoryKey(r.category_key);
                 return (
                   <article key={r.slug} className="panel">
                     <div style={{ position: "relative", width: "100%", aspectRatio: "4 / 3", borderRadius: 12, overflow: "hidden", border: "1px solid #eee", marginBottom: 10 }}>
                       <SafeImg
                         src={rImage}
-                        fallbackSrc={fallbackFromSlug(r.slug)}
+                        fallbackSrc={fallbackFromCategoryKey(r.category_key)}
                         alt={rName}
                         style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
                         loading="lazy"
@@ -365,7 +372,7 @@ export default async function ProductDetailPage({
       }];
 
   const imageUrls = imgs.rows.map((img) => `/api/catalog/product-image/${img.id}`);
-  const fallbackSrc = fallbackFromSlug(product.slug);
+  const fallbackSrc = fallbackFromCategoryKey(product.category_key);
 
   const relatedPool = relatedRes.rows;
   const sameCategory = shuffle(relatedPool.filter((r) => r.category_key === product.category_key)).slice(0, 2);
@@ -451,8 +458,8 @@ export default async function ProductDetailPage({
             {relatedProducts.map((r) => {
               const rName = isAr ? r.name_ar : r.name_en;
               const rPrice = Number(r.min_variant_price_jod || r.price_jod || 0);
-              const rImg = r.image_id ? `/api/catalog/product-image/${r.image_id}` : fallbackFromSlug(r.slug);
-              const rFallback = fallbackFromSlug(r.slug);
+              const rImg = r.image_id ? `/api/catalog/product-image/${r.image_id}` : fallbackFromCategoryKey(r.category_key);
+              const rFallback = fallbackFromCategoryKey(r.category_key);
               const rCategory = categoryLabels[r.category_key as keyof typeof categoryLabels]?.[locale] || r.category_key;
 
               return (
