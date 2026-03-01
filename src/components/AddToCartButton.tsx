@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { clampQty, mergeCartSum, readLocalCart, writeLocalCart, type CartItem } from "@/lib/cartStore";
+import { clampQty, normalizeCartItems, readLocalCart, writeLocalCart, type CartItem } from "@/lib/cartStore";
 
 type JsonRecord = Record<string, unknown>;
 function isRecord(v: unknown): v is JsonRecord {
@@ -13,11 +13,91 @@ function getBool(obj: JsonRecord, key: string): boolean {
   return obj[key] === true;
 }
 
+function toNum(v: unknown): number {
+  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : Number.NaN;
+  return Number.isFinite(n) ? n : 0;
+}
+
+function toStr(v: unknown): string {
+  return typeof v === "string" ? v : v == null ? "" : String(v);
+}
+
+/** ✅ Normalize: only positive ints are kept, everything else becomes null */
+function normVariantId(v: unknown): number | null {
+  const n = toNum(v);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.trunc(n);
+}
+
+/** ✅ Stable key to avoid null/0/undefined mismatches */
+function cartKey(slug: string, variantId: number | null): string {
+  return `${slug}::${variantId ?? "base"}`;
+}
+
+function parseCartItemsUnknown(v: unknown): CartItem[] {
+  if (!Array.isArray(v)) return [];
+
+  const out: CartItem[] = [];
+  for (const it of v) {
+    if (!isRecord(it)) continue;
+
+    const slug = toStr(it.slug).trim();
+    if (!slug) continue;
+
+    const qty = Math.max(1, Math.min(99, Math.trunc(toNum(it.qty) || 1)));
+    const priceJod = toNum(it.priceJod);
+
+    // tolerate server shapes
+    const variantId = normVariantId(it.variantId ?? it.variant_id);
+    const variantLabel = typeof it.variantLabel === "string" ? it.variantLabel : null;
+
+    const name = toStr(it.name).trim() || slug;
+
+    out.push({
+      slug,
+      name,
+      priceJod,
+      qty,
+      variantId,
+      variantLabel: variantLabel ?? undefined,
+    });
+  }
+
+  return normalizeCartItems(out);
+}
+
+function sameCart(a: CartItem[], b: CartItem[]): boolean {
+  const aa = normalizeCartItems(a);
+  const bb = normalizeCartItems(b);
+  if (aa.length !== bb.length) return false;
+
+  const mapA = new Map<string, number>();
+  for (const it of aa) {
+    const k = cartKey(String(it.slug || ""), normVariantId(it.variantId));
+    mapA.set(k, Number(it.qty || 0));
+  }
+
+  for (const it of bb) {
+    const k = cartKey(String(it.slug || ""), normVariantId(it.variantId));
+    const q = Number(it.qty || 0);
+    if ((mapA.get(k) ?? -1) !== q) return false;
+  }
+
+  return true;
+}
+
 async function trySyncToAccount(items: CartItem[]) {
+  // ✅ send normalized items and explicitly tell server the mode
+  const payloadItems = normalizeCartItems(items).map((i) => ({
+    slug: i.slug,
+    qty: i.qty,
+    variantId: normVariantId(i.variantId),
+  }));
+
   const r = await fetch("/api/cart/sync", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ items }),
+    body: JSON.stringify({ mode: "replace", items: payloadItems }),
     cache: "no-store",
   }).catch(() => null);
 
@@ -26,8 +106,15 @@ async function trySyncToAccount(items: CartItem[]) {
   const j: unknown = await r.json().catch(() => null);
   if (!isRecord(j)) return;
 
-  if (j.ok === true && getBool(j, "isAuthenticated") && Array.isArray(j.items)) {
-    writeLocalCart(mergeCartSum([], j.items as CartItem[]));
+  if (j.ok === true && getBool(j, "isAuthenticated")) {
+    const serverItems = parseCartItemsUnknown(j.items);
+    if (!serverItems.length) return;
+
+    // ✅ if local already matches canonical server, don't rewrite (prevents “double apply” feeling)
+    const localNow = normalizeCartItems(readLocalCart());
+    if (sameCart(localNow, serverItems)) return;
+
+    writeLocalCart(serverItems);
   }
 }
 
@@ -71,19 +158,27 @@ export default function AddToCartButton({
   const safeMin = Math.max(1, Number(minQty || 1));
   const safeMax = Math.max(safeMin, Number(maxQty || 99));
 
+  // ✅ normalize once
+  const vId = useMemo(() => normVariantId(variantId), [variantId]);
+
   const addedText = addedLabel || (isAr ? "تمت الإضافة ✓" : "Added ✓");
   const updatedText = updatedLabel || (isAr ? "تم التحديث ✓" : "Updated ✓");
 
   useEffect(() => {
-    const items = readLocalCart();
-    const found = items.find((i) => i.slug === slug && (i.variantId ?? null) === (variantId ?? null));
+    const items = normalizeCartItems(readLocalCart());
+    const key = cartKey(slug, vId);
+    const found = items.find((i) => cartKey(i.slug, normVariantId(i.variantId)) === key);
+
     if (found?.qty) setQty(Math.min(safeMax, Math.max(safeMin, found.qty)));
     else setQty(safeMin);
-  }, [slug, variantId, safeMin, safeMax]);
+  }, [slug, vId, safeMin, safeMax]);
 
-  useEffect(() => () => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    },
+    []
+  );
 
   const displayLabel = useMemo(() => {
     if (status === "added") return addedText;
@@ -102,16 +197,27 @@ export default function AddToCartButton({
   }
 
   function upsertCartItem(baseItems: CartItem[]): { items: CartItem[]; wasUpdate: boolean } {
-    const items = [...baseItems];
-    const idx = items.findIndex((i) => i.slug === slug && (i.variantId ?? null) === (variantId ?? null));
-    const nextItem: CartItem = { slug, variantId, variantLabel, name, priceJod, qty: clampQty(qty, safeMin, safeMax) };
+    const items = normalizeCartItems(baseItems);
+    const key = cartKey(slug, vId);
+
+    const idx = items.findIndex((i) => cartKey(i.slug, normVariantId(i.variantId)) === key);
+
+    const nextItem: CartItem = {
+      slug,
+      variantId: vId,
+      variantLabel,
+      name,
+      priceJod,
+      qty: clampQty(qty, safeMin, safeMax),
+    };
 
     if (idx >= 0) {
       items[idx] = nextItem;
-      return { items, wasUpdate: true };
+      return { items: normalizeCartItems(items), wasUpdate: true };
     }
+
     items.push(nextItem);
-    return { items, wasUpdate: false };
+    return { items: normalizeCartItems(items), wasUpdate: false };
   }
 
   async function onSetCart() {
@@ -126,8 +232,10 @@ export default function AddToCartButton({
   async function onBuyNow() {
     if (disabled) return;
 
-    const current = readLocalCart();
-    const idx = current.findIndex((i) => i.slug === slug && (i.variantId ?? null) === (variantId ?? null));
+    const current = normalizeCartItems(readLocalCart());
+    const key = cartKey(slug, vId);
+    const idx = current.findIndex((i) => cartKey(i.slug, normVariantId(i.variantId)) === key);
+
     const selectedQty = clampQty(qty, safeMin, safeMax);
 
     const items = [...current];
@@ -135,18 +243,19 @@ export default function AddToCartButton({
       const prev = items[idx];
       items[idx] = {
         slug,
-        variantId,
+        variantId: vId,
         variantLabel,
         name,
         priceJod,
         qty: clampQty((prev?.qty || 0) + selectedQty, safeMin, safeMax),
       };
     } else {
-      items.push({ slug, variantId, variantLabel, name, priceJod, qty: selectedQty });
+      items.push({ slug, variantId: vId, variantLabel, name, priceJod, qty: selectedQty });
     }
 
-    writeLocalCart(items);
-    void trySyncToAccount(items);
+    const next = normalizeCartItems(items);
+    writeLocalCart(next);
+    void trySyncToAccount(next);
     router.push(`/${locale}/checkout`);
   }
 
