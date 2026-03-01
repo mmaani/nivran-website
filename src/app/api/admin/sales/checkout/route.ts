@@ -16,6 +16,7 @@ type CheckoutItem = {
   variantId?: number | null;
   productSlug?: string | null;
 };
+
 type PromoEval =
   | { ok: true; discountJod: number; promotionId: number }
   | { ok: false; error?: string };
@@ -46,12 +47,19 @@ function normalizeQty(value: unknown): number {
   return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 999) : 1;
 }
 
-function normalizePaymentMethod(v: unknown): "CARD_ONLINE" | "CARD_POS" | "CASH" {
+type PaymentMethod = "CARD_ONLINE" | "CARD_POS" | "CASH";
+function normalizePaymentMethod(v: unknown): PaymentMethod {
   const s = String(v || "").toUpperCase();
   if (s === "CARD_ONLINE") return "CARD_ONLINE";
   if (s === "CARD_POS") return "CARD_POS";
   if (s === "CASH") return "CASH";
   return "CARD_POS";
+}
+
+function promoError(p: PromoEval): string | null {
+  if (p.ok) return null;
+  const msg = typeof p.error === "string" ? p.error.trim() : "";
+  return msg ? msg : null;
 }
 
 export async function POST(req: Request) {
@@ -199,9 +207,11 @@ export async function POST(req: Request) {
         const inferredVariant = !directProduct ? acc.variantMap.get(item.productId) || null : null;
         const inferredProductId = inferredVariant ? inferredVariant.product_id : item.productId;
 
-        const productFromInferred = !directProduct && inferredVariant ? acc.productMap.get(inferredProductId) || null : directProduct;
+        const productFromInferred =
+          !directProduct && inferredVariant ? acc.productMap.get(inferredProductId) || null : directProduct;
 
-        const productFromVariant = !productFromInferred && directVariant ? acc.productMap.get(directVariant.product_id) || null : productFromInferred;
+        const productFromVariant =
+          !productFromInferred && directVariant ? acc.productMap.get(directVariant.product_id) || null : productFromInferred;
 
         const productFromSlug =
           !productFromVariant && item.productSlug ? acc.productSlugMap.get(item.productSlug) || null : productFromVariant;
@@ -229,7 +239,8 @@ export async function POST(req: Request) {
         if (!finalProduct) {
           return {
             ...acc,
-            missingProductIds: item.productId > 0 ? new Set([...acc.missingProductIds, item.productId]) : acc.missingProductIds,
+            missingProductIds:
+              item.productId > 0 ? new Set([...acc.missingProductIds, item.productId]) : acc.missingProductIds,
           };
         }
 
@@ -284,13 +295,7 @@ export async function POST(req: Request) {
         missingProductIds: new Set<number>(),
         hardError: null as
           | null
-          | {
-              ok: false;
-              status: number;
-              error: string;
-              missingProductIds: number[];
-              staleCart: boolean;
-            },
+          | { ok: false; status: number; error: string; missingProductIds: number[]; staleCart: boolean },
       }
     );
 
@@ -311,16 +316,13 @@ export async function POST(req: Request) {
     const applyPromotion = body.applyPromotion === true;
     const promoCode = applyPromotion ? String(body.promoCode || "").trim().toUpperCase() : "";
 
-const promoEval: PromoEval = applyPromotion
-  ? promoCode
-    ? ((await evaluatePromoCodeForLines(trx as unknown as DbExecutor, promoCode, built.lines, subtotal)) as PromoEval)
-    : ((await evaluateAutoPromotionForLines(trx as unknown as DbExecutor, built.lines, subtotal)) as PromoEval)
-  : { ok: false };
+    const promoEval: PromoEval = applyPromotion
+      ? promoCode
+        ? ((await evaluatePromoCodeForLines(trx as unknown as DbExecutor, promoCode, built.lines, subtotal)) as PromoEval)
+        : ((await evaluateAutoPromotionForLines(trx as unknown as DbExecutor, built.lines, subtotal)) as PromoEval)
+      : { ok: false };
 
-const promoCodeError =
-  applyPromotion && promoCode && promoEval.ok === false && "error" in promoEval
-    ? promoEval.error || "Invalid promotion"
-    : null;
+    const promoCodeError = applyPromotion && promoCode ? promoError(promoEval) : null;
     if (promoCodeError) {
       return {
         ok: false as const,
@@ -358,13 +360,19 @@ const promoCodeError =
               `insert into customers (email, password_hash, full_name, phone, address_line1, city, country, is_active)
                values ($1,$2,$3,$4,$5,$6,$7,true)
                returning id`,
-              [customerEmail, passwordHash, customerName || null, customerPhone || null, customerAddress || null, customerCity || null, customerCountry]
+              [
+                customerEmail,
+                passwordHash,
+                customerName || null,
+                customerPhone || null,
+                customerAddress || null,
+                customerCity || null,
+                customerCountry,
+              ]
             );
             const createdId = created.rows[0]?.id ? Number(created.rows[0].id) : null;
 
-            return createdId
-              ? { ok: true as const, id: createdId, password }
-              : { ok: false as const, status: 500, error: "Failed to create customer" };
+            return createdId ? { ok: true as const, id: createdId, password } : { ok: false as const, status: 500, error: "Failed to create customer" };
           })()
         : null;
 
@@ -378,7 +386,8 @@ const promoCodeError =
       };
     }
 
-    const customerId = matchedCustomerId || (createdCustomer && "ok" in createdCustomer && createdCustomer.ok ? createdCustomer.id : null);
+    const customerId =
+      matchedCustomerId || (createdCustomer && "ok" in createdCustomer && createdCustomer.ok ? createdCustomer.id : null);
 
     if (matchedCustomerId) {
       await trx.query(
@@ -396,9 +405,7 @@ const promoCodeError =
     const hasBackorder = built.lines.some((line) => line.backorder_qty > 0);
     const isOnlineCard = paymentMethod === "CARD_ONLINE";
 
-    // ✅ IMPORTANT FIX (minimal behavior change, but critical):
-    // - Online card must start as PENDING_PAYMENT (PayTabs decides PAID/FAILED later)
-    // - In-person methods can be PAID immediately (unless BACKORDER)
+    // ✅ FIX: Online card starts PENDING_PAYMENT (PayTabs later decides PAID/FAILED)
     const status = hasBackorder ? "BACKORDER" : isOnlineCard ? "PENDING_PAYMENT" : "PAID";
 
     const shippingJod = 0;
