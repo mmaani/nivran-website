@@ -11,7 +11,7 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type PaytabsQueryResponse = {
+type PaytabsQueryItem = {
   cart_id?: string;
   cartId?: string;
   tran_ref?: string;
@@ -19,71 +19,94 @@ type PaytabsQueryResponse = {
   payment_result?: {
     response_status?: string;
     response_message?: string;
+    transaction_time?: string;
   };
   response_status?: string;
   response_message?: string;
+  transaction_time?: string;
 };
 
+type PaytabsQueryResponse = PaytabsQueryItem | PaytabsQueryItem[];
+
 function readInput(input: Record<string, unknown>) {
-  const cartId = String(input?.cartId || input?.cart_id || "").trim();
-  const tranRef = String(input?.tranRef || input?.tran_ref || "").trim();
-  return { cartId, tranRef };
+  return {
+    cartId: String((input as Record<string, unknown>)?.cartId || (input as Record<string, unknown>)?.cart_id || "").trim(),
+    tranRef: String((input as Record<string, unknown>)?.tranRef || (input as Record<string, unknown>)?.tran_ref || "").trim(),
+  };
 }
 
-function normalizePaytabsPayload(raw: unknown): PaytabsQueryResponse {
-  if (Array.isArray(raw)) {
-    const first = raw[0];
-    if (first && typeof first === "object") return first as PaytabsQueryResponse;
-    return {};
-  }
-  if (raw && typeof raw === "object") return raw as PaytabsQueryResponse;
-  return {};
+function txMs(item: PaytabsQueryItem): number {
+  return Number.isFinite(Date.parse(String(item?.payment_result?.transaction_time || item?.transaction_time || "")))
+    ? Date.parse(String(item?.payment_result?.transaction_time || item?.transaction_time || ""))
+    : -1;
+}
+
+function pickMostRelevant(data: PaytabsQueryResponse): PaytabsQueryItem {
+  return Array.isArray(data)
+    ? (data
+        .slice()
+        .sort((a, b) => txMs(a) - txMs(b))
+        .at(-1) || data.at(-1) || {})
+    : (data || {});
 }
 
 async function handleQuery(input: Record<string, unknown>) {
   await ensureOrdersTables();
-  const { apiBase, profileId, serverKey } = getPaytabsEnv();
-  const { cartId, tranRef } = readInput(input);
 
-  if (!cartId && !tranRef) {
+  if (!readInput(input).cartId && !readInput(input).tranRef) {
     return NextResponse.json({ ok: false, error: "Provide tranRef or cartId" }, { status: 400 });
   }
 
-  const body: Record<string, string> = { profile_id: profileId };
-  if (tranRef) body.tran_ref = tranRef;
-  else body.cart_id = cartId;
-
-  const res = await fetch(`${apiBase}/payment/query`, {
-    method: "POST",
-    headers: { authorization: serverKey, "content-type": "application/json" },
-    body: JSON.stringify(body),
-    cache: "no-store",
-  });
-
-  const raw = (await res.json().catch(() => ({}))) as unknown;
-  const data = normalizePaytabsPayload(raw);
-
-  if (!res.ok) {
-    return NextResponse.json({ ok: false, error: "PayTabs query failed", paytabs: raw }, { status: 502 });
+  if (!readInput(input).cartId && !readInput(input).tranRef) {
+    return NextResponse.json({ ok: false, error: "Provide tranRef or cartId" }, { status: 400 });
   }
 
-  const resolvedCartId = String(data?.cart_id || data?.cartId || cartId || "").trim();
-  const resolvedTranRef = String(data?.tran_ref || data?.tranRef || tranRef || "").trim();
+  return (async () => {
+    const env = getPaytabsEnv();
 
-  const pr = data?.payment_result || {};
-  const responseStatus = String(pr.response_status || data?.response_status || "").trim();
-  const responseMessage = String(pr.response_message || data?.response_message || "").trim();
+    const res = await fetch(`${env.apiBase}/payment/query`, {
+      method: "POST",
+      headers: { authorization: env.serverKey, "content-type": "application/json" },
+      body: JSON.stringify(
+        readInput(input).tranRef
+          ? { profile_id: env.profileId, tran_ref: readInput(input).tranRef }
+          : { profile_id: env.profileId, cart_id: readInput(input).cartId }
+      ),
+      cache: "no-store",
+    });
 
-  const nextStatus = mapPaytabsResponseStatusToOrderStatus(responseStatus);
-  const allowedFrom = paymentStatusTransitionAllowedFrom(nextStatus);
+    const data = (await res.json().catch(() => ({}))) as PaytabsQueryResponse;
 
-  let transitioned = false;
-  let correctedPaid = false;
+    if (!res.ok) {
+      return NextResponse.json({ ok: false, error: "PayTabs query failed", paytabs: data }, { status: 502 });
+    }
 
-  if (resolvedCartId) {
-    // We allow correction of PAID => FAILED/CANCELED ONLY if fulfillment did not start.
-    // (Avoid auto-downgrading shipped/fulfilled orders.)
-    const result = await db.query<{ status: string; inventory_committed_at: string | null }>(
+    const item = pickMostRelevant(data);
+
+    const resolvedCartId = String(item?.cart_id || item?.cartId || readInput(input).cartId || "").trim();
+    const resolvedTranRef = String(item?.tran_ref || item?.tranRef || readInput(input).tranRef || "").trim();
+
+    const responseStatus = String(item?.payment_result?.response_status || item?.response_status || "").trim();
+    const responseMessage = String(item?.payment_result?.response_message || item?.response_message || "").trim();
+
+    const nextStatus = mapPaytabsResponseStatusToOrderStatus(responseStatus);
+    const allowedFrom = paymentStatusTransitionAllowedFrom(nextStatus);
+
+    if (!resolvedCartId) {
+      return NextResponse.json({
+        ok: true,
+        cartId: resolvedCartId,
+        tranRef: resolvedTranRef,
+        transitioned: false,
+        correctedPaid: false,
+        responseStatus,
+        responseMessage,
+        nextStatus,
+        paytabs: data,
+      });
+    }
+
+    const r = await db.query<{ status: string; inventory_committed_at: string | null }>(
       `update orders
           set status = case
                          when status = any($6::text[]) then $2
@@ -104,42 +127,37 @@ async function handleQuery(input: Record<string, unknown>) {
         resolvedCartId,
         nextStatus,
         resolvedTranRef,
-        JSON.stringify(raw), // keep the full original payload (object OR array) for debugging
+        JSON.stringify(data),
         responseStatus,
         allowedFrom,
         responseMessage,
       ]
     );
 
-    if (result.rows.length > 0) {
-      const newStatus = String(result.rows[0].status || "").toUpperCase();
-      transitioned = newStatus === nextStatus;
-      correctedPaid = transitioned && (nextStatus === "FAILED" || nextStatus === "CANCELED");
-    }
-  }
-
-  return NextResponse.json({
-    ok: true,
-    cartId: resolvedCartId,
-    tranRef: resolvedTranRef,
-    transitioned,
-    correctedPaid,
-    responseStatus,
-    responseMessage,
-    nextStatus,
-    paytabs: raw, // return the full raw payload so you see what PayTabs sent
-  });
+    return NextResponse.json({
+      ok: true,
+      cartId: resolvedCartId,
+      tranRef: resolvedTranRef,
+      transitioned: r.rows.length > 0 && String(r.rows[0]?.status || "").toUpperCase() === nextStatus,
+      correctedPaid:
+        r.rows.length > 0 &&
+        String(r.rows[0]?.status || "").toUpperCase() === nextStatus &&
+        (nextStatus === "FAILED" || nextStatus === "CANCELED"),
+      responseStatus,
+      responseMessage,
+      nextStatus,
+      paytabs: data,
+    });
+  })();
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-  return handleQuery(body);
+  return handleQuery(((await req.json().catch(() => ({}))) as Record<string, unknown>) || {});
 }
 
 export async function GET(req: Request) {
-  const url = new URL(req.url);
   return handleQuery({
-    cartId: url.searchParams.get("cartId") || url.searchParams.get("cart_id") || "",
-    tranRef: url.searchParams.get("tranRef") || url.searchParams.get("tran_ref") || "",
+    cartId: new URL(req.url).searchParams.get("cartId") || new URL(req.url).searchParams.get("cart_id") || "",
+    tranRef: new URL(req.url).searchParams.get("tranRef") || new URL(req.url).searchParams.get("tran_ref") || "",
   });
 }
