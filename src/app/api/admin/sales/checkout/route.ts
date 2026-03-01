@@ -112,65 +112,77 @@ export async function POST(req: Request) {
       price_jod: string;
       inventory_qty: number;
     }>(
-      `select id, slug, name_en, name_ar, category_key, price_jod::text, inventory_qty
+      `
+       select id::int as id, slug, name_en, name_ar, category_key, price_jod::text, inventory_qty::int as inventory_qty
          from products
         where id = any($1::bigint[])
         for update`,
       [productIds]
     );
 
-    const fallbackBySlugRes = productSlugs.length
-      ? await trx.query<{
-          id: number;
-          slug: string;
-          name_en: string;
-          name_ar: string | null;
-          category_key: string | null;
-          price_jod: string;
-          inventory_qty: number;
-        }>(
-          `select id, slug, name_en, name_ar, category_key, price_jod::text, inventory_qty
-             from products
-            where lower(slug) = any($1::text[])`,
-          [productSlugs]
-        )
-      : {
-          rows: [] as Array<{
-            id: number;
-            slug: string;
-            name_en: string;
-            name_ar: string | null;
-            category_key: string | null;
-            price_jod: string;
-            inventory_qty: number;
-          }>,
-        };
+const fallbackBySlugRes = productSlugs.length
+  ? await trx.query<{
+      id: number;
+      slug: string;
+      name_en: string;
+      name_ar: string | null;
+      category_key: string | null;
+      price_jod: string;
+      inventory_qty: number;
+    }>(
+      `select id::int as id,
+              slug,
+              name_en,
+              name_ar,
+              category_key,
+              price_jod::text,
+              inventory_qty::int as inventory_qty
+         from products
+        where lower(slug) = any($1::text[])`,
+      [productSlugs]
+    )
+  : {
+      rows: [] as Array<{
+        id: number;
+        slug: string;
+        name_en: string;
+        name_ar: string | null;
+        category_key: string | null;
+        price_jod: string;
+        inventory_qty: number;
+      }>,
+    };
 
-    const variantRes = variantIds.length
-      ? await trx.query<{
-          id: number;
-          product_id: number;
-          label: string;
-          size_ml: number | null;
-          price_jod: string;
-          is_active: boolean;
-        }>(
-          `select id, product_id, label, size_ml, price_jod::text, is_active
-             from product_variants
-            where id = any($1::bigint[])
-            for update`,
-          [variantIds]
-        )
-      : {
-          rows: [] as Array<{
-            id: number;
-            product_id: number;
-            label: string;
-            size_ml: number | null;
-            price_jod: string;
-            is_active: boolean;
-          }>,
-        };
+const variantRes = variantIds.length
+  ? await trx.query<{
+      id: number;
+      product_id: number;
+      label: string;
+      size_ml: number | null;
+      price_jod: string;
+      is_active: boolean;
+    }>(
+      `select id::int as id,
+              product_id::int as product_id,
+              label,
+              size_ml,
+              price_jod::text,
+              is_active
+         from product_variants
+        where id = any($1::bigint[])
+        for update`,
+      [variantIds]
+    )
+  : {
+      rows: [] as Array<{
+        id: number;
+        product_id: number;
+        label: string;
+        size_ml: number | null;
+        price_jod: string;
+        is_active: boolean;
+      }>,
+    };
 
     const allProductRows = [...productsRes.rows, ...fallbackBySlugRes.rows];
 
