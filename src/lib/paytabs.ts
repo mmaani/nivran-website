@@ -42,7 +42,12 @@ export function mapPaytabsResponseStatusToOrderStatus(respStatus: string): strin
 
 /**
  * Prevent accidental downgrades after fulfillment starts.
- * (We only allow PayTabs to move an order within the payment phase.)
+ *
+ * IMPORTANT FIX:
+ * - We must allow PAID -> FAILED/CANCELED when PayTabs later confirms the payment
+ *   actually failed (e.g., response_status "E" invalid card).
+ * - We still DO NOT allow SHIPPED/DELIVERED to be downgraded because those
+ *   statuses are not included in the allowed-from list.
  */
 export function paymentStatusTransitionAllowedFrom(nextStatus: string): string[] {
   const next = String(nextStatus || "").toUpperCase();
@@ -52,8 +57,10 @@ export function paymentStatusTransitionAllowedFrom(nextStatus: string): string[]
   }
 
   if (next === "FAILED" || next === "CANCELED") {
-    // Never downgrade once PAID / fulfillment has started.
-    return ["PENDING_PAYMENT", next];
+    // Allow correcting PAID -> FAILED/CANCELED if PayTabs confirms failure,
+    // but still prevents downgrades once SHIPPED/DELIVERED because those
+    // states are not in the allowed list.
+    return ["PENDING_PAYMENT", "PAID", next];
   }
 
   return [next];
