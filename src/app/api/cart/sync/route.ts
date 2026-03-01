@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     const current = await getCart(customerId);
     nextItems = mergeCartSum(current.items, incoming); // ✅ pass CartItem[]
   }
-
+  nextItems = normalizeCartItems(nextItems);
   await replaceCart(customerId, nextItems);
 
   return NextResponse.json(

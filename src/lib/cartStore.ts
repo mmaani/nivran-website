@@ -21,7 +21,7 @@ function toStr(v: unknown): string {
 }
 
 function toNum(v: unknown): number {
-  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : Number.NaN;
   return Number.isFinite(n) ? n : 0;
 }
 
@@ -48,6 +48,13 @@ function cartKey(slug: string, variantId: number | null | undefined): string {
   return `${slug}::${variantId ?? "base"}`;
 }
 
+/**
+ * ✅ IMPORTANT:
+ * Accept BOTH camelCase and snake_case fields from DB/API:
+ * - variantId OR variant_id
+ * - variantLabel OR variant_label
+ * - priceJod OR price_jod
+ */
 export function normalizeCartItems(items: unknown): CartItem[] {
   if (!Array.isArray(items)) return [];
   const out: CartItem[] = [];
@@ -58,16 +65,20 @@ export function normalizeCartItems(items: unknown): CartItem[] {
     const slug = toStr(it.slug).trim();
     if (!slug) continue;
 
-    const variantId = normalizeVariantId(it.variantId);
-    const variantLabel = toStr(it.variantLabel).trim();
+    const variantId = normalizeVariantId(it.variantId ?? it.variant_id);
+
+    const variantLabel = toStr(it.variantLabel ?? it.variant_label).trim();
+    const name = toStr(it.name).trim();
+    const priceJod = toNum(it.priceJod ?? it.price_jod);
+    const qty = clampQty(it.qty);
 
     out.push({
       slug,
       variantId,
-      variantLabel,
-      name: toStr(it.name).trim(),
-      priceJod: toNum(it.priceJod),
-      qty: clampQty(it.qty),
+      variantLabel: variantLabel || undefined,
+      name,
+      priceJod,
+      qty,
     });
   }
 
@@ -79,16 +90,17 @@ export function normalizeCartItems(items: unknown): CartItem[] {
 
     if (!prev) {
       map.set(key, i);
-    } else {
-      map.set(key, {
-        ...prev,
-        // keep best available metadata
-        variantLabel: prev.variantLabel || i.variantLabel,
-        name: prev.name || i.name,
-        priceJod: Number.isFinite(i.priceJod) ? i.priceJod : prev.priceJod,
-        qty: clampQty((prev.qty || 0) + (i.qty || 0)),
-      });
+      continue;
     }
+
+    map.set(key, {
+      ...prev,
+      // keep best available metadata
+      variantLabel: prev.variantLabel || i.variantLabel,
+      name: prev.name || i.name,
+      priceJod: Number.isFinite(i.priceJod) ? i.priceJod : prev.priceJod,
+      qty: clampQty((prev.qty || 0) + (i.qty || 0)),
+    });
   }
 
   return Array.from(map.values());
