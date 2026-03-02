@@ -536,5 +536,6 @@ export async function POST(req: Request) {
     ]
   );
 
-  return Response.json({ ok: true, cartId, status, statusToken });
+  void statusToken;
+  return Response.json({ ok: true, cartId, status });
 }
