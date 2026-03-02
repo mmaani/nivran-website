@@ -293,7 +293,7 @@ export default function AccountClient({ locale }: { locale: string }) {
     return [...orders].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   }, [orders]);
 
-  const ORDERS_PER_PAGE = 1;
+  const ORDERS_PER_PAGE = 5;
   const totalOrderPages = Math.max(1, Math.ceil(sortedOrders.length / ORDERS_PER_PAGE));
   const pagedOrders = useMemo(() => {
     const start = (ordersPage - 1) * ORDERS_PER_PAGE;
