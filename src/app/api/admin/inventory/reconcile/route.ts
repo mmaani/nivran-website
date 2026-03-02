@@ -1,10 +1,38 @@
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 import { db } from "@/lib/db";
 import { ensureOrdersTablesSafe, commitInventoryForPaidOrderId, normalizeSkuForInventory } from "@/lib/orders";
 import { requireAdmin } from "@/lib/guards";
 import { logAdminAudit } from "@/lib/adminAudit";
 
 export const runtime = "nodejs";
+
+type IdempotencyRunRow = {
+  key: string;
+  request_hash: string;
+  response_json: unknown;
+};
+
+function sha256Hex(input: string): string {
+  return crypto.createHash("sha256").update(input).digest("hex");
+}
+
+async function ensureInventoryReconcileRunsTable(): Promise<void> {
+  await db.query(`
+    create table if not exists admin_inventory_reconcile_runs (
+      key text primary key,
+      request_hash text not null,
+      response_json jsonb not null,
+      created_at timestamptz not null default now()
+    )
+  `);
+}
+
+function readIdempotencyKey(req: Request, body: Record<string, unknown>): string {
+  const fromHeader = String(req.headers.get("x-idempotency-key") || "").trim();
+  const fromBody = typeof body["idempotencyKey"] === "string" ? String(body["idempotencyKey"]).trim() : "";
+  return fromHeader || fromBody;
+}
 
 type ReconOrderRow = {
   id: number;
@@ -350,6 +378,31 @@ export async function POST(req: Request) {
 
   const parsed: unknown = await req.json().catch(() => ({}));
   const body = isRecord(parsed) ? parsed : {};
+  const requestBodyRaw = JSON.stringify(body);
+  const requestHash = sha256Hex(requestBodyRaw);
+  const idempotencyKey = readIdempotencyKey(req, body);
+
+  if (idempotencyKey) {
+    await ensureInventoryReconcileRunsTable();
+    const prev = await db.query<IdempotencyRunRow>(
+      `select key, request_hash, response_json
+         from admin_inventory_reconcile_runs
+        where key=$1
+        limit 1`,
+      [idempotencyKey]
+    );
+    const existing = prev.rows[0];
+    if (existing) {
+      if (existing.request_hash !== requestHash) {
+        return NextResponse.json({ ok: false, error: "Idempotency key reuse with different payload" }, { status: 409 });
+      }
+      const replay =
+        typeof existing.response_json === "object" && existing.response_json !== null
+          ? { ...(existing.response_json as Record<string, unknown>), replayed: true }
+          : { ok: true, replayed: true };
+      return NextResponse.json(replay);
+    }
+  }
 
   const mode = typeof body["mode"] === "string" ? String(body["mode"]).toUpperCase() : "ONE";
 
@@ -376,12 +429,27 @@ export async function POST(req: Request) {
       results.push({ id, committed });
       if (committed) {
         await db.withTransaction(async (trx) => {
-          await logAdminAudit(trx, req, { adminId: "admin", action: "inventory.adjusted", entity: "order", entityId: String(id), metadata: { mode: "ALL" } });
+          await logAdminAudit(trx, req, {
+            adminId: "admin",
+            action: "inventory.adjusted",
+            entity: "order",
+            entityId: String(id),
+            metadata: { mode: "ALL", idempotencyKey: idempotencyKey || null },
+          });
         });
       }
     }
 
-    return NextResponse.json({ ok: true, mode: "ALL", results });
+    const response = { ok: true, mode: "ALL", results };
+    if (idempotencyKey) {
+      await db.query(
+        `insert into admin_inventory_reconcile_runs (key, request_hash, response_json)
+         values ($1,$2,$3::jsonb)
+         on conflict (key) do nothing`,
+        [idempotencyKey, requestHash, JSON.stringify(response)]
+      );
+    }
+    return NextResponse.json(response);
   }
 
   const orderId = toInt(body["orderId"] ?? body["id"]);
@@ -395,9 +463,25 @@ export async function POST(req: Request) {
 
   if (committed) {
     await db.withTransaction(async (trx) => {
-      await logAdminAudit(trx, req, { adminId: "admin", action: "inventory.adjusted", entity: "order", entityId: String(orderId), metadata: { mode: "ONE" } });
+      await logAdminAudit(trx, req, {
+        adminId: "admin",
+        action: "inventory.adjusted",
+        entity: "order",
+        entityId: String(orderId),
+        metadata: { mode: "ONE", idempotencyKey: idempotencyKey || null },
+      });
     });
   }
 
-  return NextResponse.json({ ok: true, mode: "ONE", id: orderId, committed });
+  const response = { ok: true, mode: "ONE", id: orderId, committed };
+  if (idempotencyKey) {
+    await ensureInventoryReconcileRunsTable();
+    await db.query(
+      `insert into admin_inventory_reconcile_runs (key, request_hash, response_json)
+       values ($1,$2,$3::jsonb)
+       on conflict (key) do nothing`,
+      [idempotencyKey, requestHash, JSON.stringify(response)]
+    );
+  }
+  return NextResponse.json(response);
 }

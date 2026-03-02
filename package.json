@@ -22,6 +22,7 @@
     "check:buy-now-inactive-contract": "node scripts/check-buy-now-inactive-contract.mjs",
     "check:orders-create-contract": "node scripts/check-orders-create-contract.mjs",
     "check:reorder-cart-contract": "node scripts/check-reorder-cart-contract.mjs",
+    "check:admin-catalog-inventory-contract": "node scripts/check-admin-catalog-inventory-contract.mjs",
     "monitor:critical-endpoints": "bash scripts/monitor-critical-endpoints.sh"
   },
   "dependencies": {

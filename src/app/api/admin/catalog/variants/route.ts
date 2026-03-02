@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureCatalogTablesSafe } from "@/lib/catalog";
 import { requireAdmin } from "@/lib/guards";
+import { logAdminAudit } from "@/lib/adminAudit";
 import { catalogErrorRedirect, catalogSavedRedirect, catalogUnauthorizedRedirect } from "../redirects";
 
 export const runtime = "nodejs";
@@ -14,6 +15,13 @@ function toBool(v: FormDataEntryValue | null): boolean {
 function toNum(v: FormDataEntryValue | null): number {
   const n = Number(v || 0);
   return Number.isFinite(n) ? n : 0;
+}
+
+function parseOptionalMoney(raw: string): number | null {
+  if (!raw.trim()) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  return Math.round(n * 100) / 100;
 }
 
 async function hasDuplicateVariantLabel(productId: number, label: string, excludeId?: number): Promise<boolean> {
@@ -51,9 +59,17 @@ export async function POST(req: Request) {
       const sortOrder = Math.max(0, Math.trunc(toNum(form.get("sort_order"))));
       const isActive = toBool(form.get("is_active"));
       const isDefault = toBool(form.get("is_default"));
+      const compareAt = parseOptionalMoney(compareAtRaw);
+      const sizeMl = sizeMlRaw ? Math.max(0, Math.trunc(Number(sizeMlRaw))) : null;
 
       if (productId <= 0 || !label || price <= 0) {
         return catalogErrorRedirect(req, form, "invalid-variant");
+      }
+      if (compareAt != null && compareAt > 0 && compareAt < price) {
+        return catalogErrorRedirect(req, form, "invalid-compare-price");
+      }
+      if (sizeMlRaw && !Number.isFinite(Number(sizeMlRaw))) {
+        return catalogErrorRedirect(req, form, "invalid-size-ml");
       }
       if (await hasDuplicateVariantLabel(productId, label)) {
         return catalogErrorRedirect(req, form, "duplicate-variant-label");
@@ -71,14 +87,21 @@ export async function POST(req: Request) {
           [
             productId,
             label,
-            sizeMlRaw ? Math.max(0, Math.trunc(Number(sizeMlRaw))) : null,
+            sizeMl,
             price,
-            compareAtRaw ? Number(compareAtRaw) : null,
+            compareAt,
             isDefault,
             isActive,
             sortOrder,
           ]
         );
+        await logAdminAudit(trx, req, {
+          adminId: "admin",
+          action: "catalog.variant.create",
+          entity: "variant",
+          entityId: `${productId}:${label.toLowerCase()}`,
+          metadata: { productId, label, isDefault, isActive, sortOrder },
+        });
       });
     }
 
@@ -92,8 +115,16 @@ export async function POST(req: Request) {
       const sortOrder = Math.max(0, Math.trunc(toNum(form.get("sort_order"))));
       const isActive = toBool(form.get("is_active"));
       const isDefault = toBool(form.get("is_default"));
+      const compareAt = parseOptionalMoney(compareAtRaw);
+      const sizeMl = sizeMlRaw ? Math.max(0, Math.trunc(Number(sizeMlRaw))) : null;
 
       if (id > 0 && productId > 0 && label && price > 0) {
+        if (compareAt != null && compareAt > 0 && compareAt < price) {
+          return catalogErrorRedirect(req, form, "invalid-compare-price");
+        }
+        if (sizeMlRaw && !Number.isFinite(Number(sizeMlRaw))) {
+          return catalogErrorRedirect(req, form, "invalid-size-ml");
+        }
         if (await hasDuplicateVariantLabel(productId, label, id)) {
           return catalogErrorRedirect(req, form, "duplicate-variant-label");
         }
@@ -117,14 +148,21 @@ export async function POST(req: Request) {
               id,
               productId,
               label,
-              sizeMlRaw ? Math.max(0, Math.trunc(Number(sizeMlRaw))) : null,
+              sizeMl,
               price,
-              compareAtRaw ? Number(compareAtRaw) : null,
+              compareAt,
               isDefault,
               isActive,
               sortOrder,
             ]
           );
+          await logAdminAudit(trx, req, {
+            adminId: "admin",
+            action: "catalog.variant.update",
+            entity: "variant",
+            entityId: String(id),
+            metadata: { productId, label, isDefault, isActive, sortOrder },
+          });
         });
       }
     }
@@ -137,6 +175,13 @@ export async function POST(req: Request) {
         await db.withTransaction(async (trx) => {
           await trx.query(`update product_variants set is_default=false where product_id=$1`, [productId]);
           await trx.query(`update product_variants set is_default=true, updated_at=now() where id=$1 and product_id=$2`, [id, productId]);
+          await logAdminAudit(trx, req, {
+            adminId: "admin",
+            action: "catalog.variant.set_default",
+            entity: "variant",
+            entityId: String(id),
+            metadata: { productId },
+          });
         });
       }
     }
@@ -144,7 +189,16 @@ export async function POST(req: Request) {
     if (action === "delete") {
       const id = Number(form.get("id") || 0);
       if (id > 0) {
-        await db.query(`delete from product_variants where id=$1`, [id]);
+        await db.withTransaction(async (trx) => {
+          await trx.query(`delete from product_variants where id=$1`, [id]);
+          await logAdminAudit(trx, req, {
+            adminId: "admin",
+            action: "catalog.variant.delete",
+            entity: "variant",
+            entityId: String(id),
+            metadata: {},
+          });
+        });
       }
     }
 

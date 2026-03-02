@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureCatalogTablesSafe } from "@/lib/catalog";
 import { requireAdmin } from "@/lib/guards";
+import { logAdminAudit } from "@/lib/adminAudit";
 import {
   catalogErrorRedirect,
   catalogReturnPath,
@@ -13,10 +14,14 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function pickMulti(form: FormData, key: string): string[] {
-  return form
-    .getAll(key)
-    .map((v) => String(v || "").trim())
-    .filter(Boolean);
+  return Array.from(
+    new Set(
+      form
+        .getAll(key)
+        .map((v) => String(v || "").trim())
+        .filter(Boolean)
+    )
+  ).slice(0, 20);
 }
 
 function normalizeSlug(v: unknown) {
@@ -81,6 +86,14 @@ function parseNonNegativeInt(raw: unknown): number {
   return Math.max(0, Math.trunc(n));
 }
 
+function isReasonableSlug(slug: string): boolean {
+  return slug.length >= 3 && slug.length <= 120;
+}
+
+function isReasonableInventory(value: number): boolean {
+  return Number.isFinite(value) && value >= 0 && value <= 1_000_000;
+}
+
 function pgErrorSummary(error: unknown): { code: string; msg: string } {
   const anyErr = error as { code?: unknown; message?: unknown; detail?: unknown; constraint?: unknown };
   const code = typeof anyErr?.code === "string" ? anyErr.code : "";
@@ -124,49 +137,64 @@ export async function POST(req: Request) {
       const seasons = pickMulti(form, "seasons");
       const audiences = pickMulti(form, "audiences");
 
-      if (!slug || !nameEn || !nameAr || price == null || price <= 0) {
+      if (!slug || !isReasonableSlug(slug) || !nameEn || !nameAr || price == null || price <= 0) {
         return catalogErrorRedirect(req, form, "invalid-product");
       }
+      if (!isReasonableInventory(inventory)) {
+        return catalogErrorRedirect(req, form, "invalid-inventory");
+      }
+      if (compareAt != null && compareAt > 0 && compareAt < price) {
+        return catalogErrorRedirect(req, form, "invalid-compare-price");
+      }
 
-      await db.query(
-        `insert into products
-          (slug, slug_en, slug_ar, category_key, name_en, name_ar, description_en, description_ar, price_jod, compare_at_price_jod, inventory_qty, is_active, wear_times, seasons, audiences)
-         values
-          ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::text[],$14::text[],$15::text[])
-         on conflict (slug) do update
-           set slug_en=excluded.slug_en,
-               slug_ar=excluded.slug_ar,
-               category_key=excluded.category_key,
-               name_en=excluded.name_en,
-               name_ar=excluded.name_ar,
-               description_en=excluded.description_en,
-               description_ar=excluded.description_ar,
-               price_jod=excluded.price_jod,
-               compare_at_price_jod=excluded.compare_at_price_jod,
-               inventory_qty=excluded.inventory_qty,
-               is_active=excluded.is_active,
-               wear_times=excluded.wear_times,
-               seasons=excluded.seasons,
-               audiences=excluded.audiences,
-               updated_at=now()`,
-        [
-          slug,
-          slug,
-          slug,
-          categoryKey,
-          nameEn,
-          nameAr,
-          descriptionEn,
-          descriptionAr,
-          price,
-          compareAt,
-          inventory,
-          isActive,
-          wearTimes,
-          seasons,
-          audiences,
-        ]
-      );
+      await db.withTransaction(async (trx) => {
+        await trx.query(
+          `insert into products
+            (slug, slug_en, slug_ar, category_key, name_en, name_ar, description_en, description_ar, price_jod, compare_at_price_jod, inventory_qty, is_active, wear_times, seasons, audiences)
+           values
+            ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::text[],$14::text[],$15::text[])
+           on conflict (slug) do update
+             set slug_en=excluded.slug_en,
+                 slug_ar=excluded.slug_ar,
+                 category_key=excluded.category_key,
+                 name_en=excluded.name_en,
+                 name_ar=excluded.name_ar,
+                 description_en=excluded.description_en,
+                 description_ar=excluded.description_ar,
+                 price_jod=excluded.price_jod,
+                 compare_at_price_jod=excluded.compare_at_price_jod,
+                 inventory_qty=excluded.inventory_qty,
+                 is_active=excluded.is_active,
+                 wear_times=excluded.wear_times,
+                 seasons=excluded.seasons,
+                 audiences=excluded.audiences,
+                 updated_at=now()`,
+          [
+            slug,
+            slug,
+            slug,
+            categoryKey,
+            nameEn,
+            nameAr,
+            descriptionEn,
+            descriptionAr,
+            price,
+            compareAt,
+            inventory,
+            isActive,
+            wearTimes,
+            seasons,
+            audiences,
+          ]
+        );
+        await logAdminAudit(trx, req, {
+          adminId: "admin",
+          action: "catalog.product.create_or_upsert",
+          entity: "product",
+          entityId: slug,
+          metadata: { slug, categoryKey, isActive, inventory },
+        });
+      });
     }
 
     if (action === "update") {
@@ -194,39 +222,55 @@ export async function POST(req: Request) {
       const seasons = pickMulti(form, "seasons");
       const audiences = pickMulti(form, "audiences");
 
-      await db.query(
-        `update products
-            set name_en=coalesce(nullif($2::text,''), name_en),
-                name_ar=coalesce(nullif($3::text,''), name_ar),
-                description_en=coalesce(nullif($4::text,''), description_en),
-                description_ar=coalesce(nullif($5::text,''), description_ar),
-                price_jod=coalesce($6::numeric, price_jod),
-                compare_at_price_jod=case when $7::boolean then $8::numeric else compare_at_price_jod end,
-                inventory_qty=$9::int,
-                category_key=coalesce(nullif($10::text,''), category_key),
-                is_active=$11::boolean,
-                wear_times=$12::text[],
-                seasons=$13::text[],
-                audiences=$14::text[],
-                updated_at=now()
-          where id=$1::bigint`,
-        [
-          idRaw,
-          nameEn,
-          nameAr,
-          descriptionEn ? descriptionEn : null,
-          descriptionAr ? descriptionAr : null,
-          priceSafe,
-          compareProvided,
-          compareAt,
-          inventory,
-          categoryKey,
-          isActive,
-          wearTimes,
-          seasons,
-          audiences,
-        ]
-      );
+      if (!isReasonableInventory(inventory)) {
+        return catalogErrorRedirect(req, form, "invalid-inventory");
+      }
+      if (priceSafe != null && compareProvided && compareAt != null && compareAt > 0 && compareAt < priceSafe) {
+        return catalogErrorRedirect(req, form, "invalid-compare-price");
+      }
+
+      await db.withTransaction(async (trx) => {
+        await trx.query(
+          `update products
+              set name_en=coalesce(nullif($2::text,''), name_en),
+                  name_ar=coalesce(nullif($3::text,''), name_ar),
+                  description_en=coalesce(nullif($4::text,''), description_en),
+                  description_ar=coalesce(nullif($5::text,''), description_ar),
+                  price_jod=coalesce($6::numeric, price_jod),
+                  compare_at_price_jod=case when $7::boolean then $8::numeric else compare_at_price_jod end,
+                  inventory_qty=$9::int,
+                  category_key=coalesce(nullif($10::text,''), category_key),
+                  is_active=$11::boolean,
+                  wear_times=$12::text[],
+                  seasons=$13::text[],
+                  audiences=$14::text[],
+                  updated_at=now()
+            where id=$1::bigint`,
+          [
+            idRaw,
+            nameEn,
+            nameAr,
+            descriptionEn ? descriptionEn : null,
+            descriptionAr ? descriptionAr : null,
+            priceSafe,
+            compareProvided,
+            compareAt,
+            inventory,
+            categoryKey,
+            isActive,
+            wearTimes,
+            seasons,
+            audiences,
+          ]
+        );
+        await logAdminAudit(trx, req, {
+          adminId: "admin",
+          action: "catalog.product.update",
+          entity: "product",
+          entityId: idRaw,
+          metadata: { categoryKey, isActive, inventory, compareProvided },
+        });
+      });
     }
 
     if (action === "clone") {
@@ -266,36 +310,54 @@ export async function POST(req: Request) {
           suffix += 1;
         }
 
-        await db.query(
-          `insert into products
-            (slug, slug_en, slug_ar, category_key, name_en, name_ar, description_en, description_ar, price_jod, compare_at_price_jod, inventory_qty, is_active, wear_times, seasons, audiences)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::text[],$14::text[],$15::text[])`,
-          [
-            nextSlug,
-            nextSlug,
-            nextSlug,
-            base.category_key,
-            `${base.name_en} (Copy)`,
-            `${base.name_ar} (نسخة)`,
-            base.description_en,
-            base.description_ar,
-            Number(base.price_jod || 0),
-            base.compare_at_price_jod ? Number(base.compare_at_price_jod) : null,
-            0,
-            false,
-            base.wear_times,
-            base.seasons,
-            base.audiences,
-          ]
-        );
+        await db.withTransaction(async (trx) => {
+          await trx.query(
+            `insert into products
+              (slug, slug_en, slug_ar, category_key, name_en, name_ar, description_en, description_ar, price_jod, compare_at_price_jod, inventory_qty, is_active, wear_times, seasons, audiences)
+             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::text[],$14::text[],$15::text[])`,
+            [
+              nextSlug,
+              nextSlug,
+              nextSlug,
+              base.category_key,
+              `${base.name_en} (Copy)`,
+              `${base.name_ar} (نسخة)`,
+              base.description_en,
+              base.description_ar,
+              Number(base.price_jod || 0),
+              base.compare_at_price_jod ? Number(base.compare_at_price_jod) : null,
+              0,
+              false,
+              base.wear_times,
+              base.seasons,
+              base.audiences,
+            ]
+          );
+          await logAdminAudit(trx, req, {
+            adminId: "admin",
+            action: "catalog.product.clone",
+            entity: "product",
+            entityId: nextSlug,
+            metadata: { sourceId: idRaw, sourceSlug: base.slug },
+          });
+        });
       }
     }
 
     if (action === "delete") {
       const idRaw = String(form.get("id") || "").trim();
       if (idRaw) {
-        await db.query(`delete from product_images where product_id=$1::bigint`, [idRaw]);
-        await db.query(`delete from products where id=$1::bigint`, [idRaw]);
+        await db.withTransaction(async (trx) => {
+          await trx.query(`delete from product_images where product_id=$1::bigint`, [idRaw]);
+          await trx.query(`delete from products where id=$1::bigint`, [idRaw]);
+          await logAdminAudit(trx, req, {
+            adminId: "admin",
+            action: "catalog.product.delete",
+            entity: "product",
+            entityId: idRaw,
+            metadata: {},
+          });
+        });
       }
     }
 
