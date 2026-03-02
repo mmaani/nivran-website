@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/guards";
+import { requireAdminOrSales } from "@/lib/guards";
 import { ensureRefundTablesSafe } from "@/lib/refundsSchema";
 import { createRefundRecord, markRefundFailed, markRefundSucceeded, scheduleRestockAfter48h } from "@/lib/refunds";
 import { requestPaytabsRefund } from "@/lib/paytabsRefund";
@@ -29,8 +29,16 @@ function modeToMethod(mode: string): "MANUAL" | "PAYTABS" {
 
 export const runtime = "nodejs";
 
+
+function actorIdFromAuth(auth: { role: "admin" | "sales"; staffId: number | null; username: string | null }): string {
+  if (auth.role === "admin") return "admin";
+  const sid = typeof auth.staffId === "number" && auth.staffId > 0 ? String(auth.staffId) : "unknown";
+  const user = auth.username || "sales";
+  return `sales:${sid}:${user}`;
+}
+
 export async function POST(req: Request) {
-  const auth = requireAdmin(req);
+  const auth = requireAdminOrSales(req);
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
 
   await ensureRefundTablesSafe();
@@ -48,11 +56,15 @@ export async function POST(req: Request) {
   if (!(amountJod > 0)) return NextResponse.json({ ok: false, error: "amountJod must be > 0" }, { status: 400 });
   if (!idempotencyKey) return NextResponse.json({ ok: false, error: "idempotencyKey is required" }, { status: 400 });
 
+  if (auth.role === "sales" && method !== "MANUAL") {
+    return NextResponse.json({ ok: false, error: "Sales can only create MANUAL refunds" }, { status: 403 });
+  }
+
   const prep = await db.withTransaction(async (trx) => {
     const prepared = await createRefundRecord(trx, { orderId, amountJod, reason, method, idempotencyKey });
     if (prepared.created) {
       await logAdminAudit(trx, req, {
-        adminId: "admin",
+        adminId: actorIdFromAuth(auth),
         action: "refund.created",
         entity: "refund",
         entityId: String(prepared.refund.id),
@@ -80,6 +92,13 @@ export async function POST(req: Request) {
         message: paytabs.message || "PayTabs refund failed",
         payload: paytabs.payload,
       });
+      await logAdminAudit(trx, req, {
+        adminId: actorIdFromAuth(auth),
+        action: "refund.failed",
+        entity: "refund",
+        entityId: String(prep.refund.id),
+        metadata: { source: "AUTO", message: paytabs.message || "PayTabs refund failed" },
+      });
     });
 
     return NextResponse.json(
@@ -96,7 +115,7 @@ export async function POST(req: Request) {
     });
     await scheduleRestockAfter48h(trx, { refundId: prep.refund.id });
     await logAdminAudit(trx, req, {
-      adminId: "admin",
+      adminId: actorIdFromAuth(auth),
       action: "refund.confirmed",
       entity: "refund",
       entityId: String(prep.refund.id),

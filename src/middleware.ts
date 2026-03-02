@@ -71,7 +71,11 @@ export async function middleware(req: NextRequest) {
 
   if (isSales) {
     const allowedAdminRoutes = path === "/admin/sales" || path.startsWith("/admin/sales/");
-    const allowedApiRoutes = path.startsWith("/api/admin/sales") || path === "/api/admin/logout" || path === "/api/admin/lang";
+    const allowedApiRoutes =
+      path.startsWith("/api/admin/sales") ||
+      path.startsWith("/api/admin/refund") ||
+      path === "/api/admin/logout" ||
+      path === "/api/admin/lang";
 
     if (isAdminRoute && !allowedAdminRoutes) {
       return NextResponse.redirect(new URL("/admin/sales", req.url));
