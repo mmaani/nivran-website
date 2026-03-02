@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureOrdersTablesSafe, commitInventoryForPaidOrderId, normalizeSkuForInventory } from "@/lib/orders";
 import { requireAdmin } from "@/lib/guards";
+import { logAdminAudit } from "@/lib/adminAudit";
 
 export const runtime = "nodejs";
 
@@ -373,6 +374,11 @@ export async function POST(req: Request) {
         return commitInventoryForPaidOrderId(trx, id);
       });
       results.push({ id, committed });
+      if (committed) {
+        await db.withTransaction(async (trx) => {
+          await logAdminAudit(trx, req, { adminId: "admin", action: "inventory.adjusted", entity: "order", entityId: String(id), metadata: { mode: "ALL" } });
+        });
+      }
     }
 
     return NextResponse.json({ ok: true, mode: "ALL", results });
@@ -386,6 +392,12 @@ export async function POST(req: Request) {
   const committed = await db.withTransaction(async (trx) => {
     return commitInventoryForPaidOrderId(trx, orderId);
   });
+
+  if (committed) {
+    await db.withTransaction(async (trx) => {
+      await logAdminAudit(trx, req, { adminId: "admin", action: "inventory.adjusted", entity: "order", entityId: String(orderId), metadata: { mode: "ONE" } });
+    });
+  }
 
   return NextResponse.json({ ok: true, mode: "ONE", id: orderId, committed });
 }

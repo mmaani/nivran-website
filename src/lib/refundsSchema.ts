@@ -3,11 +3,10 @@ import "server-only";
 import { db } from "@/lib/db";
 
 export async function ensureRefundTablesSafe(): Promise<void> {
-  // 1) refunds table (canonical based on db/migrations/patches/020_refunds.sql)
   await db.query(`
     create table if not exists refunds (
       id bigserial primary key,
-      order_id bigint not null references orders(id) on delete cascade,
+      order_id bigint not null,
       method text not null check (method in ('PAYTABS', 'MANUAL')),
       amount_jod numeric(10,2) not null check (amount_jod > 0),
       currency text not null default 'JOD',
@@ -25,7 +24,6 @@ export async function ensureRefundTablesSafe(): Promise<void> {
     );
   `);
 
-  // Add missing columns if refunds existed with an older drifted shape
   await db.query(`alter table refunds add column if not exists order_id bigint`);
   await db.query(`alter table refunds add column if not exists method text`);
   await db.query(`alter table refunds add column if not exists amount_jod numeric(10,2)`);
@@ -42,42 +40,69 @@ export async function ensureRefundTablesSafe(): Promise<void> {
   await db.query(`alter table refunds add column if not exists last_error text`);
   await db.query(`alter table refunds add column if not exists payload jsonb`);
 
-  // Enforce idempotency unique index
+  await db.query(`create unique index if not exists refunds_idempotency_key_idx on refunds (idempotency_key)`);
+  await db.query(`create index if not exists refunds_order_id_idx on refunds(order_id)`);
+  await db.query(`create index if not exists refunds_status_idx on refunds(status)`);
+
   await db.query(`
-    create unique index if not exists refunds_order_id_idem_key_ux
-      on refunds(order_id, idempotency_key);
+    alter table refunds
+    drop constraint if exists refunds_order_fk
+  `);
+  await db.query(`
+    alter table refunds
+    add constraint refunds_order_fk
+    foreign key (order_id) references orders(id)
   `);
 
-  await db.query(`create index if not exists refunds_order_id_idx on refunds(order_id);`);
-  await db.query(`create index if not exists refunds_status_idx on refunds(status);`);
+  await db.query(`
+    alter table refunds
+    add constraint refunds_status_check
+    check (status in ('REQUESTED','CONFIRMED','RESTOCK_SCHEDULED','RESTOCKED','FAILED'))
+  `).catch(() => undefined);
 
-  // 2) restock_jobs table (new, required by architecture)
   await db.query(`
     create table if not exists restock_jobs (
       id bigserial primary key,
-      order_id bigint not null references orders(id) on delete cascade,
-      refund_id bigint not null references refunds(id) on delete cascade,
-
-      status text not null check (status in ('SCHEDULED','DONE','CANCELED','FAILED')),
+      refund_id bigint not null,
+      status text not null,
       run_at timestamptz not null,
-
-      attempts int not null default 0,
-      last_error text null,
-
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
-      done_at timestamptz null
+      attempts int not null default 0,
+      last_error text null
     );
   `);
 
-  // One restock job per refund (idempotent scheduling)
-  await db.query(`
-    create unique index if not exists restock_jobs_refund_id_ux
-      on restock_jobs(refund_id);
-  `);
+  await db.query(`alter table restock_jobs add column if not exists refund_id bigint`);
+  await db.query(`alter table restock_jobs add column if not exists status text`);
+  await db.query(`alter table restock_jobs add column if not exists run_at timestamptz`);
+  await db.query(`alter table restock_jobs add column if not exists created_at timestamptz not null default now()`);
+  await db.query(`alter table restock_jobs add column if not exists updated_at timestamptz not null default now()`);
+  await db.query(`alter table restock_jobs add column if not exists attempts int not null default 0`);
+  await db.query(`alter table restock_jobs add column if not exists last_error text`);
+
+  await db.query(`create unique index if not exists restock_jobs_refund_id_ux on restock_jobs(refund_id)`);
+  await db.query(`create index if not exists restock_jobs_run_at_idx on restock_jobs(status, run_at)`);
+
+  await db.query(`alter table restock_jobs drop constraint if exists restock_jobs_refund_fk`);
+  await db.query(`alter table restock_jobs add constraint restock_jobs_refund_fk foreign key (refund_id) references refunds(id)`);
 
   await db.query(`
-    create index if not exists restock_jobs_run_at_idx
-      on restock_jobs(status, run_at);
+    create table if not exists admin_audit_logs (
+      id bigserial primary key,
+      admin_id text not null,
+      action text not null,
+      entity text not null,
+      entity_id text,
+      metadata jsonb,
+      ip_address text,
+      created_at timestamptz not null default now()
+    );
   `);
+
+  await db.query(`create index if not exists orders_created_at_idx on orders (created_at desc)`);
+  await db.query(`create index if not exists orders_status_idx on orders (status)`);
+  await db.query(`create index if not exists orders_payment_method_idx on orders (payment_method)`);
+  await db.query(`create index if not exists orders_inventory_commit_idx on orders (inventory_committed_at)`);
+  await db.query(`create index if not exists orders_customer_gin_idx on orders using gin (customer)`);
 }

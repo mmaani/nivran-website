@@ -250,13 +250,12 @@ export default function CartClient({ locale }: { locale: Locale }) {
       if (reorderPayload) {
         reorderAppliedRef.current = true;
 
-        // ✅ minimal + robust: merge then normalize (prevents any duplicate lines)
-        const merged = reorderPayload.mode === "replace" ? reorderPayload.items : mergeCartSum(current, reorderPayload.items);
-        const nextItems = normalizeCartItems(merged);
+        const nextItems = reorderPayload.mode === "replace" ? reorderPayload.items : mergeCartSum(current, reorderPayload.items);
+        const normalizedNextItems = normalizeCartItems(nextItems);
 
-        writeCart(nextItems);
-        bestEffortSync(nextItems);
-        setItems(nextItems);
+        writeCart(normalizedNextItems);
+        bestEffortSync(normalizedNextItems);
+        setItems(normalizedNextItems);
         sessionStorage.removeItem(REORDER_KEY);
       } else {
         setItems(current);
