@@ -2,15 +2,14 @@
 
 import React, { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { readJsonSafe } from "@/lib/http";
+import { normalizeCartItems, readLocalCart, type CartItem, writeLocalCart } from "@/lib/cartStore";
 
 type Locale = "en" | "ar";
-type CartItem = { slug: string; name: string; priceJod: number; qty: number };
 
 type LoginOk = { ok: true; needsVerification?: boolean };
 type LoginErr = { ok: false; error: string };
 type LoginResponse = LoginOk | LoginErr;
-
-const CART_KEY = "nivran_cart_v1";
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
@@ -30,33 +29,6 @@ function asLoginResponse(v: unknown): LoginResponse | null {
   return null;
 }
 
-function readCart(): CartItem[] {
-  try {
-    const raw = localStorage.getItem(CART_KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((x: unknown) => {
-        const r = isRecord(x) ? x : {};
-        return {
-          slug: String(r["slug"] || "").trim(),
-          name: String(r["name"] || "").trim(),
-          priceJod: Number(r["priceJod"] || 0),
-          qty: Math.max(1, Number(r["qty"] || 1)),
-        };
-      })
-      .filter((x) => !!x.slug);
-  } catch {
-    return [];
-  }
-}
-
-function writeCart(items: CartItem[]) {
-  localStorage.setItem(CART_KEY, JSON.stringify(items));
-  window.dispatchEvent(new Event("nivran_cart_updated"));
-}
-
 export default function LoginPage() {
   const p = useParams<{ locale?: string }>();
   const locale: Locale = p?.locale === "ar" ? "ar" : "en";
@@ -72,9 +44,12 @@ export default function LoginPage() {
       showPassword: isAr ? "إظهار" : "Show",
       hidePassword: isAr ? "إخفاء" : "Hide",
       submit: isAr ? "دخول" : "Sign in",
+      submitting: isAr ? "جاري تسجيل الدخول..." : "Signing in...",
       signup: isAr ? "إنشاء حساب جديد" : "Create account",
       forgot: isAr ? "نسيت كلمة المرور؟" : "Forgot password?",
       error: isAr ? "حدث خطأ. حاول مرة أخرى." : "Something went wrong. Please try again.",
+      invalidCredentials: isAr ? "بيانات الدخول غير صحيحة." : "Invalid email or password.",
+      tooManyAttempts: isAr ? "محاولات كثيرة. حاول لاحقًا." : "Too many attempts. Please try again later.",
     }),
     [isAr]
   );
@@ -92,35 +67,42 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      const normalizedEmail = email.trim().toLowerCase();
+
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password, locale, rememberMe }),
+        body: JSON.stringify({ email: normalizedEmail, password, locale, rememberMe }),
       });
 
-      const raw: unknown = await res.json().catch(() => null);
+      const raw: unknown = await readJsonSafe(res);
       const data = asLoginResponse(raw);
 
       if (!res.ok || !data) throw new Error(t.error);
-      if (data.ok === false) throw new Error(data.error || t.error);
+      if (data.ok === false) {
+        const code = data.error.trim().toUpperCase();
+        if (code.includes("INVALID")) throw new Error(t.invalidCredentials);
+        if (code.includes("TOO MANY") || res.status === 429) throw new Error(t.tooManyAttempts);
+        throw new Error(data.error || t.error);
+      }
 
       // cart sync
-      const localItems = readCart();
+      const localItems = normalizeCartItems(readLocalCart());
       if (localItems.length) {
         const syncRes = await fetch("/api/cart/sync", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ mode: "merge", items: localItems }),
         });
-        const syncRaw: unknown = await syncRes.json().catch(() => null);
+        const syncRaw: unknown = await readJsonSafe(syncRes);
         if (isRecord(syncRaw) && syncRaw["ok"] === true && syncRaw["isAuthenticated"] === true && Array.isArray(syncRaw["items"])) {
-          writeCart(syncRaw["items"] as CartItem[]);
+          writeLocalCart(normalizeCartItems(syncRaw["items"] as CartItem[]));
         }
       }
 
       const needsVerification = data.needsVerification === true;
       window.location.href = needsVerification
-        ? `/${locale}/account/verify?email=${encodeURIComponent(email)}`
+        ? `/${locale}/account/verify?email=${encodeURIComponent(normalizedEmail)}`
         : `/${locale}/account`;
     } catch (e2: unknown) {
       const msg = e2 instanceof Error ? e2.message : t.error;
@@ -185,7 +167,7 @@ export default function LoginPage() {
           {err ? <p style={{ color: "crimson", margin: 0 }}>{err}</p> : null}
 
           <button className="btn primary" disabled={loading}>
-            {loading ? "…" : t.submit}
+            {loading ? t.submitting : t.submit}
           </button>
 
           <div style={{ marginTop: 6 }}>
