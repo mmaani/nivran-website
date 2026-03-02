@@ -49,7 +49,15 @@ type PostAllResponse = {
   ok?: boolean;
   error?: string;
   results?: unknown;
+  replayed?: boolean;
 };
+
+function makeIdempotencyKey(prefix: string): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
 function normDelta(value: unknown): Delta | null {
   if (!isRecord(value)) return null;
@@ -170,6 +178,7 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
   const [busy, setBusy] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const [q, setQ] = useState<string>("");
 
   const L = useMemo(() => {
@@ -232,6 +241,7 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
 
   async function load() {
     setErr(null);
+    setNote(null);
     setBusy(true);
     try {
       const res = await adminFetch("/api/admin/inventory/reconcile?limit=60", { method: "GET" });
@@ -256,22 +266,34 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
 
   async function commitOne(id: number) {
     setErr(null);
+    setNote(null);
     setBusyId(id);
     try {
+      const idempotencyKey = makeIdempotencyKey(`inventory-one-${id}`);
       const res = await adminFetch("/api/admin/inventory/reconcile", {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ orderId: id }),
+        headers: {
+          "content-type": "application/json",
+          "x-idempotency-key": idempotencyKey,
+        },
+        body: JSON.stringify({ orderId: id, idempotencyKey }),
       });
       const raw: unknown = await res.json().catch(() => null);
-      const data: PostOneResponse = isRecord(raw) ? (raw as PostOneResponse) : {};
+      const data: PostOneResponse & { replayed?: boolean } = isRecord(raw) ? (raw as PostOneResponse & { replayed?: boolean }) : {};
       if (!res.ok || data.ok !== true) throw new Error(data.error || "Commit failed");
 
       setRows((prev) => prev.filter((r) => r.id !== id));
       setTotalPending((p) => Math.max(0, p - 1));
+      if (data.replayed === true) {
+        setNote(isAr ? "تم استخدام نتيجة سابقة لنفس الطلب (Idempotent replay)." : "Reused previous result for this request (idempotent replay).");
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e || "");
+      if (msg.includes("Idempotency key reuse with different payload")) {
+        setErr(isAr ? "تعارض في مفتاح التكرار. أعد المحاولة من جديد." : "Idempotency key conflict. Please retry.");
+      } else {
       setErr(msg || "Error");
+      }
     } finally {
       setBusyId(null);
     }
@@ -279,21 +301,33 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
 
   async function commitAll() {
     setErr(null);
+    setNote(null);
     setBusy(true);
     try {
+      const idempotencyKey = makeIdempotencyKey("inventory-all");
       const res = await adminFetch("/api/admin/inventory/reconcile", {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mode: "ALL", limit: 25 }),
+        headers: {
+          "content-type": "application/json",
+          "x-idempotency-key": idempotencyKey,
+        },
+        body: JSON.stringify({ mode: "ALL", limit: 25, idempotencyKey }),
       });
       const raw: unknown = await res.json().catch(() => null);
       const data: PostAllResponse = isRecord(raw) ? (raw as PostAllResponse) : {};
       if (!res.ok || data.ok !== true) throw new Error(data.error || "Commit all failed");
 
+      if (data.replayed === true) {
+        setNote(isAr ? "تم استرجاع نتيجة تنفيذ سابقة (Idempotent replay)." : "Replayed a previous execution result (idempotent replay).");
+      }
       await load();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e || "");
+      if (msg.includes("Idempotency key reuse with different payload")) {
+        setErr(isAr ? "تعارض في مفتاح التكرار. أعد المحاولة من جديد." : "Idempotency key conflict. Please retry.");
+      } else {
       setErr(msg || "Error");
+      }
     } finally {
       setBusy(false);
     }
@@ -330,6 +364,7 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={L.search} className="admin-input" />
 
         {err ? <div style={{ color: "crimson", fontWeight: 700 }}>{err}</div> : null}
+        {note ? <div style={{ color: "seagreen", fontWeight: 700 }}>{note}</div> : null}
       </div>
 
       <div className="admin-table-wrap">
