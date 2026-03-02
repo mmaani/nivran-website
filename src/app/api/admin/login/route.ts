@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 import { createSignedAdminToken } from "@/lib/adminSession";
+import { getClientIp, rateLimitCheck } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
+
+function safeEq(a: string, b: string): boolean {
+  const aa = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (aa.length !== bb.length) return false;
+  return crypto.timingSafeEqual(aa, bb);
+}
 
 export async function POST(req: Request) {
   const adminToken = process.env.ADMIN_TOKEN || "";
@@ -11,8 +20,22 @@ export async function POST(req: Request) {
 
   const body = (await req.json().catch(() => ({}))) as { token?: string };
   const token = String(body?.token || "").trim();
+  const clientIp = getClientIp(req);
 
-  if (token !== adminToken.trim()) {
+  const limit = await rateLimitCheck({
+    key: `admin-login:${clientIp}`,
+    action: "admin_login",
+    windowSeconds: 15 * 60,
+    maxInWindow: 12,
+  });
+  if (!limit.ok) {
+    return NextResponse.json(
+      { ok: false, error: "Too many attempts. Try again later." },
+      { status: 429, headers: { "retry-after": String(limit.retryAfterSeconds) } }
+    );
+  }
+
+  if (!safeEq(token, adminToken.trim())) {
     return NextResponse.json({ ok: false, error: "Invalid token" }, { status: 401 });
   }
 

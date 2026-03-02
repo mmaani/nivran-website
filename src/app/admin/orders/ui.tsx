@@ -451,7 +451,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
 
       if (!res.ok || !ok) {
         const msg = isRecord(raw) ? String(raw["error"] || "") : "";
-        throw new Error(msg || (isAr ? "فشل تحديث حالة الاسترجاع" : "Mark refund failed failed"));
+        throw new Error(msg || (isAr ? "فشل تحديث حالة الاسترجاع" : "Mark refund failed"));
       }
 
       setRows((prev) => prev.map((r) => (r.id === orderId ? { ...r, status: "REFUND_FAILED" } : r)));

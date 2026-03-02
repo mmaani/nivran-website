@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
+function safeEqHex(a: string, b: string): boolean {
+  if (!a || !b || a.length !== b.length) return false;
+  let out = 0;
+  for (let i = 0; i < a.length; i += 1) out |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return out === 0;
+}
+
 async function hasSalesSession(req: NextRequest, secret: string): Promise<boolean> {
   const role = (req.cookies.get("nivran_admin_role")?.value || "").trim();
   const staffId = (req.cookies.get("nivran_staff_id")?.value || "").trim();
@@ -12,7 +19,7 @@ async function hasSalesSession(req: NextRequest, secret: string): Promise<boolea
 
   const payload = `${Math.trunc(id)}:${username}`;
   const expected = await signHmacSha256Hex(secret, payload);
-  return expected === sig;
+  return safeEqHex(expected, sig);
 }
 
 function decodeBase64Url(input: string): string {
@@ -30,20 +37,24 @@ async function signHmacSha256Hex(secret: string, value: string): Promise<string>
 }
 
 async function isValidAdminToken(token: string, secret: string): Promise<boolean> {
-  const [encodedPayload, signature] = token.split(".");
-  if (!encodedPayload || !signature) return false;
+  try {
+    const [encodedPayload, signature] = token.split(".");
+    if (!encodedPayload || !signature) return false;
 
-  const expected = await signHmacSha256Hex(secret, encodedPayload);
-  if (expected !== signature) return false;
+    const expected = await signHmacSha256Hex(secret, encodedPayload);
+    if (!safeEqHex(expected, signature)) return false;
 
-  const parsed: unknown = JSON.parse(decodeBase64Url(encodedPayload));
-  if (typeof parsed !== "object" || parsed === null) return false;
-  const record = parsed as Record<string, unknown>;
-  if (record["role"] !== "admin") return false;
-  const exp = record["exp"];
-  if (typeof exp !== "number" || !Number.isFinite(exp)) return false;
-  const nowSec = Math.floor(Date.now() / 1000);
-  return exp > nowSec;
+    const parsed: unknown = JSON.parse(decodeBase64Url(encodedPayload));
+    if (typeof parsed !== "object" || parsed === null) return false;
+    const record = parsed as Record<string, unknown>;
+    if (record["role"] !== "admin") return false;
+    const exp = record["exp"];
+    if (typeof exp !== "number" || !Number.isFinite(exp)) return false;
+    const nowSec = Math.floor(Date.now() / 1000);
+    return exp > nowSec;
+  } catch {
+    return false;
+  }
 }
 
 export async function middleware(req: NextRequest) {

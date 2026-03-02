@@ -4,7 +4,8 @@ export type RateLimitAction =
   | "verify_email_send"
   | "auth_login"
   | "auth_forgot_password"
-  | "auth_reset_password";
+  | "auth_reset_password"
+  | "admin_login";
 
 export async function ensureRateLimitTables(): Promise<void> {
   await db.query(`
