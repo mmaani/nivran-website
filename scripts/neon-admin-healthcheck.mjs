@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
@@ -30,9 +31,15 @@ function loadDatabaseUrl() {
     const p = path.join(projectRoot, file);
     if (!fs.existsSync(p)) continue;
     const env = parseEnvFile(fs.readFileSync(p, "utf8"));
-    if (env.DATABASE_URL) return { file, url: env.DATABASE_URL };
+    if (env.DATABASE_URL) {
+      return {
+        file,
+        url: env.DATABASE_URL,
+        unpooledUrl: env.DATABASE_URL_UNPOOLED || null,
+      };
+    }
   }
-  return { file: null, url: null };
+  return { file: null, url: null, unpooledUrl: null };
 }
 
 const REQUIRED_TABLES = [
@@ -82,24 +89,49 @@ function printSection(title) {
   console.log(`\n=== ${title} ===`);
 }
 
-async function main() {
-  const { file, url } = loadDatabaseUrl();
-  if (!url) {
-    console.error("DATABASE_URL was not found in .env.local or .env");
-    process.exit(1);
+function parseHostPort(connectionString) {
+  try {
+    const u = new URL(connectionString);
+    return {
+      host: u.hostname,
+      port: Number(u.port || "5432"),
+    };
+  } catch {
+    return { host: null, port: 5432 };
   }
+}
 
-  console.log(`Loaded DATABASE_URL from ${file}`);
+async function checkTcp(host, port) {
+  if (!host) return { ok: false, error: "missing-host" };
+  return await new Promise((resolve) => {
+    const socket = new net.Socket();
+    let settled = false;
+    const done = (value) => {
+      if (settled) return;
+      settled = true;
+      try {
+        socket.destroy();
+      } catch {}
+      resolve(value);
+    };
 
+    socket.setTimeout(5000);
+    socket.once("connect", () => done({ ok: true, error: null }));
+    socket.once("timeout", () => done({ ok: false, error: "timeout" }));
+    socket.once("error", (error) => done({ ok: false, error: error?.message || "socket-error" }));
+    socket.connect(port, host);
+  });
+}
+
+async function runChecks(connectionString) {
   const pool = new Pool({
-    connectionString: url,
+    connectionString,
     ssl: { rejectUnauthorized: false },
     max: 2,
     connectionTimeoutMillis: 10000,
   });
 
   let failed = false;
-
   try {
     const tableRes = await pool.query(
       `select table_name
@@ -142,17 +174,60 @@ async function main() {
         console.log(`FAILED ${sql} :: ${msg}`);
       }
     }
-
-    printSection("Summary");
-    if (failed) {
-      console.log("FAILED: schema/query mismatches detected");
-      process.exitCode = 1;
-    } else {
-      console.log("PASS: required Neon admin schema and smoke queries are healthy");
-    }
   } finally {
     await pool.end();
   }
+  return { failed };
+}
+
+async function main() {
+  const { file, url, unpooledUrl } = loadDatabaseUrl();
+  if (!url) {
+    console.error("DATABASE_URL was not found in .env.local or .env");
+    process.exit(1);
+  }
+
+  console.log(`Loaded DATABASE_URL from ${file}`);
+  const primaryTarget = parseHostPort(url);
+  const fallbackTarget = unpooledUrl ? parseHostPort(unpooledUrl) : { host: null, port: 5432 };
+
+  printSection("Connectivity Probe");
+  console.log(`Primary host: ${primaryTarget.host}:${primaryTarget.port}`);
+  const primaryProbe = await checkTcp(primaryTarget.host, primaryTarget.port);
+  console.log(`Primary TCP probe: ${primaryProbe.ok ? "OK" : `FAILED (${primaryProbe.error})`}`);
+
+  if (unpooledUrl) {
+    console.log(`Fallback host: ${fallbackTarget.host}:${fallbackTarget.port}`);
+    const fallbackProbe = await checkTcp(fallbackTarget.host, fallbackTarget.port);
+    console.log(`Fallback TCP probe: ${fallbackProbe.ok ? "OK" : `FAILED (${fallbackProbe.error})`}`);
+  } else {
+    console.log("Fallback host: DATABASE_URL_UNPOOLED not configured");
+  }
+
+  const candidates = [{ label: "DATABASE_URL", value: url }];
+  if (unpooledUrl) candidates.push({ label: "DATABASE_URL_UNPOOLED", value: unpooledUrl });
+
+  let lastError = null;
+  for (const c of candidates) {
+    try {
+      printSection(`Schema Checks via ${c.label}`);
+      const { failed } = await runChecks(c.value);
+      printSection("Summary");
+      if (failed) {
+        console.log("FAILED: schema/query mismatches detected");
+        process.exitCode = 1;
+      } else {
+        console.log("PASS: required Neon admin schema and smoke queries are healthy");
+      }
+      return;
+    } catch (error) {
+      lastError = error;
+      const msg = error instanceof Error ? error.message : String(error || "unknown error");
+      console.log(`Connection via ${c.label} failed: ${msg}`);
+    }
+  }
+
+  throw lastError || new Error("All database connection attempts failed");
 }
 
 main().catch((error) => {
