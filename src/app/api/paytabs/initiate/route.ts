@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureOrdersTables } from "@/lib/orders";
+import { createOrderStatusToken } from "@/lib/orderStatusToken";
 import { getPaytabsEnv } from "@/lib/paytabs";
 
 type InitiateRequest = {
@@ -74,16 +75,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Order not found" }, { status: 404 });
   }
 
-  const forwardedProto = req.headers.get("x-forwarded-proto") || "https";
-  const forwardedHost = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
-  const fallbackOrigin = forwardedHost ? `${forwardedProto}://${forwardedHost}` : "";
-  const origin = req.headers.get("origin") || process.env.APP_BASE_URL || fallbackOrigin;
-  if (!origin) {
-    return NextResponse.json({ ok: false, error: "Missing origin" }, { status: 400 });
+  const appBaseRaw = (process.env.APP_BASE_URL || "").trim();
+  if (!appBaseRaw) {
+    return NextResponse.json({ ok: false, error: "APP_BASE_URL not configured" }, { status: 500 });
   }
+  let appBase = "";
+  try {
+    const u = new URL(appBaseRaw);
+    appBase = u.origin;
+  } catch {
+    return NextResponse.json({ ok: false, error: "APP_BASE_URL is invalid" }, { status: 500 });
+  }
+  const statusToken = createOrderStatusToken(cartId);
 
-  const returnUrl = `${origin}/${locale}/checkout/result?cartId=${encodeURIComponent(cartId)}`;
-  const callbackUrl = `${origin}/api/paytabs/callback`;
+  const returnUrl = `${appBase}/${locale}/checkout/result?cartId=${encodeURIComponent(cartId)}&st=${encodeURIComponent(statusToken)}`;
+  const callbackUrl = `${appBase}/api/paytabs/callback`;
 
   const customerEmail =
     order.customer_email || order.customer?.email || "test@example.com";

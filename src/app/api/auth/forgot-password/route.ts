@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { db } from "@/lib/db";
-import { ensureIdentityTables } from "@/lib/identity";
+import { ensureIdentityTables, sha256Hex } from "@/lib/identity";
 import { sendPasswordResetEmail } from "@/lib/email";
+import { getClientIp, rateLimitCheck } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,12 +42,13 @@ async function findCustomerByEmail(email: string): Promise<{ id: number; email: 
 
 async function createResetToken(customerId: number, ttlMinutes: number): Promise<{ token: string; expiresAt: string }> {
   const token = crypto.randomBytes(32).toString("hex");
+  const tokenHash = sha256Hex(token);
   const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000).toISOString();
 
   await db.query(
-    `insert into customer_password_reset_tokens (customer_id, token, expires_at)
-     values ($1,$2,$3)`,
-    [customerId, token, expiresAt]
+    `insert into customer_password_reset_tokens (customer_id, token, token_hash, expires_at)
+     values ($1,$2,$3,$4)`,
+    [customerId, tokenHash, tokenHash, expiresAt]
   );
 
   return { token, expiresAt };
@@ -54,6 +56,20 @@ async function createResetToken(customerId: number, ttlMinutes: number): Promise
 
 export async function POST(req: Request) {
   await ensureIdentityTables();
+
+  const clientIp = getClientIp(req);
+  const ipLimit = await rateLimitCheck({
+    key: `forgot:${clientIp}`,
+    action: "auth_forgot_password",
+    windowSeconds: 15 * 60,
+    maxInWindow: 12,
+  });
+  if (!ipLimit.ok) {
+    return NextResponse.json(
+      { ok: true },
+      { status: 429, headers: { "retry-after": String(ipLimit.retryAfterSeconds) } }
+    );
+  }
 
   const raw: unknown = await req.json().catch(() => null);
   const body: JsonRecord = isRecord(raw) ? raw : {};
@@ -67,13 +83,34 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true }, { status: 200 });
   }
 
+  const emailLimit = await rateLimitCheck({
+    key: `forgot:${clientIp}:${email}`,
+    action: "auth_forgot_password",
+    windowSeconds: 15 * 60,
+    maxInWindow: 5,
+  });
+  if (!emailLimit.ok) {
+    return NextResponse.json(
+      { ok: true },
+      { status: 429, headers: { "retry-after": String(emailLimit.retryAfterSeconds) } }
+    );
+  }
+
   const customer = await findCustomerByEmail(email);
 
   if (customer) {
     const { token, expiresAt } = await createResetToken(customer.id, ttlMinutes);
-
-    const origin = new URL(req.url).origin;
-    const resetUrl = `${origin}/${locale}/account/reset-password?token=${token}`;
+    const appBaseRaw = (process.env.APP_BASE_URL || "").trim();
+    if (!appBaseRaw) {
+      return NextResponse.json({ ok: false, error: "APP_BASE_URL not configured" }, { status: 500 });
+    }
+    let appBase = "";
+    try {
+      appBase = new URL(appBaseRaw).origin;
+    } catch {
+      return NextResponse.json({ ok: false, error: "APP_BASE_URL is invalid" }, { status: 500 });
+    }
+    const resetUrl = `${appBase}/${locale}/account/reset-password?token=${token}`;
 
     // In production, send email (do NOT expose resetUrl).
     if (process.env.NODE_ENV === "production") {

@@ -8,6 +8,7 @@ import {
   createCustomerSession,
   CUSTOMER_SESSION_COOKIE,
 } from "@/lib/identity";
+import { getClientIp, rateLimitCheck } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -33,6 +34,22 @@ export async function POST(req: Request): Promise<Response> {
     const password = String(input?.password || "").trim();
     const rememberMe = Boolean(input?.rememberMe);
     const locale = String(input?.locale || "en") === "ar" ? "ar" : "en";
+
+    const clientIp = getClientIp(req);
+    const limit = await rateLimitCheck({
+      key: `login:${clientIp}:${email || "unknown"}`,
+      action: "auth_login",
+      windowSeconds: 15 * 60,
+      maxInWindow: 10,
+    });
+    if (!limit.ok) {
+      const payload = { ok: false, error: "Too many attempts. Try again later." };
+      if (isForm) return NextResponse.redirect(new URL(`/${locale}?login=0`, req.url));
+      return NextResponse.json(payload, {
+        status: 429,
+        headers: { "retry-after": String(limit.retryAfterSeconds) },
+      });
+    }
 
     const c = await getCustomerByEmail(email);
     if (!c || !c.is_active) {

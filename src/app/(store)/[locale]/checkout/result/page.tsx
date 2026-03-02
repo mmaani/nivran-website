@@ -20,6 +20,7 @@ const COPY = {
   en: {
     title: "Order status",
     loading: "Checking payment status…",
+    missingToken: "Missing status token.",
     paid: "Payment received. Thank you!",
     pending: "Payment is still pending. If you just paid, refresh in a moment.",
     failed: "Payment failed. You can try again.",
@@ -33,6 +34,7 @@ const COPY = {
   ar: {
     title: "حالة الطلب",
     loading: "جارٍ التحقق من حالة الدفع…",
+    missingToken: "رمز حالة الطلب مفقود.",
     paid: "تم استلام الدفع. شكراً لك!",
     pending: "الدفع ما زال قيد المعالجة. إذا دفعت الآن، أعد المحاولة بعد قليل.",
     failed: "فشل الدفع. يمكنك المحاولة مرة أخرى.",
@@ -48,7 +50,7 @@ const COPY = {
 function statusMsg(locale: "en" | "ar", s: string) {
   const t = COPY[locale];
   const u = String(s || "").toUpperCase();
-  if (u === "PAID") return t.paid;
+  if (u === "PAID" || u === "PAID_COD") return t.paid;
   if (u === "FAILED") return t.failed;
   if (u === "CANCELED") return t.canceled;
   return t.pending;
@@ -67,6 +69,7 @@ export default function CheckoutResultPage() {
   const t = COPY[locale];
 
   const cartId = (search?.get("cartId") || "").trim();
+  const statusToken = (search?.get("st") || search?.get("statusToken") || "").trim();
 
   const [data, setData] = useState<OrderStatusResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -76,9 +79,9 @@ export default function CheckoutResultPage() {
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     async function poll() {
-      if (!cartId) return;
+      if (!cartId || !statusToken) return;
       try {
-        const r = await fetch(`/api/orders/status?cartId=${encodeURIComponent(cartId)}`, { cache: "no-store" });
+        const r = await fetch(`/api/orders/status?cartId=${encodeURIComponent(cartId)}&st=${encodeURIComponent(statusToken)}`, { cache: "no-store" });
         const j = (await r.json().catch(() => ({}))) as OrdersStatusApiResponse;
         if (!r.ok || !j?.ok) throw new Error(j?.error || "Failed");
         if (!stop) setData(j.order || null);
@@ -96,7 +99,7 @@ export default function CheckoutResultPage() {
       stop = true;
       if (timer) clearTimeout(timer);
     };
-  }, [cartId]);
+  }, [cartId, statusToken]);
 
   const st = String(data?.status || "");
   const msg = useMemo(() => statusMsg(locale, st), [locale, st]);
@@ -110,6 +113,7 @@ export default function CheckoutResultPage() {
       {!cartId ? (
         <p className="muted">{locale === "ar" ? "رقم الطلب غير موجود." : "Missing cartId."}</p>
       ) : null}
+      {!statusToken ? <p className="muted">{t.missingToken}</p> : null}
 
       {err ? <p style={{ color: "#b00" }}>{err}</p> : null}
 
@@ -138,7 +142,7 @@ export default function CheckoutResultPage() {
             <a className="btn" href={`/${locale}/product`}>
               {t.backShop}
             </a>
-            <a className="btn btn-outline" href={`/${locale}/checkout?cartId=${encodeURIComponent(cartId)}`}>
+            <a className="btn btn-outline" href={`/${locale}/checkout?cartId=${encodeURIComponent(cartId)}${statusToken ? `&st=${encodeURIComponent(statusToken)}` : ""}`}>
               {t.tryAgain}
             </a>
           </div>

@@ -141,12 +141,15 @@ export async function ensureIdentityTables(): Promise<void> {
       id bigserial primary key,
       customer_id bigint not null references customers(id) on delete cascade,
       token text not null,
+      token_hash text,
       expires_at timestamptz not null,
       used_at timestamptz,
       created_at timestamptz not null default now()
     );
   `);
+  await db.query(`alter table customer_password_reset_tokens add column if not exists token_hash text`);
   await db.query(`create index if not exists customer_password_reset_tokens_token_idx on customer_password_reset_tokens(token);`);
+  await db.query(`create index if not exists customer_password_reset_tokens_token_hash_idx on customer_password_reset_tokens(token_hash);`);
   await db.query(`create index if not exists customer_password_reset_tokens_customer_idx on customer_password_reset_tokens(customer_id);`);
 
   /**

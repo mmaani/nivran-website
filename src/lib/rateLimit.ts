@@ -1,5 +1,11 @@
 import { db } from "@/lib/db";
 
+export type RateLimitAction =
+  | "verify_email_send"
+  | "auth_login"
+  | "auth_forgot_password"
+  | "auth_reset_password";
+
 export async function ensureRateLimitTables(): Promise<void> {
   await db.query(`
     create table if not exists auth_rate_limits (
@@ -14,7 +20,7 @@ export async function ensureRateLimitTables(): Promise<void> {
 
 export async function rateLimitCheck(args: {
   key: string;
-  action: "verify_email_send";
+  action: RateLimitAction;
   windowSeconds: number;
   maxInWindow: number;
 }): Promise<{ ok: boolean; remaining: number; retryAfterSeconds: number }> {
@@ -38,4 +44,15 @@ export async function rateLimitCheck(args: {
   await db.query(`insert into auth_rate_limits (key, action) values ($1,$2)`, [args.key, args.action]);
 
   return { ok: true, remaining: remaining - 1, retryAfterSeconds: 0 };
+}
+
+export function getClientIp(req: Request): string {
+  const forwarded = req.headers.get("x-forwarded-for") || "";
+  const first = forwarded.split(",")[0]?.trim();
+  if (first) return first;
+  const realIp = (req.headers.get("x-real-ip") || "").trim();
+  if (realIp) return realIp;
+  const cfIp = (req.headers.get("cf-connecting-ip") || "").trim();
+  if (cfIp) return cfIp;
+  return "unknown";
 }

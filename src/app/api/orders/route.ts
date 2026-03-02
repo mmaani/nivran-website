@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { ensureIdentityTables, getCustomerIdFromRequest } from "@/lib/identity";
 import { ensureOrdersTables } from "@/lib/ordersSchema";
 import { hasColumn } from "@/lib/dbSchema";
+import { createOrderStatusToken } from "@/lib/orderStatusToken";
 import { evaluateAutoPromotionForLines, evaluatePromoCodeForLines as evaluatePromoCodeForLinesLib, type PricedOrderLine } from "@/lib/promotions";
 import { readFreeShippingThresholdJod as readFreeShippingThresholdJodLive, shippingForSubtotal as shippingForSubtotalLive } from "@/lib/shipping";
 
@@ -474,7 +475,8 @@ export async function POST(req: Request) {
   const totalJod = round2(subtotalAfterDiscountJod + shippingJod);
 
   const cartId = `NIV-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
-  const status = paymentMethod === "COD" ? "PAID_COD" : "PENDING_PAYMENT";
+  const status = paymentMethod === "COD" ? "PENDING_COD_CONFIRM" : "PENDING_PAYMENT";
+  const statusToken = createOrderStatusToken(cartId);
 
   const itemsSnapshot = lines.map((line) => ({
     slug: line.slug,
@@ -534,5 +536,5 @@ export async function POST(req: Request) {
     ]
   );
 
-  return Response.json({ ok: true, cartId, status });
+  return Response.json({ ok: true, cartId, status, statusToken });
 }
