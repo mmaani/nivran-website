@@ -23,6 +23,7 @@
     "check:orders-create-contract": "node scripts/check-orders-create-contract.mjs",
     "check:reorder-cart-contract": "node scripts/check-reorder-cart-contract.mjs",
     "check:admin-catalog-inventory-contract": "node scripts/check-admin-catalog-inventory-contract.mjs",
+    "check:neon-admin-health": "node scripts/neon-admin-healthcheck.mjs",
     "monitor:critical-endpoints": "bash scripts/monitor-critical-endpoints.sh"
   },
   "dependencies": {
