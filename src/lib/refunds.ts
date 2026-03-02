@@ -75,6 +75,15 @@ function extractRestockDeltas(items: unknown): Array<{ slug: string; qty: number
   return out;
 }
 
+function normalizeStatus(v: string): string {
+  return String(v || "").trim().toUpperCase();
+}
+
+function isRefundableOrderStatus(status: string): boolean {
+  const s = normalizeStatus(status);
+  return s === "PAID" || s === "PAID_COD" || s === "PROCESSING" || s === "SHIPPED" || s === "DELIVERED";
+}
+
 function canTransition(from: RefundStatus, to: RefundStatus): boolean {
   return REFUND_TRANSITIONS[from]?.includes(to) ?? false;
 }
@@ -111,11 +120,13 @@ export async function createRefundRecord(
   input: { orderId: number; amountJod: number; reason: string; method: RefundMethod; idempotencyKey: string }
 ): Promise<{ refund: RefundRow; order: OrderForRefund; created: boolean }> {
   const orderRes = await trx.query<OrderForRefund>(
-    `select id, status, paytabs_tran_ref from orders where id = $1 for update`,
+    `select id, status, payment_method, paytabs_tran_ref from orders where id = $1 for update`,
     [input.orderId]
   );
   const order = orderRes.rows[0];
   if (!order) throw new Error("ORDER_NOT_FOUND");
+  if (!isRefundableOrderStatus(order.status)) throw new Error("ORDER_NOT_REFUNDABLE_STATUS");
+  if (input.method === "PAYTABS" && !(order.paytabs_tran_ref || "").trim()) throw new Error("MISSING_PAYTABS_TRAN_REF");
 
   const existing = await trx.query<RefundRow>(`select * from refunds where idempotency_key = $1 limit 1`, [input.idempotencyKey]);
   if (existing.rows[0]) {

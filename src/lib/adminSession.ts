@@ -77,7 +77,7 @@ function verifyAdminTokenString(token: string): boolean {
 }
 
 function signStaff(staffId: number, username: string): string {
-  const secret = process.env.ADMIN_SESSION_SECRET || process.env.ADMIN_TOKEN || "";
+  const secret = getAdminSecret();
   return crypto.createHmac("sha256", secret).update(`${staffId}:${username.toLowerCase()}`).digest("hex");
 }
 

@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 
-function hasSalesSession(req: NextRequest): boolean {
+async function hasSalesSession(req: NextRequest, secret: string): Promise<boolean> {
   const role = (req.cookies.get("nivran_admin_role")?.value || "").trim();
   const staffId = (req.cookies.get("nivran_staff_id")?.value || "").trim();
-  const username = (req.cookies.get("nivran_staff_user")?.value || "").trim();
+  const username = (req.cookies.get("nivran_staff_user")?.value || "").trim().toLowerCase();
   const sig = (req.cookies.get("nivran_staff_sig")?.value || "").trim();
-  return role === "sales" && !!staffId && !!username && !!sig;
+  if (!(role === "sales" && !!staffId && !!username && !!sig && !!secret)) return false;
+
+  const id = Number(staffId);
+  if (!Number.isFinite(id) || id <= 0) return false;
+
+  const payload = `${Math.trunc(id)}:${username}`;
+  const expected = await signHmacSha256Hex(secret, payload);
+  return expected === sig;
 }
 
 function decodeBase64Url(input: string): string {
@@ -53,7 +60,7 @@ export async function middleware(req: NextRequest) {
   if (isAdminLoginPage || isAdminLoginApi) return NextResponse.next();
 
   const isAdmin = !!adminSecret && !!cookieToken && (await isValidAdminToken(cookieToken, adminSecret));
-  const isSales = hasSalesSession(req);
+  const isSales = await hasSalesSession(req, adminSecret);
 
   if (!isAdmin && !isSales) {
     if (isAdminApi) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
