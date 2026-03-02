@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/guards";
 import { ensureRefundTablesSafe } from "@/lib/refundsSchema";
 import { markRefundFailed } from "@/lib/refunds";
+import { logAdminAudit } from "@/lib/adminAudit";
 
 type JsonRecord = Record<string, unknown>;
 function isRecord(v: unknown): v is JsonRecord {
@@ -39,6 +40,7 @@ export async function POST(req: Request) {
 
   await db.withTransaction(async (trx) => {
     await markRefundFailed(trx, { refundId, message, payload: { manual_fail: true } });
+    await logAdminAudit(trx, req, { adminId: "admin", action: "refund.failed", entity: "refund", entityId: String(refundId), metadata: { message } });
   });
 
   return NextResponse.json({ ok: true, refundId });

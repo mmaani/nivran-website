@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/guards";
 import { ensureRefundTablesSafe } from "@/lib/refundsSchema";
 import { markRefundSucceeded, scheduleRestockAfter48h } from "@/lib/refunds";
+import { logAdminAudit } from "@/lib/adminAudit";
 
 type JsonRecord = Record<string, unknown>;
 function isRecord(v: unknown): v is JsonRecord {
@@ -43,7 +44,8 @@ export async function POST(req: Request) {
       paytabsRefundReference: null,
       payload: { manual_note: note },
     });
-    await scheduleRestockAfter48h(trx, { orderId: r.orderId, refundId });
+    await scheduleRestockAfter48h(trx, { refundId });
+    await logAdminAudit(trx, req, { adminId: "admin", action: "refund.confirmed", entity: "refund", entityId: String(refundId), metadata: { orderId: r.orderId } });
     return r;
   });
 
