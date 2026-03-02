@@ -1,16 +1,5 @@
-// src/lib/db.ts
 import "server-only";
-
-import WebSocket from "ws";
-import {
-  Pool,
-  neonConfig,
-  type PoolClient,
-  type QueryResult,
-  type QueryResultRow,
-} from "@neondatabase/serverless";
-
-neonConfig.webSocketConstructor = WebSocket;
+import { Pool, PoolClient, QueryResult, QueryResultRow } from "pg";
 
 let pool: Pool | null = null;
 
@@ -21,12 +10,10 @@ function normalizeDatabaseUrl(connectionString: string): string {
     const sslmode = (url.searchParams.get("sslmode") || "").toLowerCase();
     if (!sslmode) url.searchParams.set("sslmode", "require");
 
-    // Keep your existing compat param (harmless; kept for parity with your current setup)
     if (!url.searchParams.get("uselibpqcompat")) {
       url.searchParams.set("uselibpqcompat", "true");
     }
 
-    // If present, remove sslrootcert=system (not meaningful here, and can confuse)
     if ((url.searchParams.get("sslrootcert") || "").toLowerCase() === "system") {
       url.searchParams.delete("sslrootcert");
     }
@@ -37,6 +24,24 @@ function normalizeDatabaseUrl(connectionString: string): string {
   }
 }
 
+function sslConfigFromUrl(connectionString: string): false | { rejectUnauthorized: boolean } {
+  try {
+    const url = new URL(connectionString);
+    const sslmode = (url.searchParams.get("sslmode") || "").toLowerCase();
+
+    // Neon expects SSL. "verify-full" is strict. "require" is common.
+    // In Node pg, verify-full essentially maps to rejectUnauthorized=true (it verifies cert chain).
+    // If your environment has issues verifying CA, you may temporarily set rejectUnauthorized=false,
+    // but we will NOT default to that.
+    if (sslmode === "disable") return false;
+
+    // Require SSL, verify chain by default
+    return { rejectUnauthorized: true };
+  } catch {
+    return { rejectUnauthorized: true };
+  }
+}
+
 function getPool(): Pool {
   if (pool) return pool;
 
@@ -44,9 +49,17 @@ function getPool(): Pool {
   if (!rawConnectionString) throw new Error("DATABASE_URL env var is required");
 
   const connectionString = normalizeDatabaseUrl(rawConnectionString);
+  const ssl = sslConfigFromUrl(connectionString);
 
   pool = new Pool({
     connectionString,
+    ssl,
+
+    // Codespaces/network can stall; avoid infinite hangs
+    connectionTimeoutMillis: 10_000,
+    idleTimeoutMillis: 30_000,
+    max: 10,
+    allowExitOnIdle: true,
   });
 
   return pool;
@@ -114,9 +127,8 @@ export function isDbConnectivityError(error: unknown): boolean {
 
   if (code === "ECONNREFUSED") return true;
   if (code === "ETIMEDOUT") return true;
-  if (code === "ENOTFOUND") return true;
   if (code === "ENETUNREACH") return true;
-  if (code === "EAI_AGAIN") return true;
+  if (code === "ENOTFOUND") return true;
 
   if (code === "57P01") return true;
   if (code === "57P02") return true;
@@ -127,10 +139,6 @@ export function isDbConnectivityError(error: unknown): boolean {
   if (msg.includes("self signed certificate")) return true;
   if (msg.includes("certificate has expired")) return true;
   if (msg.includes("unable to verify the first certificate")) return true;
-
-  // Neon serverless driver can surface websocket-related connectivity messages
-  if (msg.includes("websocket")) return true;
-  if (msg.includes("fetch failed")) return true;
 
   return false;
 }
