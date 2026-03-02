@@ -524,7 +524,7 @@ export default function AccountClient({ locale }: { locale: string }) {
       }));
 
       const currentCart = normalizeCartItems(readLocalCart());
-      const nextCart = normalizeCartItems(mode === "replace" ? mappedCartItems : mergeCartSum(currentCart, mappedCartItems));
+      const nextCart = mode === "replace" ? mappedCartItems : mergeCartSum(currentCart, mappedCartItems);
       writeLocalCart(nextCart);
 
       fetch("/api/cart/sync", {
