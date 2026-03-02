@@ -46,6 +46,7 @@ type OrderItemLine = {
 type OrderInsight = {
   totalOrders: number;
   totalSpent: number;
+  totalSaved: number;
   lastOrderAt: string | null;
 };
 
@@ -211,8 +212,13 @@ export default function AccountClient({ locale }: { locale: string }) {
       close: isAr ? "إغلاق" : "Close",
       overviewOrders: isAr ? "إجمالي الطلبات" : "Total orders",
       overviewSpent: isAr ? "إجمالي الإنفاق" : "Total spent",
+      overviewSaved: isAr ? "إجمالي التوفير" : "Total saved",
       overviewLast: isAr ? "آخر طلب" : "Last order",
       noDate: isAr ? "لا يوجد" : "N/A",
+      showingRecentOrders: isAr ? "آخر الطلبات" : "Recent orders",
+      pageInfo: isAr ? "صفحة" : "Page",
+      previousPage: isAr ? "السابق" : "Previous",
+      nextPage: isAr ? "التالي" : "Next",
       ordersTitle: isAr ? "طلباتك" : "Your Orders",
       verifySending: isAr ? "جارٍ الإرسال..." : "Sending...",
     }),
@@ -238,6 +244,7 @@ export default function AccountClient({ locale }: { locale: string }) {
   const [reorderOrderId, setReorderOrderId] = useState<number | null>(null);
   const [reorderMode, setReorderMode] = useState<ReorderMode>("add");
   const [authBusy, setAuthBusy] = useState<"verify" | "logout" | null>(null);
+  const [ordersPage, setOrdersPage] = useState(1);
 
   // Country combobox
   const countryWrapRef = useRef<HTMLDivElement | null>(null);
@@ -249,15 +256,23 @@ export default function AccountClient({ locale }: { locale: string }) {
   const verified = useMemo(() => asBool(profile?.is_verified), [profile?.is_verified]);
 
   const orderInsight = useMemo<OrderInsight>(() => {
-    if (!orders.length) return { totalOrders: 0, totalSpent: 0, lastOrderAt: null };
+    if (!orders.length) return { totalOrders: 0, totalSpent: 0, totalSaved: 0, lastOrderAt: null };
 
     let totalSpent = 0;
+    let totalSaved = 0;
     let latestTime = 0;
     let latestRaw: string | null = null;
 
     for (const row of orders) {
       const amount = Number(row.total_jod ?? row.amount_jod ?? 0);
       if (Number.isFinite(amount)) totalSpent += amount;
+
+      const directDiscount = Number(row.discount_jod ?? 0);
+      const subtotalBefore = Number(row.subtotal_before_discount_jod ?? 0);
+      const subtotalAfter = Number(row.subtotal_after_discount_jod ?? 0);
+      const inferredDiscount = subtotalBefore > subtotalAfter ? subtotalBefore - subtotalAfter : 0;
+      const saved = Number.isFinite(directDiscount) && directDiscount > 0 ? directDiscount : inferredDiscount;
+      if (Number.isFinite(saved) && saved > 0) totalSaved += saved;
 
       const created = Date.parse(row.created_at);
       if (Number.isFinite(created) && created > latestTime) {
@@ -269,6 +284,7 @@ export default function AccountClient({ locale }: { locale: string }) {
     return {
       totalOrders: orders.length,
       totalSpent,
+      totalSaved,
       lastOrderAt: latestRaw,
     };
   }, [orders]);
@@ -277,10 +293,21 @@ export default function AccountClient({ locale }: { locale: string }) {
     return [...orders].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   }, [orders]);
 
+  const ORDERS_PER_PAGE = 5;
+  const totalOrderPages = Math.max(1, Math.ceil(sortedOrders.length / ORDERS_PER_PAGE));
+  const pagedOrders = useMemo(() => {
+    const start = (ordersPage - 1) * ORDERS_PER_PAGE;
+    return sortedOrders.slice(start, start + ORDERS_PER_PAGE);
+  }, [ordersPage, sortedOrders]);
+
   const selectedReorderOrder = useMemo(() => {
     if (!reorderOrderId) return null;
     return orders.find((item) => item.id === reorderOrderId) ?? null;
   }, [orders, reorderOrderId]);
+
+  useEffect(() => {
+    if (ordersPage > totalOrderPages) setOrdersPage(totalOrderPages);
+  }, [ordersPage, totalOrderPages]);
 
   const canSave = useMemo(() => {
     if (!fullName.trim()) return false;
@@ -540,6 +567,7 @@ export default function AccountClient({ locale }: { locale: string }) {
         orderId: String(reorderOrderId),
         mode,
         t: String(Date.now()),
+        prepared: "1",
       });
       window.location.href = `/${locale}/cart?${qs.toString()}`;
     } catch {
@@ -816,6 +844,10 @@ export default function AccountClient({ locale }: { locale: string }) {
               <span className="muted">{COPY.overviewLast}</span>
               <strong>{formatDate(orderInsight.lastOrderAt)}</strong>
             </div>
+            <div className="overview-item">
+              <span className="muted">{COPY.overviewSaved}</span>
+              <strong>{orderInsight.totalSaved > 0 ? `${orderInsight.totalSaved.toFixed(2)} JOD` : COPY.none}</strong>
+            </div>
           </div>
 
           {orders.length === 0 ? (
@@ -823,6 +855,7 @@ export default function AccountClient({ locale }: { locale: string }) {
               {COPY.emptyOrders}
             </p>
           ) : (
+            <>
             <div className="table-wrap">
               <table className="table">
                 <thead>
@@ -836,7 +869,7 @@ export default function AccountClient({ locale }: { locale: string }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedOrders.map((o) => {
+                  {pagedOrders.map((o) => {
                     const status = String(o.status || "").toUpperCase();
                     const total = o.total_jod ? Number(o.total_jod) : Number(o.amount_jod || 0);
                     const discount = o.discount_jod ? Number(o.discount_jod) : 0;
@@ -884,6 +917,21 @@ export default function AccountClient({ locale }: { locale: string }) {
                 </tbody>
               </table>
             </div>
+
+            <div className="orders-pagination" aria-label={COPY.showingRecentOrders}>
+              <span className="muted">
+                {COPY.pageInfo} {ordersPage} / {totalOrderPages}
+              </span>
+              <div className="orders-pagination-actions">
+                <button className="btn btn-quiet" onClick={() => setOrdersPage((p) => Math.max(1, p - 1))} disabled={ordersPage <= 1}>
+                  {COPY.previousPage}
+                </button>
+                <button className="btn btn-quiet" onClick={() => setOrdersPage((p) => Math.min(totalOrderPages, p + 1))} disabled={ordersPage >= totalOrderPages}>
+                  {COPY.nextPage}
+                </button>
+              </div>
+            </div>
+            </>
           )}
         </div>
       </div>

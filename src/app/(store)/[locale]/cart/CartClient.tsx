@@ -222,6 +222,7 @@ export default function CartClient({ locale }: { locale: Locale }) {
       const modeRaw = url?.searchParams.get("mode");
       const mode: "replace" | "add" = modeRaw === "add" ? "add" : "replace";
       const nonce = url?.searchParams.get("t") || "";
+      const reorderPrepared = url?.searchParams.get("prepared") === "1";
 
       if (hasReorderFlag) {
         const target = `/${locale}/cart`;
@@ -229,6 +230,12 @@ export default function CartClient({ locale }: { locale: Locale }) {
       }
 
       const consumeToken = `${reorderOrderId}:${mode}:${nonce}`;
+      if (hasReorderFlag && reorderPrepared) {
+        setItems(current);
+        sessionStorage.removeItem(REORDER_KEY);
+        return;
+      }
+
       if (hasReorderFlag) {
         const consumed = sessionStorage.getItem(REORDER_CONSUMED_KEY);
         if (consumed === consumeToken) {
