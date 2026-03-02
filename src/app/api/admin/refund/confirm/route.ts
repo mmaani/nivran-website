@@ -1,9 +1,10 @@
 // src/app/api/admin/refund/confirm/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/guards";
+import { requireAdminOrSales } from "@/lib/guards";
 import { ensureRefundTablesSafe } from "@/lib/refundsSchema";
 import { markRefundSucceeded, scheduleRestockAfter48h } from "@/lib/refunds";
+import { logAdminAudit } from "@/lib/adminAudit";
 
 type JsonRecord = Record<string, unknown>;
 function isRecord(v: unknown): v is JsonRecord {
@@ -23,8 +24,16 @@ function toStr(v: unknown): string {
 
 export const runtime = "nodejs";
 
+
+function actorIdFromAuth(auth: { role: "admin" | "sales"; staffId: number | null; username: string | null }): string {
+  if (auth.role === "admin") return "admin";
+  const sid = typeof auth.staffId === "number" && auth.staffId > 0 ? String(auth.staffId) : "unknown";
+  const user = auth.username || "sales";
+  return `sales:${sid}:${user}`;
+}
+
 export async function POST(req: Request) {
-  const auth = requireAdmin(req);
+  const auth = requireAdminOrSales(req);
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
 
   await ensureRefundTablesSafe();
@@ -43,7 +52,8 @@ export async function POST(req: Request) {
       paytabsRefundReference: null,
       payload: { manual_note: note },
     });
-    await scheduleRestockAfter48h(trx, { orderId: r.orderId, refundId });
+    await scheduleRestockAfter48h(trx, { refundId });
+    await logAdminAudit(trx, req, { adminId: actorIdFromAuth(auth), action: "refund.confirmed", entity: "refund", entityId: String(refundId), metadata: { orderId: r.orderId } });
     return r;
   });
 
