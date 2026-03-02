@@ -264,7 +264,7 @@ export async function POST(req: Request) {
       return catalogSavedRedirect(req, form);
     }
 
-    return catalogSavedRedirect(req, form);
+    return catalogErrorRedirect(req, form, "unknown-action");
   } catch (error: unknown) {
     console.error("[admin/catalog/promotions] route error", error);
 

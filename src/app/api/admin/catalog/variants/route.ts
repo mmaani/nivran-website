@@ -118,88 +118,100 @@ export async function POST(req: Request) {
       const compareAt = parseOptionalMoney(compareAtRaw);
       const sizeMl = sizeMlRaw ? Math.max(0, Math.trunc(Number(sizeMlRaw))) : null;
 
-      if (id > 0 && productId > 0 && label && price > 0) {
-        if (compareAt != null && compareAt > 0 && compareAt < price) {
-          return catalogErrorRedirect(req, form, "invalid-compare-price");
-        }
-        if (sizeMlRaw && !Number.isFinite(Number(sizeMlRaw))) {
-          return catalogErrorRedirect(req, form, "invalid-size-ml");
-        }
-        if (await hasDuplicateVariantLabel(productId, label, id)) {
-          return catalogErrorRedirect(req, form, "duplicate-variant-label");
-        }
-        await db.withTransaction(async (trx) => {
-          if (isDefault) {
-            await trx.query(`update product_variants set is_default=false where product_id=$1`, [productId]);
-          }
-
-          await trx.query(
-            `update product_variants
-                set label=$3,
-                    size_ml=$4,
-                    price_jod=$5,
-                    compare_at_price_jod=$6,
-                    is_default=$7,
-                    is_active=$8,
-                    sort_order=$9,
-                    updated_at=now()
-              where id=$1 and product_id=$2`,
-            [
-              id,
-              productId,
-              label,
-              sizeMl,
-              price,
-              compareAt,
-              isDefault,
-              isActive,
-              sortOrder,
-            ]
-          );
-          await logAdminAudit(trx, req, {
-            adminId: "admin",
-            action: "catalog.variant.update",
-            entity: "variant",
-            entityId: String(id),
-            metadata: { productId, label, isDefault, isActive, sortOrder },
-          });
-        });
+      if (!(id > 0 && productId > 0 && label && price > 0)) {
+        return catalogErrorRedirect(req, form, "invalid-variant");
       }
+      if (compareAt != null && compareAt > 0 && compareAt < price) {
+        return catalogErrorRedirect(req, form, "invalid-compare-price");
+      }
+      if (sizeMlRaw && !Number.isFinite(Number(sizeMlRaw))) {
+        return catalogErrorRedirect(req, form, "invalid-size-ml");
+      }
+      if (await hasDuplicateVariantLabel(productId, label, id)) {
+        return catalogErrorRedirect(req, form, "duplicate-variant-label");
+      }
+      const updated = await db.withTransaction(async (trx) => {
+        if (isDefault) {
+          await trx.query(`update product_variants set is_default=false where product_id=$1`, [productId]);
+        }
+
+        const result = await trx.query(
+          `update product_variants
+              set label=$3,
+                  size_ml=$4,
+                  price_jod=$5,
+                  compare_at_price_jod=$6,
+                  is_default=$7,
+                  is_active=$8,
+                  sort_order=$9,
+                  updated_at=now()
+            where id=$1 and product_id=$2`,
+          [
+            id,
+            productId,
+            label,
+            sizeMl,
+            price,
+            compareAt,
+            isDefault,
+            isActive,
+            sortOrder,
+          ]
+        );
+        if ((result.rowCount ?? 0) !== 1) return false;
+        await logAdminAudit(trx, req, {
+          adminId: "admin",
+          action: "catalog.variant.update",
+          entity: "variant",
+          entityId: String(id),
+          metadata: { productId, label, isDefault, isActive, sortOrder },
+        });
+        return true;
+      });
+      if (!updated) return catalogErrorRedirect(req, form, "variant-not-found");
     }
 
 
     if (action === "set-default") {
       const id = Number(form.get("id") || 0);
       const productId = Number(form.get("product_id") || 0);
-      if (id > 0 && productId > 0) {
-        await db.withTransaction(async (trx) => {
-          await trx.query(`update product_variants set is_default=false where product_id=$1`, [productId]);
-          await trx.query(`update product_variants set is_default=true, updated_at=now() where id=$1 and product_id=$2`, [id, productId]);
-          await logAdminAudit(trx, req, {
-            adminId: "admin",
-            action: "catalog.variant.set_default",
-            entity: "variant",
-            entityId: String(id),
-            metadata: { productId },
-          });
+      if (!(id > 0 && productId > 0)) return catalogErrorRedirect(req, form, "invalid-variant");
+      const updated = await db.withTransaction(async (trx) => {
+        await trx.query(`update product_variants set is_default=false where product_id=$1`, [productId]);
+        const result = await trx.query(`update product_variants set is_default=true, updated_at=now() where id=$1 and product_id=$2`, [id, productId]);
+        if ((result.rowCount ?? 0) !== 1) return false;
+        await logAdminAudit(trx, req, {
+          adminId: "admin",
+          action: "catalog.variant.set_default",
+          entity: "variant",
+          entityId: String(id),
+          metadata: { productId },
         });
-      }
+        return true;
+      });
+      if (!updated) return catalogErrorRedirect(req, form, "variant-not-found");
     }
 
     if (action === "delete") {
       const id = Number(form.get("id") || 0);
-      if (id > 0) {
-        await db.withTransaction(async (trx) => {
-          await trx.query(`delete from product_variants where id=$1`, [id]);
-          await logAdminAudit(trx, req, {
-            adminId: "admin",
-            action: "catalog.variant.delete",
-            entity: "variant",
-            entityId: String(id),
-            metadata: {},
-          });
+      if (!(id > 0)) return catalogErrorRedirect(req, form, "invalid-variant");
+      const deleted = await db.withTransaction(async (trx) => {
+        const result = await trx.query(`delete from product_variants where id=$1`, [id]);
+        if ((result.rowCount ?? 0) !== 1) return false;
+        await logAdminAudit(trx, req, {
+          adminId: "admin",
+          action: "catalog.variant.delete",
+          entity: "variant",
+          entityId: String(id),
+          metadata: {},
         });
-      }
+        return true;
+      });
+      if (!deleted) return catalogErrorRedirect(req, form, "variant-not-found");
+    }
+
+    if (!["create", "update", "set-default", "delete"].includes(action)) {
+      return catalogErrorRedirect(req, form, "unknown-action");
     }
 
     return catalogSavedRedirect(req, form);

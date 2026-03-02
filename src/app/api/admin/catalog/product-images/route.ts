@@ -32,10 +32,16 @@ export async function POST(req: Request) {
 
     const files = (form.getAll("images") || []).filter(Boolean) as unknown as File[];
     const selected = files.slice(0, MAX_IMAGE_COUNT);
+    if (!selected.length) {
+      return catalogErrorRedirect(req, form, "missing-image");
+    }
 
     for (const file of selected) {
       if (!String(file?.type || "").toLowerCase().startsWith("image/")) {
         return catalogErrorRedirect(req, form, "invalid-image-type");
+      }
+      if (!Number.isFinite(file?.size) || file.size <= 0) {
+        return catalogErrorRedirect(req, form, "invalid-image-file");
       }
       if (typeof file?.size === "number" && file.size > MAX_IMAGE_BYTES) {
         return catalogErrorRedirect(req, form, "image-too-large");

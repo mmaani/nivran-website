@@ -229,8 +229,8 @@ export async function POST(req: Request) {
         return catalogErrorRedirect(req, form, "invalid-compare-price");
       }
 
-      await db.withTransaction(async (trx) => {
-        await trx.query(
+      const updated = await db.withTransaction(async (trx) => {
+        const result = await trx.query(
           `update products
               set name_en=coalesce(nullif($2::text,''), name_en),
                   name_ar=coalesce(nullif($3::text,''), name_ar),
@@ -263,6 +263,7 @@ export async function POST(req: Request) {
             audiences,
           ]
         );
+        if ((result.rowCount ?? 0) !== 1) return false;
         await logAdminAudit(trx, req, {
           adminId: "admin",
           action: "catalog.product.update",
@@ -270,95 +271,103 @@ export async function POST(req: Request) {
           entityId: idRaw,
           metadata: { categoryKey, isActive, inventory, compareProvided },
         });
+        return true;
       });
+      if (!updated) return catalogErrorRedirect(req, form, "product-not-found");
     }
 
     if (action === "clone") {
       const idRaw = String(form.get("id") || "").trim();
-      if (idRaw) {
-        const source = await db.query<{
-          slug: string;
-          category_key: string;
-          name_en: string;
-          name_ar: string;
-          description_en: string | null;
-          description_ar: string | null;
-          price_jod: string;
-          compare_at_price_jod: string | null;
-          wear_times: string[];
-          seasons: string[];
-          audiences: string[];
-        }>(
-          `select slug, category_key, name_en, name_ar, description_en, description_ar,
-                  price_jod::text, compare_at_price_jod::text,
-                  coalesce(wear_times, '{}'::text[]) as wear_times,
-                  coalesce(seasons, '{}'::text[]) as seasons,
-                  coalesce(audiences, '{}'::text[]) as audiences
-             from products where id=$1::bigint`,
-          [idRaw]
-        );
+      if (!idRaw) return catalogErrorRedirect(req, form, "invalid-product-id");
 
-        const base = source.rows[0];
-        if (!base) return catalogErrorRedirect(req, form, "product-not-found");
+      const source = await db.query<{
+        slug: string;
+        category_key: string;
+        name_en: string;
+        name_ar: string;
+        description_en: string | null;
+        description_ar: string | null;
+        price_jod: string;
+        compare_at_price_jod: string | null;
+        wear_times: string[];
+        seasons: string[];
+        audiences: string[];
+      }>(
+        `select slug, category_key, name_en, name_ar, description_en, description_ar,
+                price_jod::text, compare_at_price_jod::text,
+                coalesce(wear_times, '{}'::text[]) as wear_times,
+                coalesce(seasons, '{}'::text[]) as seasons,
+                coalesce(audiences, '{}'::text[]) as audiences
+           from products where id=$1::bigint`,
+        [idRaw]
+      );
 
-        let nextSlug = `${base.slug}-copy`;
-        let suffix = 2;
-        while (true) {
-          const exists = await db.query<{ id: string }>(`select id::text as id from products where slug=$1 limit 1`, [nextSlug]);
-          if (!exists.rows[0]) break;
-          nextSlug = `${base.slug}-copy-${suffix}`;
-          suffix += 1;
-        }
+      const base = source.rows[0];
+      if (!base) return catalogErrorRedirect(req, form, "product-not-found");
 
-        await db.withTransaction(async (trx) => {
-          await trx.query(
-            `insert into products
-              (slug, slug_en, slug_ar, category_key, name_en, name_ar, description_en, description_ar, price_jod, compare_at_price_jod, inventory_qty, is_active, wear_times, seasons, audiences)
-             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::text[],$14::text[],$15::text[])`,
-            [
-              nextSlug,
-              nextSlug,
-              nextSlug,
-              base.category_key,
-              `${base.name_en} (Copy)`,
-              `${base.name_ar} (نسخة)`,
-              base.description_en,
-              base.description_ar,
-              Number(base.price_jod || 0),
-              base.compare_at_price_jod ? Number(base.compare_at_price_jod) : null,
-              0,
-              false,
-              base.wear_times,
-              base.seasons,
-              base.audiences,
-            ]
-          );
-          await logAdminAudit(trx, req, {
-            adminId: "admin",
-            action: "catalog.product.clone",
-            entity: "product",
-            entityId: nextSlug,
-            metadata: { sourceId: idRaw, sourceSlug: base.slug },
-          });
-        });
+      let nextSlug = `${base.slug}-copy`;
+      let suffix = 2;
+      while (true) {
+        const exists = await db.query<{ id: string }>(`select id::text as id from products where slug=$1 limit 1`, [nextSlug]);
+        if (!exists.rows[0]) break;
+        nextSlug = `${base.slug}-copy-${suffix}`;
+        suffix += 1;
       }
+
+      await db.withTransaction(async (trx) => {
+        await trx.query(
+          `insert into products
+            (slug, slug_en, slug_ar, category_key, name_en, name_ar, description_en, description_ar, price_jod, compare_at_price_jod, inventory_qty, is_active, wear_times, seasons, audiences)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::text[],$14::text[],$15::text[])`,
+          [
+            nextSlug,
+            nextSlug,
+            nextSlug,
+            base.category_key,
+            `${base.name_en} (Copy)`,
+            `${base.name_ar} (نسخة)`,
+            base.description_en,
+            base.description_ar,
+            Number(base.price_jod || 0),
+            base.compare_at_price_jod ? Number(base.compare_at_price_jod) : null,
+            0,
+            false,
+            base.wear_times,
+            base.seasons,
+            base.audiences,
+          ]
+        );
+        await logAdminAudit(trx, req, {
+          adminId: "admin",
+          action: "catalog.product.clone",
+          entity: "product",
+          entityId: nextSlug,
+          metadata: { sourceId: idRaw, sourceSlug: base.slug },
+        });
+      });
     }
 
     if (action === "delete") {
       const idRaw = String(form.get("id") || "").trim();
-      if (idRaw) {
-        await db.withTransaction(async (trx) => {
-          await trx.query(`delete from product_images where product_id=$1::bigint`, [idRaw]);
-          await trx.query(`delete from products where id=$1::bigint`, [idRaw]);
-          await logAdminAudit(trx, req, {
-            adminId: "admin",
-            action: "catalog.product.delete",
-            entity: "product",
-            entityId: idRaw,
-            metadata: {},
-          });
+      if (!idRaw) return catalogErrorRedirect(req, form, "invalid-product-id");
+      const deleted = await db.withTransaction(async (trx) => {
+        await trx.query(`delete from product_images where product_id=$1::bigint`, [idRaw]);
+        const result = await trx.query(`delete from products where id=$1::bigint`, [idRaw]);
+        if ((result.rowCount ?? 0) !== 1) return false;
+        await logAdminAudit(trx, req, {
+          adminId: "admin",
+          action: "catalog.product.delete",
+          entity: "product",
+          entityId: idRaw,
+          metadata: {},
         });
-      }
+        return true;
+      });
+      if (!deleted) return catalogErrorRedirect(req, form, "product-not-found");
+    }
+
+    if (!["create", "update", "clone", "delete"].includes(action)) {
+      return catalogErrorRedirect(req, form, "unknown-action");
     }
 
     return catalogSavedRedirect(req, form);

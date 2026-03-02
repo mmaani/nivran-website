@@ -381,7 +381,7 @@ export async function POST(req: Request) {
       return catalogSavedRedirect(req, form);
     }
 
-    return catalogSavedRedirect(req, form);
+    return catalogErrorRedirect(req, form, "unknown-action");
   } catch (error: unknown) {
     console.error("[admin/catalog/categories] route error", error);
     return catalogErrorRedirect(req, form, "category-save-failed");
