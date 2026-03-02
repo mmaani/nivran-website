@@ -65,6 +65,7 @@ function safeStringify(value: unknown): string {
 }
 
 function describeUnknownError(err: unknown): string {
+  // 1) Normal Error
   if (err instanceof Error) {
     const anyErr = err as Error & { code?: unknown; digest?: unknown; cause?: unknown };
     return safeStringify({
@@ -79,16 +80,60 @@ function describeUnknownError(err: unknown): string {
     });
   }
 
+  // 2) ErrorEvent (what you are seeing)
+  // In Node/Next this can exist as a global in some paths.
   const isObj = typeof err === "object" && err !== null;
+
+  const anyObj = (isObj ? (err as Record<string, unknown>) : null) as Record<string, unknown> | null;
+
+  const stack =
+    isObj && "stack" in (err as object) && typeof (err as { stack?: unknown }).stack === "string"
+      ? String((err as { stack?: unknown }).stack)
+      : "";
+
+  const message =
+    isObj && "message" in (err as object) && typeof (err as { message?: unknown }).message === "string"
+      ? String((err as { message?: unknown }).message)
+      : "";
+
+  const filename =
+    isObj && "filename" in (err as object) && typeof (err as { filename?: unknown }).filename === "string"
+      ? String((err as { filename?: unknown }).filename)
+      : "";
+
+  const lineno =
+    isObj && "lineno" in (err as object) && typeof (err as { lineno?: unknown }).lineno === "number"
+      ? (err as { lineno?: number }).lineno
+      : null;
+
+  const colno =
+    isObj && "colno" in (err as object) && typeof (err as { colno?: unknown }).colno === "number"
+      ? (err as { colno?: number }).colno
+      : null;
+
+  const innerError = isObj && "error" in (err as object) ? (err as { error?: unknown }).error : null;
+
   return safeStringify({
     kind: "NonError",
     type: typeof err,
     isObject: isObj,
     constructorName: isObj ? (err as { constructor?: { name?: string } }).constructor?.name : null,
     ownKeys: isObj ? Object.getOwnPropertyNames(err as object) : [],
-    value: err,
+    // ✅ Key fields that help pinpoint source
+    message,
+    filename,
+    lineno,
+    colno,
+    stack,
+    // ✅ The real error is often inside ErrorEvent.error
+    error: innerError instanceof Error
+      ? { name: innerError.name, message: innerError.message, stack: innerError.stack }
+      : innerError,
+    // ✅ Keep the raw value too
+    value: anyObj || err,
   });
 }
+
 
 async function cookieHeader(): Promise<string> {
   // Next 15.5+ can return a Promise in some environments; await is safe either way.
