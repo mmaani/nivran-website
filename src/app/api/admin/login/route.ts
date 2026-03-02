@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createSignedAdminToken } from "@/lib/adminSession";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,7 @@ export async function POST(req: Request) {
   }
 
   const res = NextResponse.json({ ok: true });
+  const signedToken = createSignedAdminToken(60 * 60 * 12);
   const opts = {
     httpOnly: true,
     sameSite: "lax" as const,
@@ -23,8 +25,8 @@ export async function POST(req: Request) {
     path: "/",
     maxAge: 60 * 60 * 12, // 12h
   };
-  res.cookies.set("admin_token", token, opts);
-  res.cookies.set("nivran_admin_token", token, opts);
+  res.cookies.set("admin_token", signedToken, opts);
+  res.cookies.set("nivran_admin_token", signedToken, opts);
   res.cookies.set("nivran_admin_role", "", { ...opts, maxAge: 0 });
   res.cookies.set("nivran_staff_id", "", { ...opts, maxAge: 0 });
   res.cookies.set("nivran_staff_user", "", { ...opts, maxAge: 0 });

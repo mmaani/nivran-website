@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { ensureOrdersTablesSafe, commitInventoryForPaidOrderId } from "@/lib/orders";
 import { requireAdmin } from "@/lib/guards";
 import { consumePromotionUsage } from "@/lib/promotions";
+import { logAdminAudit } from "@/lib/adminAudit";
 
 export const runtime = "nodejs";
 
@@ -262,6 +263,16 @@ export async function POST(req: Request) {
       // ignore
     }
   }
+
+  await db.withTransaction(async (trx) => {
+    await logAdminAudit(trx, req, {
+      adminId: "admin",
+      action: "order.status_changed",
+      entity: "order",
+      entityId: String(id),
+      metadata: { status: nextStatus },
+    });
+  });
 
   return NextResponse.json({ ok: true });
 }

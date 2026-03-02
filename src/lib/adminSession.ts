@@ -11,6 +11,71 @@ export type AdminSession = {
   username: string | null;
 };
 
+type AdminTokenPayload = {
+  role: "admin";
+  iat: number;
+  exp: number;
+};
+
+const ADMIN_COOKIE_NAMES = ["admin_token", "nivran_admin_token"] as const;
+
+function getAdminSecret(): string {
+  return (process.env.ADMIN_SECRET || process.env.ADMIN_SESSION_SECRET || process.env.ADMIN_TOKEN || "").trim();
+}
+
+function signAdminPayload(encodedPayload: string): string {
+  return crypto.createHmac("sha256", getAdminSecret()).update(encodedPayload).digest("hex");
+}
+
+function parseAdminToken(token: string): AdminTokenPayload | null {
+  const trimmed = token.trim();
+  if (!trimmed) return null;
+
+  const [encodedPayload, signature] = trimmed.split(".");
+  if (!encodedPayload || !signature) return null;
+
+  const expected = signAdminPayload(encodedPayload);
+  if (!safeEq(signature, expected)) return null;
+
+  const decodedText = Buffer.from(encodedPayload, "base64url").toString("utf8");
+  const parsed: unknown = JSON.parse(decodedText);
+  if (typeof parsed !== "object" || parsed === null) return null;
+
+  const maybe = parsed as Record<string, unknown>;
+  const role = maybe["role"];
+  const iat = maybe["iat"];
+  const exp = maybe["exp"];
+
+  if (role !== "admin") return null;
+  if (typeof iat !== "number" || !Number.isFinite(iat)) return null;
+  if (typeof exp !== "number" || !Number.isFinite(exp)) return null;
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (exp <= nowSec) return null;
+
+  return { role: "admin", iat: Math.trunc(iat), exp: Math.trunc(exp) };
+}
+
+export function createSignedAdminToken(ttlSec = 60 * 60 * 12): string {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const payload: AdminTokenPayload = {
+    role: "admin",
+    iat: nowSec,
+    exp: nowSec + Math.max(60, Math.trunc(ttlSec)),
+  };
+  const encodedPayload = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+  const signature = signAdminPayload(encodedPayload);
+  return `${encodedPayload}.${signature}`;
+}
+
+function verifyAdminTokenString(token: string): boolean {
+  try {
+    return !!parseAdminToken(token);
+  } catch {
+    return false;
+  }
+}
+
 function signStaff(staffId: number, username: string): string {
   const secret = process.env.ADMIN_SESSION_SECRET || process.env.ADMIN_TOKEN || "";
   return crypto.createHmac("sha256", secret).update(`${staffId}:${username.toLowerCase()}`).digest("hex");
@@ -25,9 +90,8 @@ function safeEq(a: string, b: string): boolean {
 
 export async function readAdminSessionFromCookies(): Promise<AdminSession | null> {
   const store = await cookies();
-  const adminToken = (store.get("admin_token")?.value || store.get("nivran_admin_token")?.value || "").trim();
-  const expected = (process.env.ADMIN_TOKEN || "").trim();
-  if (adminToken && expected && adminToken === expected) {
+  const adminToken = (store.get(ADMIN_COOKIE_NAMES[0])?.value || store.get(ADMIN_COOKIE_NAMES[1])?.value || "").trim();
+  if (adminToken && verifyAdminTokenString(adminToken)) {
     return { role: "admin", staffId: null, username: null };
   }
 
@@ -46,14 +110,14 @@ export async function readAdminSessionFromCookies(): Promise<AdminSession | null
 }
 
 export function verifyAdminFromRequest(req: Request): boolean {
-  const expected = (process.env.ADMIN_TOKEN || "").trim();
-  if (!expected) return false;
+  const secret = getAdminSecret();
+  if (!secret) return false;
   const cookieHeader = req.headers.get("cookie") || "";
   const pieces = cookieHeader.split(";").map((value) => value.trim());
   for (const piece of pieces) {
-    if (piece.startsWith("admin_token=") || piece.startsWith("nivran_admin_token=")) {
+    if (piece.startsWith(`${ADMIN_COOKIE_NAMES[0]}=`) || piece.startsWith(`${ADMIN_COOKIE_NAMES[1]}=`)) {
       const got = decodeURIComponent(piece.slice(piece.indexOf("=") + 1)).trim();
-      if (got === expected) return true;
+      if (verifyAdminTokenString(got)) return true;
     }
   }
   return false;

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/guards";
 import { ensureRefundTablesSafe } from "@/lib/refundsSchema";
 import { runDueRestocks } from "@/lib/refunds";
+import { logAdminAudit } from "@/lib/adminAudit";
 
 type JsonRecord = Record<string, unknown>;
 function isRecord(v: unknown): v is JsonRecord {
@@ -30,7 +31,19 @@ export async function POST(req: Request) {
   const body = isRecord(parsed) ? parsed : {};
   const limit = Math.max(1, Math.min(200, toInt(body["limit"] ?? 50)));
 
-  const result = await db.withTransaction(async (trx) => runDueRestocks(trx, { limit }));
+  const result = await db.withTransaction(async (trx) => {
+    const run = await runDueRestocks(trx, { limit });
+    for (const refundId of run.restockedRefundIds) {
+      await logAdminAudit(trx, req, {
+        adminId: "admin",
+        action: "restock.executed",
+        entity: "refund",
+        entityId: String(refundId),
+        metadata: { source: "runner" },
+      });
+    }
+    return run;
+  });
 
   return NextResponse.json(result);
 }

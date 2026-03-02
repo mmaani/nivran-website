@@ -8,10 +8,40 @@ function hasSalesSession(req: NextRequest): boolean {
   return role === "sales" && !!staffId && !!username && !!sig;
 }
 
-export function middleware(req: NextRequest) {
-  const path = req.nextUrl.pathname;
+function decodeBase64Url(input: string): string {
+  const base64 = input.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = `${base64}${"=".repeat((4 - (base64.length % 4)) % 4)}`;
+  return atob(padded);
+}
 
-  const adminToken = (process.env.ADMIN_TOKEN || "").trim();
+async function signHmacSha256Hex(secret: string, value: string): Promise<string> {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(signature))
+    .map((x) => x.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function isValidAdminToken(token: string, secret: string): Promise<boolean> {
+  const [encodedPayload, signature] = token.split(".");
+  if (!encodedPayload || !signature) return false;
+
+  const expected = await signHmacSha256Hex(secret, encodedPayload);
+  if (expected !== signature) return false;
+
+  const parsed: unknown = JSON.parse(decodeBase64Url(encodedPayload));
+  if (typeof parsed !== "object" || parsed === null) return false;
+  const record = parsed as Record<string, unknown>;
+  if (record["role"] !== "admin") return false;
+  const exp = record["exp"];
+  if (typeof exp !== "number" || !Number.isFinite(exp)) return false;
+  const nowSec = Math.floor(Date.now() / 1000);
+  return exp > nowSec;
+}
+
+export async function middleware(req: NextRequest) {
+  const path = req.nextUrl.pathname;
+  const adminSecret = (process.env.ADMIN_SECRET || process.env.ADMIN_SESSION_SECRET || process.env.ADMIN_TOKEN || "").trim();
   const cookieToken = (req.cookies.get("admin_token")?.value || req.cookies.get("nivran_admin_token")?.value || "").trim();
 
   const isAdminRoute = path.startsWith("/admin");
@@ -22,7 +52,7 @@ export function middleware(req: NextRequest) {
   if (!isAdminRoute && !isAdminApi) return NextResponse.next();
   if (isAdminLoginPage || isAdminLoginApi) return NextResponse.next();
 
-  const isAdmin = !!adminToken && cookieToken === adminToken;
+  const isAdmin = !!adminSecret && !!cookieToken && (await isValidAdminToken(cookieToken, adminSecret));
   const isSales = hasSalesSession(req);
 
   if (!isAdmin && !isSales) {
