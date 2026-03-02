@@ -26,7 +26,6 @@ export type RefundRow = {
 type OrderForRefund = {
   id: number;
   status: string;
-  payment_method: string;
   paytabs_tran_ref: string | null;
 };
 
