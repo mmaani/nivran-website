@@ -317,9 +317,10 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
         autoNoteMissingTran: "لا يوجد tran_ref — استخدم الاسترجاع اليدوي",
         invalidAmount: "المبلغ غير صالح",
 
-        confirmManual: "اعتماد",
-        failManual: "رفض",
-        refundState: "حالة الاسترجاع",
+        confirmManual: "اعتماد الاسترجاع",
+        failManual: "رفض الاسترجاع",
+        refundState: "بانتظار قرار الاسترجاع",
+        refundDecisionHint: "إجراء مطلوب",
       };
     }
 
@@ -381,9 +382,10 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
       autoNoteMissingTran: "No tran_ref — use manual refund",
       invalidAmount: "Invalid amount",
 
-      confirmManual: "Approve",
-      failManual: "Reject",
-      refundState: "Refund state",
+      confirmManual: "Approve Refund",
+      failManual: "Reject Refund",
+      refundState: "Refund decision pending",
+      refundDecisionHint: "Action required",
     };
   }, [isAr]);
 
@@ -831,7 +833,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                     </td>
 
                     <td data-label={L.details} className="orders-actions-cell">
-                      <div style={{ display: "grid", gap: 6 }}>
+                      <div className="orders-actions-shell" style={{ display: "grid", gap: 8 }}>
                         <div className="orders-actions-row" style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                           <button className="btn" type="button" onClick={() => toggleDetails(r.id)}>
                             {opened ? L.hideDetails : L.showDetails}
@@ -856,33 +858,43 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                               gap: 6,
                               alignItems: "center",
                               flexWrap: "nowrap",
-                              padding: "6px 8px",
-                              borderRadius: 10,
-                              border: "1px solid #f3c58a",
-                              background: "#fff9f2",
-                              width: "fit-content",
+                              padding: "10px 12px",
+                              borderRadius: 12,
+                              border: "1px solid #efb969",
+                              background: "linear-gradient(180deg, #fff8ee, #fff2df)",
+                              width: "100%",
                             }}
                           >
-                            <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.78 }}>
-                              {L.refundState}: {refundStateLabel}
+                            <span
+                              className="orders-refund-hint"
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 900,
+                                letterSpacing: ".03em",
+                                textTransform: "uppercase",
+                                color: "#8d4f00",
+                              }}
+                            >
+                              {L.refundDecisionHint}
+                            </span>
+                            <span style={{ fontSize: 12, fontWeight: 800, opacity: 0.92 }}>
+                              {L.refundState}: <span className="mono">{refundStateLabel}</span>
                             </span>
                             <button
-                              className="btn"
+                              className="btn orders-refund-approve"
                               type="button"
                               onClick={() => confirmManualRefund(r.id)}
                               disabled={busyId === r.id}
                               title={L.confirmManual}
-                              style={{ whiteSpace: "nowrap" }}
                             >
                               {L.confirmManual}
                             </button>
                             <button
-                              className="btn"
+                              className="btn orders-refund-reject"
                               type="button"
                               onClick={() => failManualRefund(r.id)}
                               disabled={busyId === r.id}
                               title={L.failManual}
-                              style={{ whiteSpace: "nowrap" }}
                             >
                               {L.failManual}
                             </button>
@@ -1111,10 +1123,33 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
         .orders-actions-row .btn {
           min-width: 84px;
         }
+        .orders-actions-shell {
+          border: 1px solid rgba(20, 20, 20, 0.08);
+          background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(252, 247, 237, 0.9));
+          border-radius: 12px;
+          padding: 8px;
+        }
         .orders-manual-bar {
           max-width: 100%;
           overflow-x: auto;
-          padding-bottom: 2px;
+          padding-bottom: 4px;
+        }
+        .orders-manual-bar .btn {
+          white-space: nowrap;
+          min-height: 40px;
+          padding-inline: 14px;
+          font-size: 13px;
+          font-weight: 800;
+        }
+        .orders-refund-approve {
+          border-color: #9fd9b5 !important;
+          background: linear-gradient(180deg, #f0fff6, #e4f9ed) !important;
+          color: #16613a !important;
+        }
+        .orders-refund-reject {
+          border-color: #f0b4b4 !important;
+          background: linear-gradient(180deg, #fff3f3, #ffe6e6) !important;
+          color: #8f1f1f !important;
         }
         @media (max-width: 640px) {
           .orders-source-cell {
@@ -1130,13 +1165,22 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
             padding-inline: 10px;
             font-size: 12px;
           }
+          .orders-actions-shell {
+            padding: 6px;
+            border-radius: 10px;
+          }
           .orders-actions-row {
             gap: 5px;
           }
           .orders-manual-bar {
             gap: 5px;
-            padding: 6px;
+            padding: 8px;
             max-width: 100%;
+          }
+          .orders-manual-bar .btn {
+            min-height: 36px;
+            padding-inline: 10px;
+            font-size: 12px;
           }
           .orders-update-cell :global(.admin-select) {
             min-width: 0 !important;
