@@ -460,6 +460,17 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
 
   const canRequestRefund = (order: OrderRow): boolean => {
     const status = String(order.status || "").toUpperCase();
+    const lastRefundStatus = String(order.last_refund_status || "").toUpperCase();
+    const hasRefundRecord = parseRefundId(order.last_refund_id) > 0;
+    const hasRefundLifecycle =
+      hasRefundRecord ||
+      status.startsWith("REFUND_") ||
+      lastRefundStatus === "REQUESTED" ||
+      lastRefundStatus === "FAILED" ||
+      lastRefundStatus === "CONFIRMED" ||
+      lastRefundStatus === "RESTOCK_SCHEDULED" ||
+      lastRefundStatus === "RESTOCKED";
+    if (hasRefundLifecycle) return false;
     return status === "PAID" || status === "PAID_COD";
   };
 
@@ -886,7 +897,8 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
                   refundId > 0
                     ? `${isAr ? "طلب" : "Request"} #${refundId} ${refundStatus ? `(${refundStatus})` : ""}`
                     : "—";
-                const refundRequestDisabled = !canRequestRefund(order);
+                const refundRequestAllowed = canRequestRefund(order);
+                const hasRefundRecord = refundId > 0 || refundStatus.length > 0;
 
                 return (
                   <React.Fragment key={order.id}>
@@ -902,13 +914,29 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
                       <td data-label={isAr ? "الحالة" : "Status"}>{statusLabel(order.status)}</td>
                       <td data-label={isAr ? "الاسترجاع" : "Refund"}>{refundText}</td>
                       <td data-label={isAr ? "الإجمالي" : "Amount"} style={{ textAlign: "right" }}>{money(Number(order.total_jod || 0))}</td>
-                      <td data-label={isAr ? "إجراءات" : "Actions"} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <button className="btn" type="button" onClick={() => setExpandedOrders((prev) => ({ ...prev, [order.id]: !prev[order.id] }))}>
-                          {expanded ? (isAr ? "إخفاء" : "Hide") : (isAr ? "عرض" : "Show")}
-                        </button>
-                        <button className="btn" type="button" disabled={refundRequestDisabled} onClick={() => openRefundRequest(order)}>
-                          {isAr ? "طلب استرجاع" : "Request refund"}
-                        </button>
+                      <td data-label={isAr ? "إجراءات" : "Actions"}>
+                        <div style={{ display: "grid", gap: 6, minWidth: 170 }}>
+                          <button className="btn" type="button" onClick={() => setExpandedOrders((prev) => ({ ...prev, [order.id]: !prev[order.id] }))}>
+                            {expanded ? (isAr ? "إخفاء" : "Hide") : (isAr ? "عرض" : "Show")}
+                          </button>
+                          {refundRequestAllowed ? (
+                            <button className="btn btn-primary" type="button" onClick={() => openRefundRequest(order)}>
+                              {isAr ? "طلب استرجاع" : "Request refund"}
+                            </button>
+                          ) : hasRefundRecord ? (
+                            <span
+                              style={{
+                                border: "1px solid rgba(20,20,20,.15)",
+                                borderRadius: 10,
+                                padding: "6px 8px",
+                                fontSize: 12,
+                                background: "#f8f1e3",
+                              }}
+                            >
+                              {isAr ? "تم اتخاذ إجراء استرجاع" : "Refund action already recorded"}
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                     {expanded ? (
