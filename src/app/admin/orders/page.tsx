@@ -37,6 +37,7 @@ type OrdersRow = {
   sales_actor_role: string | null;
   sales_actor_staff_id: number | null;
   sales_actor_username: string | null;
+  sales_actor_display_name: string | null;
   sales_created_at: string | null;
   last_refund_id: number | null;
   last_refund_status: string | null;
@@ -133,6 +134,7 @@ export default async function AdminOrdersPage() {
             s.actor_role::text as sales_actor_role,
             s.actor_staff_id::int as sales_actor_staff_id,
             s.actor_username::text as sales_actor_username,
+            s.actor_display_name::text as sales_actor_display_name,
             s.created_at::text as sales_created_at,
             r.id::int as last_refund_id,
             r.status::text as last_refund_status,
@@ -144,12 +146,26 @@ export default async function AdminOrdersPage() {
             r.last_error::text as last_refund_error
       from orders o
       left join lateral (
-        select actor_role, actor_staff_id, actor_username, created_at
-          from sales_audit_logs
-         where order_id = o.id
-           and action = 'CREATE_SALE'
-         order by created_at desc
-         limit 1
+        select
+          l.actor_role,
+          l.actor_staff_id,
+          l.actor_username,
+          coalesce(
+            nullif(btrim(su.full_name), ''),
+            nullif(split_part(l.actor_username, '@', 1), ''),
+            nullif(btrim(l.actor_username), '')
+          ) as actor_display_name,
+          l.created_at
+        from sales_audit_logs l
+        left join staff_users su
+          on (
+            (l.actor_staff_id is not null and su.id = l.actor_staff_id)
+            or lower(su.username) = lower(l.actor_username)
+          )
+       where l.order_id = o.id
+         and l.action = 'CREATE_SALE'
+       order by l.created_at desc
+       limit 1
       ) s on true
       left join lateral (
         select id, status, method, amount_jod, requested_at, succeeded_at, failed_at, last_error
