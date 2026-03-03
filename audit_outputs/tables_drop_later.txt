@@ -1,0 +1,2 @@
+coupons
+email_send_log
