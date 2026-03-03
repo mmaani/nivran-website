@@ -1,6 +1,7 @@
+-- PRODUCTION PREP ONLY
+-- Do NOT run until preview rename + app verification are completed and approved.
 BEGIN;
 
--- Preview-safe archive renames (no DROPs).
 ALTER TABLE public.batches RENAME TO batches_archive_20260303;
 ALTER TABLE public.order_refunds RENAME TO order_refunds_archive_20260303;
 ALTER TABLE public.product_media RENAME TO product_media_archive_20260303;

@@ -1,10 +1,2 @@
-batches
 coupons
-customer_cart_items
-customer_carts
 email_send_log
-order_refunds
-password_reset_tokens
-payments
-product_media
-shipments

@@ -20,6 +20,7 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const isProd = process.env.VERCEL_ENV === "production";
 
   return (
     <html
@@ -45,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
       <body>
         {children}
+        {isProd ? <Script src="/_vercel/insights/script.js" strategy="afterInteractive" /> : null}
       </body>
     </html>
   );
