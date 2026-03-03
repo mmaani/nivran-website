@@ -54,11 +54,12 @@ export async function ensureRefundTablesSafe(): Promise<void> {
     foreign key (order_id) references orders(id)
   `);
 
+  await db.query(`alter table refunds drop constraint if exists refunds_status_check`);
   await db.query(`
     alter table refunds
     add constraint refunds_status_check
     check (status in ('REQUESTED','CONFIRMED','RESTOCK_SCHEDULED','RESTOCKED','FAILED'))
-  `).catch(() => undefined);
+  `);
 
   await db.query(`
     create table if not exists restock_jobs (
@@ -80,6 +81,14 @@ export async function ensureRefundTablesSafe(): Promise<void> {
   await db.query(`alter table restock_jobs add column if not exists updated_at timestamptz not null default now()`);
   await db.query(`alter table restock_jobs add column if not exists attempts int not null default 0`);
   await db.query(`alter table restock_jobs add column if not exists last_error text`);
+  await db.query(`alter table restock_jobs alter column order_id drop not null`).catch(() => undefined);
+
+  await db.query(`alter table restock_jobs drop constraint if exists restock_jobs_status_check`);
+  await db.query(`
+    alter table restock_jobs
+    add constraint restock_jobs_status_check
+    check (status in ('SCHEDULED','RESTOCKED','DONE','CANCELED','FAILED'))
+  `);
 
   await db.query(`create unique index if not exists restock_jobs_refund_id_ux on restock_jobs(refund_id)`);
   await db.query(`create index if not exists restock_jobs_run_at_idx on restock_jobs(status, run_at)`);
