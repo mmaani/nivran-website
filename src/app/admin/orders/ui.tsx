@@ -752,7 +752,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                     </td>
 
                     <td data-label={L.cart} className="ltr">
-                      <span className="mono" title={r.cart_id}>
+                      <span className="mono orders-cart-id" title={r.cart_id}>
                         {compactCartId(r.cart_id)}
                       </span>
                     </td>
@@ -783,7 +783,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                     </td>
 
                     <td data-label={L.source}>
-                      <div style={{ display: "grid", gap: 6 }}>
+                      <div className="orders-source-cell" style={{ display: "grid", gap: 6 }}>
                         <span
                           style={{
                             ...sourceBadgeStyle(sourceKind),
@@ -830,9 +830,9 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                       {new Date(r.created_at).toLocaleString(isAr ? "ar-JO" : undefined)}
                     </td>
 
-                    <td data-label={L.details}>
+                    <td data-label={L.details} className="orders-actions-cell">
                       <div style={{ display: "grid", gap: 6 }}>
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                        <div className="orders-actions-row" style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                           <button className="btn" type="button" onClick={() => toggleDetails(r.id)}>
                             {opened ? L.hideDetails : L.showDetails}
                           </button>
@@ -850,6 +850,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                         </div>
                         {canConfirmManual ? (
                           <div
+                            className="orders-manual-bar"
                             style={{
                               display: "inline-flex",
                               gap: 6,
@@ -890,7 +891,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                       </div>
                     </td>
 
-                    <td data-label={L.update}>
+                    <td data-label={L.update} className="orders-update-cell">
                       <select
                         value={r.status}
                         disabled={busyId === r.id}
@@ -1083,6 +1084,54 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
           </div>
         </div>
       ) : null}
+      <style jsx>{`
+        .orders-cart-id {
+          max-width: 100%;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          display: inline-block;
+          vertical-align: top;
+        }
+        .orders-source-cell {
+          max-width: 260px;
+        }
+        .orders-actions-row .btn {
+          min-width: 84px;
+        }
+        .orders-manual-bar {
+          max-width: 100%;
+          overflow-x: auto;
+          padding-bottom: 2px;
+        }
+        @media (max-width: 640px) {
+          .orders-source-cell {
+            max-width: 100%;
+            gap: 4px;
+          }
+          .orders-source-cell .mono {
+            overflow-wrap: anywhere;
+            white-space: normal;
+          }
+          .orders-actions-cell :global(.btn) {
+            min-width: 72px;
+            padding-inline: 10px;
+            font-size: 12px;
+          }
+          .orders-actions-row {
+            gap: 5px;
+          }
+          .orders-manual-bar {
+            gap: 5px;
+            padding: 6px;
+            max-width: 100%;
+          }
+          .orders-update-cell :global(.admin-select) {
+            min-width: 0 !important;
+            width: 100% !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
