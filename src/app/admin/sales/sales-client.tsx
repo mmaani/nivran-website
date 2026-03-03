@@ -154,6 +154,22 @@ function parseRefundId(value: unknown): number {
   return Math.trunc(n);
 }
 
+function toDisplayPersonName(rawValue: string, fallback: string, isAr: boolean): string {
+  const raw = String(rawValue || "").trim();
+  if (!raw) return fallback;
+  const local = raw.includes("@") ? raw.split("@")[0] : raw;
+  const tokens = local
+    .replace(/[._-]+/g, " ")
+    .split(" ")
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0);
+  if (tokens.length === 0) return fallback;
+  if (isAr) return tokens.join(" ");
+  return tokens
+    .map((token) => `${token.charAt(0).toUpperCase()}${token.slice(1).toLowerCase()}`)
+    .join(" ");
+}
+
 function resolveCartLinePricing(product: Product, variantId: number | null, isAr: boolean): { unitPriceJod: number; variantLabel: string } {
   if (variantId) {
     const selectedVariant = product.variants?.find((entry) => normalizeId(entry.id) === variantId) || null;
@@ -231,6 +247,10 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
   }, []);
 
   const isAr = lang === "ar";
+  const viewerDisplayName = useMemo(
+    () => toDisplayPersonName(viewerName, isAr ? "مندوب المبيعات" : "Sales Rep", isAr),
+    [viewerName, isAr]
+  );
 
   const load = useCallback(async (offsetOverride?: number) => {
     const offset = typeof offsetOverride === "number" ? Math.max(0, Math.trunc(offsetOverride)) : ordersOffset;
@@ -723,26 +743,36 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
 
   return (
     <div className="admin-grid" style={{ gap: 16 }} dir={isAr ? "rtl" : "ltr"}>
-      <h1 className="admin-h1">{isAr ? "بوابة المبيعات" : "Sales Portal"}</h1>
-      <p className="admin-muted" style={{ marginTop: -8 }}>
-        {viewerRole === "sales"
-          ? isAr
-            ? `مرحبًا ${viewerName || "مندوب المبيعات"} — راقب مبيعاتك وأنشئ طلبات استرجاع للإدارة.`
-            : `Welcome ${viewerName || "Sales Rep"} - monitor your transactions and create refund requests for admin approval.`
-          : isAr
-            ? "وضع الإدارة: يمكنك متابعة جميع عمليات البيع."
-            : "Admin mode: you can review all sales transactions."}
-      </p>
+      <section className="admin-card sales-gate-hero">
+        <div style={{ display: "grid", gap: 8 }}>
+          <span className="admin-kicker">{isAr ? "بوابة المبيعات غير المتصلة" : "Offline Sales Gate"}</span>
+          <h1 className="admin-h1" style={{ margin: 0 }}>{isAr ? "مركز تنفيذ المبيعات داخل المتجر" : "In-Store Sales Command Desk"}</h1>
+          <p className="admin-muted" style={{ margin: 0 }}>
+            {viewerRole === "sales"
+              ? isAr
+                ? `مرحبًا ${viewerDisplayName}، نفّذ عمليات البيع بسرعة وبدقة، وأنشئ طلبات الاسترجاع للإدارة عند الحاجة.`
+                : `Welcome ${viewerDisplayName}. Complete offline transactions with precision and submit refund requests for admin approval.`
+              : isAr
+                ? "وضع الإدارة مفعل: إشراف كامل على العمليات، المدفوعات، والاسترجاعات."
+                : "Admin mode enabled: full oversight for transactions, payments, and refunds."}
+          </p>
+        </div>
+        <div className="sales-gate-hero-ops">
+          <span className="admin-tag-chip">{isAr ? "تنفيذ فوري للطلب" : "Instant order execution"}</span>
+          <span className="admin-tag-chip">{isAr ? "تتبع عميل في خطوة واحدة" : "Single-step customer capture"}</span>
+          <span className="admin-tag-chip">{isAr ? "استرجاع مضبوط بموافقة الإدارة" : "Controlled refund approval flow"}</span>
+        </div>
+      </section>
 
       <div className="admin-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-        <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "المنتجات المعروضة" : "Visible products"}</b><div>{visibleProducts.length}</div></div>
-        <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "العروض" : "Promotions"}</b><div>{promos.length}</div></div>
-        <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "عناصر السلة" : "Cart items"}</b><div>{itemCount}</div></div>
-        <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "المجموع الفرعي" : "Subtotal"}</b><div>{money(subtotal)}</div></div>
-        <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "إجمالي المعاملات" : "Sales transactions"}</b><div>{ordersTransactionsCount}</div></div>
-        <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "إجمالي البيع قبل الاسترجاع" : "Gross sales"}</b><div>{money(ordersGrossSalesJod)}</div></div>
-        <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "إجمالي المسترجع" : "Refunded amount"}</b><div>-{money(ordersRefundedSalesJod)}</div></div>
-        <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "صافي المبيعات" : "Net sales"}</b><div>{money(ordersTotalSalesJod)}</div></div>
+        <div className="admin-card sales-metric-card" style={{ padding: 12 }}><b>{isAr ? "المنتجات المعروضة" : "Visible products"}</b><div>{visibleProducts.length}</div></div>
+        <div className="admin-card sales-metric-card" style={{ padding: 12 }}><b>{isAr ? "العروض" : "Promotions"}</b><div>{promos.length}</div></div>
+        <div className="admin-card sales-metric-card" style={{ padding: 12 }}><b>{isAr ? "عناصر السلة" : "Cart items"}</b><div>{itemCount}</div></div>
+        <div className="admin-card sales-metric-card" style={{ padding: 12 }}><b>{isAr ? "المجموع الفرعي" : "Subtotal"}</b><div>{money(subtotal)}</div></div>
+        <div className="admin-card sales-metric-card" style={{ padding: 12 }}><b>{isAr ? "إجمالي المعاملات" : "Sales transactions"}</b><div>{ordersTransactionsCount}</div></div>
+        <div className="admin-card sales-metric-card" style={{ padding: 12 }}><b>{isAr ? "إجمالي البيع قبل الاسترجاع" : "Gross sales"}</b><div>{money(ordersGrossSalesJod)}</div></div>
+        <div className="admin-card sales-metric-card sales-metric-card-refund" style={{ padding: 12 }}><b>{isAr ? "إجمالي المسترجع" : "Refunded amount"}</b><div>-{money(ordersRefundedSalesJod)}</div></div>
+        <div className="admin-card sales-metric-card sales-metric-card-net" style={{ padding: 12 }}><b>{isAr ? "صافي المبيعات" : "Net sales"}</b><div>{money(ordersTotalSalesJod)}</div></div>
       </div>
 
       <div className="admin-card" style={{ padding: 14 }}>

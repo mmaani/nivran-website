@@ -1022,6 +1022,48 @@
 }
 
 /* Sales portal responsive polish */
+.sales-gate-hero {
+  background:
+    radial-gradient(120% 220% at 0% 0%, rgba(199, 165, 106, 0.16), transparent 52%),
+    radial-gradient(120% 220% at 100% 0%, rgba(255, 255, 255, 0.55), transparent 52%),
+    linear-gradient(135deg, #fffdf8 0%, #f7efdf 100%);
+  border-color: rgba(167, 130, 62, 0.35);
+  box-shadow: 0 14px 34px rgba(24, 18, 10, 0.11);
+  display: grid;
+  gap: 12px;
+}
+
+.sales-gate-hero-ops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sales-metric-card {
+  background: linear-gradient(180deg, #fffdf9, #fbf4e8);
+}
+
+.sales-metric-card b {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.sales-metric-card > div {
+  font-size: 20px;
+  font-weight: 900;
+  margin-top: 4px;
+}
+
+.sales-metric-card-refund {
+  border-color: rgba(190, 90, 82, 0.35);
+  background: linear-gradient(180deg, #fff8f7, #fef0ee);
+}
+
+.sales-metric-card-net {
+  border-color: rgba(34, 121, 72, 0.35);
+  background: linear-gradient(180deg, #f8fff9, #ecf7ef);
+}
+
 .sales-orders-table {
   min-width: 980px;
 }
@@ -1039,6 +1081,10 @@
 }
 
 @media (max-width: 640px) {
+  .sales-gate-hero {
+    padding: 12px;
+  }
+
   .sales-orders-table {
     min-width: 0;
   }
