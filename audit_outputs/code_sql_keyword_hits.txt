@@ -1,0 +1,935 @@
+src/components/SafeImg.tsx:3:import React, { useEffect, useState } from "react";
+src/components/SafeImg.tsx:4:import Image from "next/image";
+src/components/CartHydrator.tsx:3:import { useEffect } from "react";
+src/components/CartHydrator.tsx:168: * Only call server "merge" when local cart is meaningfully different from server cart.
+src/components/AddToCartButton.tsx:3:import React, { useEffect, useMemo, useRef, useState } from "react";
+src/components/AddToCartButton.tsx:4:import { useRouter } from "next/navigation";
+src/components/AddToCartButton.tsx:5:import { clampQty, normalizeCartItems, readLocalCart, writeLocalCart, type CartItem } from "@/lib/cartStore";
+src/components/brand/BrandLogo.tsx:5:import { useState } from "react";
+src/components/brand/BrandLogo.tsx:6:import Link from "next/link";
+src/components/brand/HeaderLogo.tsx:5:import Link from "next/link";
+src/components/brand/HeaderLogo.tsx:6:import { useEffect, useMemo, useState } from "react";
+src/components/brand/HeaderLogo.tsx:21:    const update = () => {
+src/components/site/LocaleSwitchLink.tsx:3:import Link from "next/link";
+src/components/site/LocaleSwitchLink.tsx:4:import { usePathname } from "next/navigation";
+src/components/site/Footer.tsx:1:import Link from "next/link";
+src/components/ui/Button.tsx:1:import type { ButtonHTMLAttributes, CSSProperties } from "react";
+src/components/ui/Card.tsx:1:import type { CSSProperties, HTMLAttributes } from "react";
+src/components/ui/Input.tsx:1:import type { CSSProperties, InputHTMLAttributes } from "react";
+src/components/CartHeaderIcon.tsx:3:import React, { useEffect, useState } from "react";
+src/components/CartHeaderIcon.tsx:4:import { usePathname } from "next/navigation";
+src/lib/http.ts:8: * Safely parse JSON from a response without throwing.
+src/lib/email.ts:1:import { Resend } from "resend";
+src/lib/email.ts:2:import { logEmailSendAttempt } from "@/lib/emailLog";
+src/lib/email.ts:13:  const from = process.env.EMAIL_FROM;
+src/lib/email.ts:90:  const from = getEmailFrom();
+src/lib/catalogFallback.ts:2:import { categoryLabels, products as staticProducts, type Locale } from "@/lib/siteContent";
+src/lib/identity.ts:1:import crypto from "crypto";
+src/lib/identity.ts:2:import { db } from "@/lib/db";
+src/lib/identity.ts:3:import { hasColumn } from "@/lib/dbSchema";
+src/lib/identity.ts:84:        await db.query(`select 1 from staff_users limit 1`);
+src/lib/identity.ts:85:        await db.query(`select 1 from customers limit 1`);
+src/lib/identity.ts:122:      customer_id bigint not null references customers(id) on delete cascade,
+src/lib/identity.ts:135:  await db.query(`update customer_sessions set expires_at = now() + interval '30 days' where expires_at is null`);
+src/lib/identity.ts:142:      customer_id bigint not null references customers(id) on delete cascade,
+src/lib/identity.ts:164:      customer_id bigint not null references customers(id) on delete cascade,
+src/lib/identity.ts:181:  await db.query(`update customer_email_verification_codes set attempts = 0 where attempts is null`);
+src/lib/identity.ts:188:        select 1
+src/lib/identity.ts:189:          from information_schema.columns
+src/lib/identity.ts:236:        select 1 from information_schema.columns
+src/lib/identity.ts:239:        select 1 from information_schema.columns
+src/lib/identity.ts:285:    `select id, email, password_hash,
+src/lib/identity.ts:294:       from customers
+src/lib/identity.ts:328:    `insert into customers (
+src/lib/identity.ts:363:    `insert into customer_sessions (customer_id, token_hash, expires_at)
+src/lib/identity.ts:374:    `update customer_sessions
+src/lib/identity.ts:409:    `select customer_id
+src/lib/identity.ts:410:       from customer_sessions
+src/lib/identity.ts:437:    `select id,
+src/lib/identity.ts:441:       from staff_users
+src/lib/identity.ts:475:          `update staff_users
+src/lib/identity.ts:482:          `update staff_users
+src/lib/identity.ts:495:      `insert into staff_users (${loginColumn}, password_hash, full_name, role, is_active)
+src/lib/identity.ts:547:    `select created_at::text as created_at
+src/lib/identity.ts:548:       from customer_email_verification_codes
+src/lib/identity.ts:564:    `select count(*)::int as n
+src/lib/identity.ts:565:       from customer_email_verification_codes
+src/lib/identity.ts:573:      `select created_at::text as created_at
+src/lib/identity.ts:574:         from customer_email_verification_codes
+src/lib/identity.ts:589:    `update customer_email_verification_codes
+src/lib/identity.ts:607:      `insert into customer_email_verification_codes (customer_id, code, code_hash, salt, expires_at)
+src/lib/identity.ts:613:      `insert into customer_email_verification_codes (customer_id, code_hash, salt, expires_at)
+src/lib/identity.ts:619:      `insert into customer_email_verification_codes (customer_id, code, expires_at)
+src/lib/identity.ts:629:      `insert into customer_email_verification_codes (customer_id, code, code_hash, salt, expires_at)
+src/lib/identity.ts:663:    select id,
+src/lib/identity.ts:670:      from customer_email_verification_codes
+src/lib/identity.ts:684:    await db.query(`update customer_email_verification_codes set used_at = now() where id = $1`, [row.id]);
+src/lib/identity.ts:701:    await db.query(`update customer_email_verification_codes set attempts = attempts + 1 where id = $1`, [row.id]);
+src/lib/identity.ts:705:  await db.query(`update customer_email_verification_codes set used_at = now() where id = $1`, [row.id]);
+src/lib/identity.ts:707:    `update customers
+src/lib/identity.ts:723:    `select email_verified_at::text as email_verified_at from customers where id = $1`,
+src/lib/adminSession.ts:1:import crypto from "crypto";
+src/lib/adminSession.ts:2:import { cookies } from "next/headers";
+src/lib/adminSession.ts:3:import { db } from "@/lib/db";
+src/lib/adminSession.ts:4:import { verifyPassword } from "@/lib/identity";
+src/lib/adminSession.ts:179:    `select count(*)::text as c
+src/lib/adminSession.ts:180:       from staff_login_attempts
+src/lib/adminSession.ts:191:    `select id, username, password_hash, role, is_active
+src/lib/adminSession.ts:192:       from staff_users
+src/lib/adminSession.ts:203:  await db.query(`insert into staff_login_attempts (username, success) values ($1,$2)`, [username, valid]);
+src/lib/refunds.ts:3:import type { DbTx } from "@/lib/db";
+src/lib/refunds.ts:100:    `update refunds
+src/lib/refunds.ts:123:    `select id, status, payment_method, paytabs_tran_ref from orders where id = $1 for update`,
+src/lib/refunds.ts:131:  const existing = await trx.query<RefundRow>(`select * from refunds where idempotency_key = $1 limit 1`, [input.idempotencyKey]);
+src/lib/refunds.ts:137:    `insert into refunds
+src/lib/refunds.ts:149:    const ref = await trx.query<RefundRow>(`select * from refunds where idempotency_key = $1 limit 1`, [input.idempotencyKey]);
+src/lib/refunds.ts:154:  await trx.query(`update orders set status = 'REFUND_PENDING', updated_at = now() where id = $1`, [input.orderId]);
+src/lib/refunds.ts:159:  const row = await trx.query<{ status: RefundStatus }>(`select status from refunds where id = $1 for update`, [input.refundId]);
+src/lib/refunds.ts:176:    `select status, order_id from refunds where id = $1 for update`,
+src/lib/refunds.ts:190:  await trx.query(`update orders set status = 'REFUNDED', updated_at = now() where id = $1`, [current.order_id]);
+src/lib/refunds.ts:195:  const row = await trx.query<{ status: RefundStatus }>(`select status from refunds where id = $1 for update`, [input.refundId]);
+src/lib/refunds.ts:201:    `insert into restock_jobs (refund_id, status, run_at, created_at, updated_at)
+src/lib/refunds.ts:204:     do update set status = 'SCHEDULED', run_at = excluded.run_at, updated_at = now()`,
+src/lib/refunds.ts:215:    `select *
+src/lib/refunds.ts:216:       from restock_jobs
+src/lib/refunds.ts:219:      for update skip locked
+src/lib/refunds.ts:231:        `select order_id, status from refunds where id = $1 for update`,
+src/lib/refunds.ts:237:      const orderRes = await trx.query<{ items: unknown }>(`select items from orders where id = $1 for update`, [refund.order_id]);
+src/lib/refunds.ts:241:        const p = await trx.query<ProductRow>(`select slug, inventory_qty from products where slug = $1 for update`, [d.slug]);
+src/lib/refunds.ts:244:          `update products set inventory_qty = coalesce(inventory_qty, 0) + $2::int, updated_at = now() where slug = $1`,
+src/lib/refunds.ts:250:      await trx.query(`update refunds set restocked = true where id = $1`, [job.refund_id]);
+src/lib/refunds.ts:251:      await trx.query(`update restock_jobs set status = 'RESTOCKED', updated_at = now() where id = $1`, [job.id]);
+src/lib/refunds.ts:257:        `update restock_jobs
+src/lib/refundsSchema.ts:3:import { db } from "@/lib/db";
+src/lib/inbox.ts:2:import { db } from "@/lib/db";
+src/lib/inbox.ts:52:        await db.query(`select 1 from contact_submissions limit 1`);
+src/lib/inbox.ts:53:        await db.query(`select 1 from newsletter_subscribers limit 1`);
+src/lib/rateLimit.ts:1:import { db } from "@/lib/db";
+src/lib/rateLimit.ts:32:    `select count(*)::text as c
+src/lib/rateLimit.ts:33:       from auth_rate_limits
+src/lib/rateLimit.ts:45:  await db.query(`insert into auth_rate_limits (key, action) values ($1,$2)`, [args.key, args.action]);
+src/lib/siteContent.ts:51:      en: "A clean profile that opens bright, settles soft, and stays balanced from day to night.",
+src/lib/paytabs.ts:2:import crypto from "crypto";
+src/lib/cartStore.server.ts:2:import { db } from "@/lib/db";
+src/lib/cartStore.server.ts:3:import { CartItem, normalizeCartItems, cartQty, cartSubtotalJod } from "@/lib/cartStore";
+src/lib/cartStore.server.ts:46:    `select items from carts where cart_id=$1 limit 1`,
+src/lib/cartStore.server.ts:76:    `insert into carts (cart_id, items, updated_at)
+src/lib/cartStore.server.ts:78:     on conflict (cart_id) do update set items=excluded.items, updated_at=now()`,
+src/lib/cartStore.server.ts:85:// Re-export pure helpers for server routes that already import them from this module.
+src/lib/cartStore.server.ts:86:export { normalizeCartItems, mergeCartSum } from "@/lib/cartStore";
+src/lib/db.ts:2:import { Pool, PoolClient, QueryResult, QueryResultRow } from "pg";
+src/lib/orderStatusToken.ts:1:import crypto from "crypto";
+src/lib/adminCustomers.ts:2:import { db } from "@/lib/db";
+src/lib/adminCustomers.ts:3:import { ensureIdentityTables } from "@/lib/identity";
+src/lib/adminCustomers.ts:88:      from customers c
+src/lib/adminCustomers.ts:89:      left join (
+src/lib/adminCustomers.ts:95:        from orders
+src/lib/adminCustomers.ts:105:    db.query<{ total: string }>(`select count(*)::text as total from customers`),
+src/lib/adminCustomers.ts:160:      from customers
+src/lib/adminCustomers.ts:174:      from orders
+src/lib/adminCustomers.ts:192:      from customer_sessions
+src/lib/guards.ts:1:import { readSalesFromRequest, verifyAdminFromRequest } from "@/lib/adminSession";
+src/lib/ordersSchema.ts:1:import { db } from "@/lib/db";
+src/lib/ordersSchema.ts:68:        select 1 from information_schema.tables
+src/lib/ordersSchema.ts:75:            on delete set null;
+src/lib/ordersSchema.ts:112:          on delete cascade;
+src/lib/ordersSchema.ts:149:  await db.query(`update orders set currency='JOD' where currency is null;`);
+src/lib/ordersSchema.ts:150:  await db.query(`update orders set locale='en' where locale is null;`);
+src/lib/ordersSchema.ts:151:  await db.query(`update orders set payment_method='PAYTABS' where payment_method is null;`);
+src/lib/ordersSchema.ts:152:  await db.query(`update orders set created_at=coalesce(created_at, now()) where created_at is null;`);
+src/lib/ordersSchema.ts:153:  await db.query(`update orders set updated_at=coalesce(updated_at, created_at, now()) where updated_at is null;`);
+src/lib/ordersSchema.ts:161:        select 1 from information_schema.columns
+src/lib/ordersSchema.ts:172:          update order_items
+src/lib/ordersSchema.ts:175:          update order_items
+src/lib/ordersSchema.ts:189:      if not exists (select 1 from pg_constraint where conname='orders_discount_source_chk') then
+src/lib/ordersSchema.ts:199:      if not exists (select 1 from pg_constraint where conname='orders_single_discount_chk') then
+src/lib/paytabsRefund.ts:3:import { getPaytabsEnv } from "@/lib/paytabs";
+src/lib/orders.ts:2:import type { DbTx } from "@/lib/db";
+src/lib/orders.ts:3:import { db } from "@/lib/db";
+src/lib/orders.ts:83:        select 1 from pg_constraint where conname='orders_discount_source_chk'
+src/lib/orders.ts:96:        select 1 from pg_constraint where conname='orders_single_discount_chk'
+src/lib/orders.ts:111:    update orders
+src/lib/orders.ts:118:    update orders
+src/lib/orders.ts:142:  // Raw value from the order payload (may contain underscores, uppercase, etc.)
+src/lib/orders.ts:146:  // Optional variant id from the order payload (when slug is missing/incorrect)
+src/lib/orders.ts:279:      `select product_slug::text as slug
+src/lib/orders.ts:280:         from variants
+src/lib/orders.ts:315:      `select slug::text as slug
+src/lib/orders.ts:316:         from products
+src/lib/orders.ts:355:    `select cart_id, status, inventory_committed_at, items
+src/lib/orders.ts:356:       from orders
+src/lib/orders.ts:375:      `update orders
+src/lib/orders.ts:393:      `update products
+src/lib/orders.ts:402:    `update orders
+src/lib/orders.ts:415:    `select cart_id, status, inventory_committed_at, items
+src/lib/orders.ts:416:       from orders
+src/lib/orders.ts:434:      `update orders
+src/lib/orders.ts:451:      `update products
+src/lib/orders.ts:460:    `update orders
+src/lib/orders.ts:482:        await db.query(`select 1 from orders limit 1`);
+src/lib/orders.ts:483:        await db.query(`select 1 from paytabs_callbacks limit 1`);
+src/lib/homeCopy.ts:1:import type { Locale } from "@/lib/locale";
+src/lib/homeCopy.ts:69:  premiumAccessBody: "Perfume starts from 15 JOD",
+src/lib/shipping.ts:3:import { db } from "@/lib/db";
+src/lib/shipping.ts:28:      `select value_number from store_settings where key='free_shipping_threshold_jod' limit 1`
+src/lib/promotions.ts:2:import type { DbExecutor, DbTx } from "@/lib/db";
+src/lib/promotions.ts:194:    `select id, promo_kind, code, title_en, title_ar, discount_type, discount_value,
+src/lib/promotions.ts:199:       from promotions
+src/lib/promotions.ts:231:    `select id, promo_kind, code, title_en, title_ar, discount_type, discount_value,
+src/lib/promotions.ts:236:       from promotions
+src/lib/promotions.ts:295:    `update promotions
+src/lib/admin-lang.ts:2:import { cookies } from "next/headers";
+src/lib/admin-page.ts:1:import { readAdminSessionFromCookies } from "@/lib/adminSession";
+src/lib/emailLog.ts:1:import { db } from "@/lib/db";
+src/lib/emailLog.ts:41:    `insert into email_send_logs (provider, kind, "to", subject, ok, attempt, provider_id, error, meta)
+src/lib/emailLog.ts:66:    `select id
+src/lib/emailLog.ts:67:       from email_send_logs
+src/lib/adminAudit.ts:2:import type { DbTx } from "@/lib/db";
+src/lib/adminAudit.ts:39:    `insert into admin_audit_logs (admin_id, action, entity, entity_id, metadata, ip_address)
+src/lib/customerAuth.ts:2:import crypto from "crypto";
+src/lib/customerAuth.ts:3:import { db } from "@/lib/db";
+src/lib/customerAuth.ts:4:import { hasColumn } from "@/lib/dbSchema";
+src/lib/customerAuth.ts:50:          `select customer_id
+src/lib/customerAuth.ts:51:             from customer_sessions
+src/lib/customerAuth.ts:59:          `select customer_id
+src/lib/customerAuth.ts:60:             from customer_sessions
+src/lib/customerAuth.ts:76:      `select customer_id
+src/lib/customerAuth.ts:77:         from customer_sessions
+src/lib/cartStore.ts:53: * Accept BOTH camelCase and snake_case fields from DB/API:
+src/lib/dbSchema.ts:2:import { db } from "@/lib/db";
+src/lib/dbSchema.ts:15:    `select exists (
+src/lib/dbSchema.ts:16:       select 1
+src/lib/dbSchema.ts:17:         from information_schema.columns
+src/lib/catalog.ts:3:import { db, isDbConnectivityError } from "@/lib/db";
+src/lib/catalog.ts:9: * - Products are managed from /admin/catalog (not hardcoded in siteContent)
+src/lib/catalog.ts:44:    update products
+src/lib/catalog.ts:65:    update products
+src/lib/catalog.ts:75:      select slug
+src/lib/catalog.ts:76:      from products
+src/lib/catalog.ts:81:    update products p
+src/lib/catalog.ts:83:    from d
+src/lib/catalog.ts:105:  // Otherwise, admins cannot delete categories because the bootstrap would re-insert them.
+src/lib/catalog.ts:107:    insert into categories (key, name_en, name_ar, sort_order, is_active, is_promoted)
+src/lib/catalog.ts:108:    select v.key, v.name_en, v.name_ar, v.sort_order, v.is_active, v.is_promoted
+src/lib/catalog.ts:109:      from (
+src/lib/catalog.ts:117:     where not exists (select 1 from categories limit 1);
+src/lib/catalog.ts:163:      select code
+src/lib/catalog.ts:164:      from promotions
+src/lib/catalog.ts:169:    update promotions p
+src/lib/catalog.ts:171:    from d
+src/lib/catalog.ts:178:    update promotions
+src/lib/catalog.ts:193:        select 1 from pg_constraint where conname='promotions_kind_code_chk'
+src/lib/catalog.ts:222:    insert into store_settings (key, value_number)
+src/lib/catalog.ts:243:      product_id bigint not null references products(id) on delete cascade,
+src/lib/catalog.ts:325:        await db.query(`select 1 from products limit 1`);
+src/lib/catalog.ts:326:        await db.query(`select 1 from categories limit 1`);
+src/lib/catalog.ts:327:        await db.query(`select 1 from promotions limit 1`);
+src/middleware.ts:1:import { NextRequest, NextResponse } from "next/server";
+src/app/styleguide/page.tsx:1:import type { Metadata } from "next";
+src/app/styleguide/page.tsx:2:import Header from "@/components/site/Header";
+src/app/styleguide/page.tsx:3:import Footer from "@/components/site/Footer";
+src/app/layout.tsx:1:import type { Metadata } from "next";
+src/app/layout.tsx:3:import { cairoArabic, inter, playfairDisplay } from "./ui/fonts";
+src/app/layout.tsx:4:import Script from "next/script";
+src/app/layout.tsx:5:import { Analytics } from "@vercel/analytics/next";
+src/app/(store)/[locale]/account/login/page.tsx:3:import React, { useMemo, useState } from "react";
+src/app/(store)/[locale]/account/login/page.tsx:4:import { useParams } from "next/navigation";
+src/app/(store)/[locale]/account/login/page.tsx:5:import { readJsonSafe } from "@/lib/http";
+src/app/(store)/[locale]/account/login/page.tsx:6:import { normalizeCartItems, readLocalCart, type CartItem, writeLocalCart } from "@/lib/cartStore";
+src/app/(store)/[locale]/account/forgot-password/page.tsx:3:import { useParams } from "next/navigation";
+src/app/(store)/[locale]/account/forgot-password/page.tsx:4:import { useState } from "react";
+src/app/(store)/[locale]/account/forgot-password/page.tsx:5:import { isRecord, readErrorMessage } from "@/lib/http-client";
+src/app/(store)/[locale]/account/signup/page.tsx:3:import { useMemo, useState } from "react";
+src/app/(store)/[locale]/account/signup/page.tsx:4:import { useParams } from "next/navigation";
+src/app/(store)/[locale]/account/signup/page.tsx:5:import { CART_LOCAL_KEY } from "@/lib/cartStore";
+src/app/(store)/[locale]/account/signup/page.tsx:6:import { isRecord, readErrorMessage } from "@/lib/http-client";
+src/app/(store)/[locale]/account/orders/[id]/page.tsx:3:import { useEffect, useMemo, useState } from "react";
+src/app/(store)/[locale]/account/orders/[id]/page.tsx:4:import { useParams } from "next/navigation";
+src/app/(store)/[locale]/account/verify/page.tsx:3:import React, { useEffect, useMemo, useState } from "react";
+src/app/(store)/[locale]/account/verify/page.tsx:4:import { useParams, useSearchParams } from "next/navigation";
+src/app/(store)/[locale]/account/verify/page.tsx:5:import { isRecord, readErrorMessage } from "@/lib/http-client";
+src/app/(store)/[locale]/account/page.tsx:1:import AccountClient from "./AccountClient";
+src/app/(store)/[locale]/account/reset-password/page.tsx:3:import { useParams, useSearchParams } from "next/navigation";
+src/app/(store)/[locale]/account/reset-password/page.tsx:4:import { useState } from "react";
+src/app/(store)/[locale]/account/AccountClient.tsx:3:import { useEffect, useMemo, useRef, useState } from "react";
+src/app/(store)/[locale]/account/AccountClient.tsx:4:import { readJsonSafe } from "@/lib/http";
+src/app/(store)/[locale]/account/AccountClient.tsx:5:import { mergeCartSum, normalizeCartItems, readLocalCart, type CartItem, writeLocalCart } from "@/lib/cartStore";
+src/app/(store)/[locale]/layout.tsx:1:import Link from "next/link";
+src/app/(store)/[locale]/layout.tsx:2:import CartHeaderIcon from "@/components/CartHeaderIcon";
+src/app/(store)/[locale]/layout.tsx:3:import CartHydrator from "@/components/CartHydrator";
+src/app/(store)/[locale]/layout.tsx:4:import LocaleSwitchLink from "@/components/site/LocaleSwitchLink";
+src/app/(store)/[locale]/layout.tsx:5:import Footer from "@/components/site/Footer";
+src/app/(store)/[locale]/layout.tsx:6:import HeaderLogo from "@/components/brand/HeaderLogo";
+src/app/(store)/[locale]/product/ProductCatalogClient.tsx:3:import Image from "next/image";
+src/app/(store)/[locale]/product/ProductCatalogClient.tsx:4:import { useMemo, useState } from "react";
+src/app/(store)/[locale]/product/ProductCatalogClient.tsx:5:import type { Locale, Product, ProductVariant, ScentFamily, Concentration } from "@/lib/siteContent";
+src/app/(store)/[locale]/product/ProductCatalogClient.tsx:6:import { categoryLabels, concentrationLabels, defaultVariant, minPrice, scentFamilyLabels } from "@/lib/siteContent";
+src/app/(store)/[locale]/product/ProductCatalogClient.tsx:59:            <select className="input" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+src/app/(store)/[locale]/product/ProductCatalogClient.tsx:69:            <select className="input" value={family} onChange={(e) => setFamily(e.target.value as ScentFamily | "all")}>
+src/app/(store)/[locale]/product/ProductCatalogClient.tsx:79:            <select className="input" value={size} onChange={(e) => setSize(e.target.value)}>
+src/app/(store)/[locale]/product/ProductCatalogClient.tsx:88:            <select className="input" value={concentration} onChange={(e) => setConcentration(e.target.value as Concentration | "all")}>
+src/app/(store)/[locale]/product/ProductCatalogClient.tsx:98:            <select className="input" value={price} onChange={(e) => setPrice(e.target.value)}>
+src/app/(store)/[locale]/product/ProductGridClient.tsx:3:import { useMemo, useState } from "react";
+src/app/(store)/[locale]/product/ProductGridClient.tsx:4:import SafeImg from "@/components/SafeImg";
+src/app/(store)/[locale]/product/ProductGridClient.tsx:5:import AddToCartButton from "@/components/AddToCartButton";
+src/app/(store)/[locale]/product/ProductGridClient.tsx:159:            <select className="input" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+src/app/(store)/[locale]/product/page.tsx:1:import ProductGridClient from "./ProductGridClient";
+src/app/(store)/[locale]/product/page.tsx:2:import { db, isDbConnectivityError } from "@/lib/db";
+src/app/(store)/[locale]/product/page.tsx:3:import { ensureCatalogTablesSafe, isRecoverableCatalogSetupError } from "@/lib/catalog";
+src/app/(store)/[locale]/product/page.tsx:7:} from "@/lib/catalogFallback";
+src/app/(store)/[locale]/product/page.tsx:130:    `select key, name_en, name_ar, is_active, is_promoted, sort_order
+src/app/(store)/[locale]/product/page.tsx:131:       from categories
+src/app/(store)/[locale]/product/page.tsx:138:    `select p.id,
+src/app/(store)/[locale]/product/page.tsx:152:              select pi.id
+src/app/(store)/[locale]/product/page.tsx:153:              from product_images pi
+src/app/(store)/[locale]/product/page.tsx:174:       from products p
+src/app/(store)/[locale]/product/page.tsx:175:       left join lateral (
+src/app/(store)/[locale]/product/page.tsx:176:         select min(v.price_jod) as min_variant_price_jod
+src/app/(store)/[locale]/product/page.tsx:177:         from product_variants v
+src/app/(store)/[locale]/product/page.tsx:180:       left join lateral (
+src/app/(store)/[locale]/product/page.tsx:181:         select v.id, v.label, v.price_jod
+src/app/(store)/[locale]/product/page.tsx:182:         from product_variants v
+src/app/(store)/[locale]/product/page.tsx:187:       left join lateral (
+src/app/(store)/[locale]/product/page.tsx:188:         select pr.id,
+src/app/(store)/[locale]/product/page.tsx:194:         from promotions pr
+src/app/(store)/[locale]/product/page.tsx:222:        `select id, promo_kind, title_en, title_ar, discount_type, discount_value::text,
+src/app/(store)/[locale]/product/page.tsx:225:           from promotions
+src/app/(store)/[locale]/product/page.tsx:354:          {isAr ? "لا توجد منتجات بعد. أضف المنتجات من لوحة الإدارة." : "No products yet. Add products from Admin."}
+src/app/(store)/[locale]/product/[slug]/ProductPurchasePanel.tsx:3:import { useMemo, useState } from "react";
+src/app/(store)/[locale]/product/[slug]/ProductPurchasePanel.tsx:4:import AddToCartButton from "@/components/AddToCartButton";
+src/app/(store)/[locale]/product/[slug]/ProductImageGallery.tsx:3:import React, { useEffect, useMemo, useState } from "react";
+src/app/(store)/[locale]/product/[slug]/ProductImageGallery.tsx:4:import SafeImg from "@/components/SafeImg";
+src/app/(store)/[locale]/product/[slug]/ProductImageGallery.tsx:5:import styles from "./page.module.css";
+src/app/(store)/[locale]/product/[slug]/page.tsx:1:import ProductImageGallery from "./ProductImageGallery";
+src/app/(store)/[locale]/product/[slug]/page.tsx:2:import ProductPurchasePanel from "./ProductPurchasePanel";
+src/app/(store)/[locale]/product/[slug]/page.tsx:3:import SafeImg from "@/components/SafeImg";
+src/app/(store)/[locale]/product/[slug]/page.tsx:4:import { notFound } from "next/navigation";
+src/app/(store)/[locale]/product/[slug]/page.tsx:5:import { db, isDbConnectivityError } from "@/lib/db";
+src/app/(store)/[locale]/product/[slug]/page.tsx:6:import { ensureCatalogTablesSafe, isRecoverableCatalogSetupError } from "@/lib/catalog";
+src/app/(store)/[locale]/product/[slug]/page.tsx:12:} from "@/lib/catalogFallback";
+src/app/(store)/[locale]/product/[slug]/page.tsx:13:import { categoryLabels } from "@/lib/siteContent";
+src/app/(store)/[locale]/product/[slug]/page.tsx:14:import styles from "./page.module.css";
+src/app/(store)/[locale]/product/[slug]/page.tsx:231:    `select p.id,
+src/app/(store)/[locale]/product/[slug]/page.tsx:257:       from products p
+src/app/(store)/[locale]/product/[slug]/page.tsx:258:       left join lateral (
+src/app/(store)/[locale]/product/[slug]/page.tsx:259:         select pr.id,
+src/app/(store)/[locale]/product/[slug]/page.tsx:267:         from promotions pr
+src/app/(store)/[locale]/product/[slug]/page.tsx:297:    `select key, name_en, name_ar
+src/app/(store)/[locale]/product/[slug]/page.tsx:298:       from categories
+src/app/(store)/[locale]/product/[slug]/page.tsx:306:    `select id
+src/app/(store)/[locale]/product/[slug]/page.tsx:307:       from product_images
+src/app/(store)/[locale]/product/[slug]/page.tsx:314:    `select id, label, price_jod::text as price_jod, compare_at_price_jod::text as compare_at_price_jod, is_default, sort_order
+src/app/(store)/[locale]/product/[slug]/page.tsx:315:       from product_variants
+src/app/(store)/[locale]/product/[slug]/page.tsx:322:    `select p.slug,
+src/app/(store)/[locale]/product/[slug]/page.tsx:329:              select pi.id
+src/app/(store)/[locale]/product/[slug]/page.tsx:330:              from product_images pi
+src/app/(store)/[locale]/product/[slug]/page.tsx:335:       from products p
+src/app/(store)/[locale]/product/[slug]/page.tsx:336:       left join lateral (
+src/app/(store)/[locale]/product/[slug]/page.tsx:337:         select min(v.price_jod) as min_variant_price_jod
+src/app/(store)/[locale]/product/[slug]/page.tsx:338:         from product_variants v
+src/app/(store)/[locale]/checkout/result/page.tsx:3:import React, { useEffect, useMemo, useState } from "react";
+src/app/(store)/[locale]/checkout/result/page.tsx:4:import { useParams, useSearchParams } from "next/navigation";
+src/app/(store)/[locale]/checkout/page.tsx:1:import CheckoutClient from "./CheckoutClient";
+src/app/(store)/[locale]/checkout/CheckoutClient.tsx:3:import React, { useCallback, useEffect, useMemo, useState } from "react";
+src/app/(store)/[locale]/checkout/CheckoutClient.tsx:4:import { useParams, useSearchParams } from "next/navigation";
+src/app/(store)/[locale]/checkout/CheckoutClient.tsx:5:import { clearLocalCart, readLocalCart, type CartItem } from "@/lib/cartStore";
+src/app/(store)/[locale]/terms/page.tsx:181:              "Keep away from heat/flame and out of reach of children.",
+src/app/(store)/[locale]/terms/page.tsx:236:              "To the extent permitted by law, NIVRAN is not liable for indirect, incidental, or consequential damages arising from use of the site or products.",
+src/app/(store)/[locale]/terms/page.tsx:253:            paragraphs: ["We may update these Terms from time to time. The latest version will be posted here with an updated date."],
+src/app/(store)/[locale]/compliance/page.tsx:86:            paragraphs: ["Some perfumes are alcohol-based and flammable.", "Store away from heat, sparks, and open flame; do not spray near fire."],
+src/app/(store)/[locale]/privacy/page.tsx:139:            paragraphs: ["We may update this policy. The latest version will always be posted here with an updated date."],
+src/app/(store)/[locale]/QuickFactsRotator.tsx:3:import { useEffect, useMemo, useState } from "react";
+src/app/(store)/[locale]/QuickFactsRotator.tsx:20:    const update = () => setReducedMotion(media.matches);
+src/app/(store)/[locale]/policies/terms/page.tsx:1:import { redirect } from "next/navigation";
+src/app/(store)/[locale]/policies/compliance/page.tsx:1:import { redirect } from "next/navigation";
+src/app/(store)/[locale]/policies/privacy/page.tsx:1:import { redirect } from "next/navigation";
+src/app/(store)/[locale]/policies/returns/page.tsx:1:import { redirect } from "next/navigation";
+src/app/(store)/[locale]/policies/shipping/page.tsx:1:import { redirect } from "next/navigation";
+src/app/(store)/[locale]/faq/FAQAccordion.tsx:3:import { useMemo, useState } from "react";
+src/app/(store)/[locale]/faq/page.tsx:109:          "Store it in a cool, dry place away from direct sunlight and heat (avoid leaving it in a car or by a window).",
+src/app/(store)/[locale]/cart/page.tsx:1:import { Suspense } from "react";
+src/app/(store)/[locale]/cart/page.tsx:2:import CartClient from "./CartClient";
+src/app/(store)/[locale]/cart/CartClient.tsx:3:import React, { useEffect, useMemo, useRef, useState } from "react";
+src/app/(store)/[locale]/cart/CartClient.tsx:4:import { clearLocalCart, mergeCartSum, normalizeCartItems, readLocalCart, writeLocalCart, type CartItem } from "@/lib/cartStore";
+src/app/(store)/[locale]/shipping/page.tsx:77:            paragraphs: ["Phase 1: We currently deliver within Jordan only.", "This policy applies to NIVRAN products, including perfumes and other personal care items such as creams, soaps, and similar cosmetic products.", "If we expand in the future, we’ll update this page."],
+src/app/(store)/[locale]/shipping/page.tsx:113:            paragraphs: ["Storage guidance may vary by product type; always follow the packaging instructions.", "Perfumes may be alcohol-based and flammable. Store and use away from heat and open flames.", "Keep out of reach of children."],
+src/app/(store)/[locale]/page.tsx:10:} from "@/lib/siteContent";
+src/app/(store)/[locale]/page.tsx:11:import type { Locale } from "@/lib/locale";
+src/app/(store)/[locale]/page.tsx:12:import { getHomeCopy } from "@/lib/homeCopy";
+src/app/(store)/[locale]/page.tsx:13:import QuickFactsRotator from "./QuickFactsRotator";
+src/app/(store)/[locale]/story/page.tsx:22:            <p>NIVRAN was born from a simple need: to feel calm in a world that rarely slows down.</p>
+src/app/(store)/[locale]/story/page.tsx:26:            <p>We chose in-house manufacturing on purpose. It gives us control over blending, testing, and consistency from one bottle to the next.</p>
+src/app/(store)/[locale]/contact/ContactForm.tsx:3:import { useState } from "react";
+src/app/(store)/[locale]/contact/ContactForm.tsx:113:      <select required className="input" name="topic" defaultValue="">
+src/app/(store)/[locale]/contact/page.tsx:1:import ContactForm from "./ContactForm";
+src/app/api/paytabs/callback/route.ts:2:import { NextResponse } from "next/server";
+src/app/api/paytabs/callback/route.ts:3:import { db } from "@/lib/db";
+src/app/api/paytabs/callback/route.ts:4:import { ensureOrdersTables, commitInventoryForPaidCart } from "@/lib/orders";
+src/app/api/paytabs/callback/route.ts:5:import { consumePromotionUsage } from "@/lib/promotions";
+src/app/api/paytabs/callback/route.ts:6:import { sendOrderThankYouEmail } from "@/lib/email";
+src/app/api/paytabs/callback/route.ts:7:import { hasSuccessfulEmailByKindAndMeta } from "@/lib/emailLog";
+src/app/api/paytabs/callback/route.ts:14:} from "@/lib/paytabs";
+src/app/api/paytabs/callback/route.ts:47:    "select 1 from information_schema.columns where table_name='paytabs_callbacks' and column_name='payload' limit 1"
+src/app/api/paytabs/callback/route.ts:74:      `select cart_id, status, discount_source, promo_code, promotion_id,
+src/app/api/paytabs/callback/route.ts:76:         from orders
+src/app/api/paytabs/callback/route.ts:101:        `update orders
+src/app/api/paytabs/callback/route.ts:114:      `update orders
+src/app/api/paytabs/callback/route.ts:142:    `select cart_id, customer_name, customer_email, total_jod::text, items
+src/app/api/paytabs/callback/route.ts:143:       from orders
+src/app/api/paytabs/callback/route.ts:245:        `insert into paytabs_callbacks
+src/app/api/paytabs/callback/route.ts:262:        `insert into paytabs_callbacks
+src/app/api/paytabs/callback/route.ts:314:    `update orders
+src/app/api/paytabs/initiate/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/paytabs/initiate/route.ts:2:import { db } from "@/lib/db";
+src/app/api/paytabs/initiate/route.ts:3:import { ensureOrdersTables } from "@/lib/orders";
+src/app/api/paytabs/initiate/route.ts:4:import { createOrderStatusToken } from "@/lib/orderStatusToken";
+src/app/api/paytabs/initiate/route.ts:5:import { getPaytabsEnv } from "@/lib/paytabs";
+src/app/api/paytabs/initiate/route.ts:55:    `select cart_id,
+src/app/api/paytabs/initiate/route.ts:67:       from orders
+src/app/api/paytabs/initiate/route.ts:155:      "update orders set paytabs_last_payload=$2, paytabs_response_status=$3, paytabs_response_message=$4, updated_at=now() where cart_id=$1",
+src/app/api/paytabs/initiate/route.ts:162:    "update orders set paytabs_last_payload=$2, paytabs_tran_ref=$3, paytabs_response_status=$4, paytabs_response_message=$5, updated_at=now() where cart_id=$1",
+src/app/api/paytabs/query/route.ts:2:import { NextResponse } from "next/server";
+src/app/api/paytabs/query/route.ts:3:import { db } from "@/lib/db";
+src/app/api/paytabs/query/route.ts:4:import { ensureOrdersTables } from "@/lib/orders";
+src/app/api/paytabs/query/route.ts:9:} from "@/lib/paytabs";
+src/app/api/paytabs/query/route.ts:110:      `update orders
+src/app/api/promotions/validate/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/promotions/validate/route.ts:2:import { db, isDbConnectivityError } from "@/lib/db";
+src/app/api/promotions/validate/route.ts:3:import { ensureCatalogTablesSafe } from "@/lib/catalog";
+src/app/api/promotions/validate/route.ts:4:import { evaluateAutoPromotionForLines, evaluatePromoCodeForLines, type PricedOrderLine } from "@/lib/promotions";
+src/app/api/promotions/validate/route.ts:135:      `select p.id,
+src/app/api/promotions/validate/route.ts:140:         from products p
+src/app/api/promotions/validate/route.ts:153:        `select id, product_id, price_jod
+src/app/api/promotions/validate/route.ts:154:           from product_variants
+src/app/api/newsletter/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/newsletter/route.ts:2:import { db } from "@/lib/db";
+src/app/api/newsletter/route.ts:33:    delete from newsletter_subscribers a
+src/app/api/newsletter/route.ts:91:      insert into newsletter_subscribers (email, locale, updated_at)
+src/app/api/newsletter/route.ts:94:      do update set
+src/app/api/health/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/health/route.ts:2:import { db, isDbConnectivityError } from "@/lib/db";
+src/app/api/health/route.ts:3:import { ensureCatalogTablesSafe, isRecoverableCatalogSetupError } from "@/lib/catalog";
+src/app/api/health/route.ts:10:    const ping = await db.query<{ now: string }>(`select now()::text as now`);
+src/app/api/order-status/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/order-status/route.ts:2:import { db } from "@/lib/db";
+src/app/api/order-status/route.ts:3:import { verifyOrderStatusToken } from "@/lib/orderStatusToken";
+src/app/api/order-status/route.ts:23:    `select cart_id, status, amount, currency,
+src/app/api/order-status/route.ts:25:     from orders
+src/app/api/auth/logout/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/auth/logout/route.ts:2:import { db } from "@/lib/db";
+src/app/api/auth/logout/route.ts:3:import { hasColumn } from "@/lib/dbSchema";
+src/app/api/auth/logout/route.ts:4:import { CUSTOMER_SESSION_COOKIE, sha256Hex } from "@/lib/identity";
+src/app/api/auth/logout/route.ts:26:      ? `update customer_sessions set revoked_at=now() where token_hash=$1 or token=$2`
+src/app/api/auth/logout/route.ts:27:      : `update customer_sessions set revoked_at=now() where token=$1`;
+src/app/api/auth/login/route.ts:2:import { NextResponse } from "next/server";
+src/app/api/auth/login/route.ts:3:import { isDbConnectivityError } from "@/lib/db";
+src/app/api/auth/login/route.ts:10:} from "@/lib/identity";
+src/app/api/auth/login/route.ts:11:import { getClientIp, rateLimitCheck } from "@/lib/rateLimit";
+src/app/api/auth/forgot-password/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/auth/forgot-password/route.ts:2:import crypto from "crypto";
+src/app/api/auth/forgot-password/route.ts:3:import { db } from "@/lib/db";
+src/app/api/auth/forgot-password/route.ts:4:import { ensureIdentityTables, sha256Hex } from "@/lib/identity";
+src/app/api/auth/forgot-password/route.ts:5:import { sendPasswordResetEmail } from "@/lib/email";
+src/app/api/auth/forgot-password/route.ts:6:import { getClientIp, rateLimitCheck } from "@/lib/rateLimit";
+src/app/api/auth/forgot-password/route.ts:34:    `select id, email
+src/app/api/auth/forgot-password/route.ts:35:       from customers
+src/app/api/auth/forgot-password/route.ts:49:    `insert into customer_password_reset_tokens (customer_id, token, token_hash, expires_at)
+src/app/api/auth/signup/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/auth/signup/route.ts:8:} from "@/lib/identity";
+src/app/api/auth/signup/route.ts:9:import { sendVerificationCodeEmail } from "@/lib/email";
+src/app/api/auth/profile/route.ts:1:import { db } from "@/lib/db";
+src/app/api/auth/profile/route.ts:2:import { ensureCatalogTables } from "@/lib/catalog";
+src/app/api/auth/profile/route.ts:3:import { ensureOrdersTables } from "@/lib/ordersSchema";
+src/app/api/auth/profile/route.ts:4:import { ensureIdentityTables, getCustomerIdFromRequest } from "@/lib/identity";
+src/app/api/auth/profile/route.ts:5:import { hasColumn } from "@/lib/dbSchema";
+src/app/api/auth/profile/route.ts:25:    `select id, email,
+src/app/api/auth/profile/route.ts:34:       from customers
+src/app/api/auth/profile/route.ts:53:    `select id, cart_id, status,
+src/app/api/auth/profile/route.ts:64:       from orders
+src/app/api/auth/profile/route.ts:139:    `update customers
+src/app/api/auth/verify/confirm/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/auth/verify/confirm/route.ts:8:} from "@/lib/identity";
+src/app/api/auth/verify/start/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/auth/verify/start/route.ts:2:import { ensureIdentityTables, getCustomerIdFromRequest, issueEmailVerificationCode } from "@/lib/identity";
+src/app/api/auth/verify/start/route.ts:3:import { db } from "@/lib/db";
+src/app/api/auth/verify/start/route.ts:4:import { sendVerificationCodeEmail, type Locale } from "@/lib/email";
+src/app/api/auth/verify/start/route.ts:21:  const r = await db.query<{ email: string }>(`select email from customers where id = $1`, [customerId]);
+src/app/api/auth/reset-password/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/auth/reset-password/route.ts:2:import { db } from "@/lib/db";
+src/app/api/auth/reset-password/route.ts:3:import { hasColumn } from "@/lib/dbSchema";
+src/app/api/auth/reset-password/route.ts:4:import { ensureIdentityTables, hashPassword, sha256Hex } from "@/lib/identity";
+src/app/api/auth/reset-password/route.ts:5:import { getClientIp, rateLimitCheck } from "@/lib/rateLimit";
+src/app/api/auth/reset-password/route.ts:38:      ? `select id, customer_id
+src/app/api/auth/reset-password/route.ts:39:         from customer_password_reset_tokens
+src/app/api/auth/reset-password/route.ts:44:      : `select id, customer_id
+src/app/api/auth/reset-password/route.ts:45:         from customer_password_reset_tokens
+src/app/api/auth/reset-password/route.ts:55:  await db.query(`update customers set password_hash=$2, updated_at=now() where id=$1`, [row.customer_id, await hashPassword(password)]);
+src/app/api/auth/reset-password/route.ts:56:  await db.query(`update customer_password_reset_tokens set used_at=now() where id=$1`, [row.id]);
+src/app/api/auth/reset-password/route.ts:57:  await db.query(`update customer_sessions set revoked_at=now() where customer_id=$1`, [row.customer_id]);
+src/app/api/orders/status/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/orders/status/route.ts:2:import { db } from "@/lib/db";
+src/app/api/orders/status/route.ts:3:import { verifyOrderStatusToken } from "@/lib/orderStatusToken";
+src/app/api/orders/status/route.ts:4:import { ensureOrdersTables } from "@/lib/orders";
+src/app/api/orders/status/route.ts:21:    `select cart_id, status, amount, currency, locale, payment_method, updated_at
+src/app/api/orders/status/route.ts:22:     from orders where cart_id=$1 limit 1`,
+src/app/api/orders/route.ts:1:import { db } from "@/lib/db";
+src/app/api/orders/route.ts:2:import { ensureIdentityTables, getCustomerIdFromRequest } from "@/lib/identity";
+src/app/api/orders/route.ts:3:import { ensureOrdersTables } from "@/lib/ordersSchema";
+src/app/api/orders/route.ts:4:import { hasColumn } from "@/lib/dbSchema";
+src/app/api/orders/route.ts:5:import { createOrderStatusToken } from "@/lib/orderStatusToken";
+src/app/api/orders/route.ts:6:import { evaluateAutoPromotionForLines, evaluatePromoCodeForLines as evaluatePromoCodeForLinesLib, type PricedOrderLine } from "@/lib/promotions";
+src/app/api/orders/route.ts:7:import { readFreeShippingThresholdJod as readFreeShippingThresholdJodLive, shippingForSubtotal as shippingForSubtotalLive } from "@/lib/shipping";
+src/app/api/orders/route.ts:197:  const orderItemsJoinSql = `${canJoinLegacyVariants ? "left join variants v on v.id = oi.variant_id" : ""}\n            ${canJoinProductCatalog ? "left join product_variants pv on pv.id = oi.variant_id left join products p on p.id = pv.product_id" : ""}`;
+src/app/api/orders/route.ts:211:      `select id, cart_id, status,
+src/app/api/orders/route.ts:223:         from orders
+src/app/api/orders/route.ts:235:        `select items
+src/app/api/orders/route.ts:236:           from order_items
+src/app/api/orders/route.ts:248:        `select oi.id, oi.order_id, oi.variant_id,
+src/app/api/orders/route.ts:254:           from order_items oi
+src/app/api/orders/route.ts:268:    `select id, cart_id, status,
+src/app/api/orders/route.ts:279:       from orders
+src/app/api/orders/route.ts:292:          `select oi.id, oi.order_id, oi.variant_id,
+src/app/api/orders/route.ts:298:             from order_items oi
+src/app/api/orders/route.ts:307:          `select items
+src/app/api/orders/route.ts:308:             from order_items
+src/app/api/orders/route.ts:367:    `select p.id,
+src/app/api/orders/route.ts:377:       from products p
+src/app/api/orders/route.ts:378:       left join lateral (
+src/app/api/orders/route.ts:379:         select v.id, v.label, v.price_jod
+src/app/api/orders/route.ts:380:           from product_variants v
+src/app/api/orders/route.ts:397:      `select id, product_id, label, price_jod
+src/app/api/orders/route.ts:398:         from product_variants
+src/app/api/orders/route.ts:494:    `insert into orders (
+src/app/api/shipping-config/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/shipping-config/route.ts:2:import { isDbConnectivityError } from "@/lib/db";
+src/app/api/shipping-config/route.ts:3:import { ensureCatalogTablesSafe } from "@/lib/catalog";
+src/app/api/shipping-config/route.ts:8:} from "@/lib/shipping";
+src/app/api/cart/sync/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/cart/sync/route.ts:8:} from "@/lib/cartStore.server";
+src/app/api/cart/sync/route.ts:9:import { getCustomerIdFromRequest } from "@/lib/customerAuth";
+src/app/api/cart/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/cart/route.ts:2:import { ensureCartTables, getCart } from "@/lib/cartStore.server";
+src/app/api/cart/route.ts:3:import { getCustomerIdFromRequest } from "@/lib/customerAuth";
+src/app/api/pricing/quote/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/pricing/quote/route.ts:2:import { db, isDbConnectivityError } from "@/lib/db";
+src/app/api/pricing/quote/route.ts:3:import { ensureCatalogTablesSafe, isRecoverableCatalogSetupError } from "@/lib/catalog";
+src/app/api/pricing/quote/route.ts:4:import { readFreeShippingThresholdJod, shippingForSubtotal } from "@/lib/shipping";
+src/app/api/pricing/quote/route.ts:10:} from "@/lib/promotions";
+src/app/api/pricing/quote/route.ts:126:      `select p.id,
+src/app/api/pricing/quote/route.ts:136:         from products p
+src/app/api/pricing/quote/route.ts:137:         left join lateral (
+src/app/api/pricing/quote/route.ts:138:           select v.id, v.label, v.price_jod
+src/app/api/pricing/quote/route.ts:139:             from product_variants v
+src/app/api/pricing/quote/route.ts:160:        `select id, product_id, label, price_jod
+src/app/api/pricing/quote/route.ts:161:           from product_variants
+src/app/api/admin/lang/route.ts:2:import { NextResponse } from "next/server";
+src/app/api/admin/lang/route.ts:23:  // If request came from a normal HTML form (not fetch), we can redirect back.
+src/app/api/admin/logout/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/admin/sales/checkout/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/admin/sales/checkout/route.ts:2:import crypto from "crypto";
+src/app/api/admin/sales/checkout/route.ts:3:import { db, type DbExecutor } from "@/lib/db";
+src/app/api/admin/sales/checkout/route.ts:4:import { requireAdminOrSales } from "@/lib/guards";
+src/app/api/admin/sales/checkout/route.ts:9:} from "@/lib/promotions";
+src/app/api/admin/sales/checkout/route.ts:10:import { hashPassword } from "@/lib/identity";
+src/app/api/admin/sales/checkout/route.ts:11:import { sendOrderThankYouEmail, sendSalesWelcomeEmail } from "@/lib/email";
+src/app/api/admin/sales/checkout/route.ts:125:      from products
+src/app/api/admin/sales/checkout/route.ts:162:      from products
+src/app/api/admin/sales/checkout/route.ts:188:      `select id::int as id,
+src/app/api/admin/sales/checkout/route.ts:194:         from product_variants
+src/app/api/admin/sales/checkout/route.ts:375:      .query<{ id: number }>(`select id from customers where lower(email)=lower($1) limit 1`, [customerEmail])
+src/app/api/admin/sales/checkout/route.ts:395:              `insert into customers (email, password_hash, full_name, phone, address_line1, city, country, is_active)
+src/app/api/admin/sales/checkout/route.ts:429:        `update customers
+src/app/api/admin/sales/checkout/route.ts:451:      `insert into orders (
+src/app/api/admin/sales/checkout/route.ts:520:              `update products
+src/app/api/admin/sales/checkout/route.ts:531:      `insert into sales_audit_logs (order_id, actor_role, actor_staff_id, actor_username, action, payload)
+src/app/api/admin/sales/login/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/admin/sales/login/route.ts:2:import { authenticateSalesUser, makeSalesCookies } from "@/lib/adminSession";
+src/app/api/admin/sales/orders/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/admin/sales/orders/route.ts:2:import { db } from "@/lib/db";
+src/app/api/admin/sales/orders/route.ts:3:import { requireAdminOrSales } from "@/lib/guards";
+src/app/api/admin/sales/orders/route.ts:31:  const from = String(url.searchParams.get("from") || "").trim();
+src/app/api/admin/sales/orders/route.ts:34:  const fromIso = /^\d{4}-\d{2}-\d{2}$/.test(from) ? from : "";
+src/app/api/admin/sales/orders/route.ts:75:         select sum(greatest(0, coalesce((entry->>'requested_qty')::int, (entry->>'qty')::int, 0)))
+src/app/api/admin/sales/orders/route.ts:76:           from jsonb_array_elements(coalesce(o.items, '[]'::jsonb)) as entry
+src/app/api/admin/sales/orders/route.ts:79:     from sales_audit_logs l
+src/app/api/admin/sales/orders/route.ts:80:     join orders o on o.id = l.order_id
+src/app/api/admin/sales/catalog/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/admin/sales/catalog/route.ts:2:import { db } from "@/lib/db";
+src/app/api/admin/sales/catalog/route.ts:3:import { requireAdminOrSales } from "@/lib/guards";
+src/app/api/admin/sales/catalog/route.ts:57:           select jsonb_agg(
+src/app/api/admin/sales/catalog/route.ts:67:           from product_variants v
+src/app/api/admin/sales/catalog/route.ts:73:     from products p
+src/app/api/admin/sales/catalog/route.ts:74:     left join lateral (
+src/app/api/admin/sales/catalog/route.ts:75:       select count(*)::int as active_promo_count
+src/app/api/admin/sales/catalog/route.ts:76:       from promotions pr
+src/app/api/admin/sales/catalog/route.ts:95:    `select id, code, title_en, title_ar, discount_type, discount_value::text
+src/app/api/admin/sales/catalog/route.ts:96:       from promotions
+src/app/api/admin/monitoring/route.ts:2:import { NextResponse } from "next/server";
+src/app/api/admin/monitoring/route.ts:3:import { db } from "@/lib/db";
+src/app/api/admin/monitoring/route.ts:4:import { requireAdmin } from "@/lib/guards";
+src/app/api/admin/monitoring/route.ts:5:import { ensureOrdersTablesSafe } from "@/lib/orders";
+src/app/api/admin/monitoring/route.ts:6:import { ensureRefundTablesSafe } from "@/lib/refundsSchema";
+src/app/api/admin/monitoring/route.ts:18:    `select status, count(*)::int as count
+src/app/api/admin/monitoring/route.ts:19:       from orders
+src/app/api/admin/monitoring/route.ts:26:    `select id, cart_id, created_at, updated_at
+src/app/api/admin/monitoring/route.ts:27:       from orders
+src/app/api/admin/monitoring/route.ts:35:    `select status, count(*)::int as count
+src/app/api/admin/monitoring/route.ts:36:       from refunds
+src/app/api/admin/monitoring/route.ts:43:    `select status, count(*)::int as count
+src/app/api/admin/monitoring/route.ts:44:       from restock_jobs
+src/app/api/admin/monitoring/route.ts:50:    `select cart_id, status, paytabs_tran_ref, updated_at
+src/app/api/admin/monitoring/route.ts:51:       from orders
+src/app/api/admin/login/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/admin/login/route.ts:2:import crypto from "crypto";
+src/app/api/admin/login/route.ts:3:import { createSignedAdminToken } from "@/lib/adminSession";
+src/app/api/admin/login/route.ts:4:import { getClientIp, rateLimitCheck } from "@/lib/rateLimit";
+src/app/api/admin/health/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/admin/health/route.ts:2:import { db } from "@/lib/db";
+src/app/api/admin/health/route.ts:3:import { requireAdmin } from "@/lib/guards";
+src/app/api/admin/health/route.ts:11:  const { rows } = await db.query<{ now: string }>("select now() as now");
+src/app/api/admin/order-status/route.ts:2:import { NextResponse } from "next/server";
+src/app/api/admin/order-status/route.ts:3:import { db } from "@/lib/db";
+src/app/api/admin/order-status/route.ts:4:import { ensureOrdersTablesSafe, commitInventoryForPaidOrderId } from "@/lib/orders";
+src/app/api/admin/order-status/route.ts:5:import { requireAdmin } from "@/lib/guards";
+src/app/api/admin/order-status/route.ts:6:import { consumePromotionUsage } from "@/lib/promotions";
+src/app/api/admin/order-status/route.ts:7:import { logAdminAudit } from "@/lib/adminAudit";
+src/app/api/admin/order-status/route.ts:132:      `select status, discount_source, promo_code, promotion_id, promo_consumed
+src/app/api/admin/order-status/route.ts:133:         from orders
+src/app/api/admin/order-status/route.ts:157:        `update orders
+src/app/api/admin/order-status/route.ts:170:      `update orders
+src/app/api/admin/order-status/route.ts:198:  // Transaction: lock the order row, validate transition, update status
+src/app/api/admin/order-status/route.ts:201:      `select id, status, payment_method, inventory_committed_at
+src/app/api/admin/order-status/route.ts:202:         from orders
+src/app/api/admin/order-status/route.ts:244:    await trx.query(`update orders set status = $2, updated_at = now() where id = $1`, [id, nextStatus]);
+src/app/api/admin/order-status/route.ts:253:  // Post-update side effects (idempotent, safe to run after):
+src/app/api/admin/inbox/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/admin/inbox/route.ts:2:import { db } from "@/lib/db";
+src/app/api/admin/inbox/route.ts:3:import { requireAdmin } from "@/lib/guards";
+src/app/api/admin/inbox/route.ts:4:import { ensureInboxTablesSafe } from "@/lib/inbox";
+src/app/api/admin/inbox/route.ts:5:import { hasColumn } from "@/lib/dbSchema";
+src/app/api/admin/inbox/route.ts:6:import { ensureOrdersTablesSafe } from "@/lib/orders";
+src/app/api/admin/inbox/route.ts:60:      `select id, name, email, phone, topic, subject, order_ref, message, locale, created_at::text
+src/app/api/admin/inbox/route.ts:61:       from contact_submissions
+src/app/api/admin/inbox/route.ts:67:      `select id, email, locale, created_at::text
+src/app/api/admin/inbox/route.ts:68:       from newsletter_subscribers
+src/app/api/admin/inbox/route.ts:74:      `select id, cart_id, tran_ref, ${verifiedSelect}, signature_valid, ${receivedAtSelect}::text as received_at,
+src/app/api/admin/inbox/route.ts:76:         from paytabs_callbacks
+src/app/api/admin/restock/run/route.ts:2:import { NextResponse } from "next/server";
+src/app/api/admin/restock/run/route.ts:3:import { db } from "@/lib/db";
+src/app/api/admin/restock/run/route.ts:4:import { requireAdmin } from "@/lib/guards";
+src/app/api/admin/restock/run/route.ts:5:import { ensureRefundTablesSafe } from "@/lib/refundsSchema";
+src/app/api/admin/restock/run/route.ts:6:import { runDueRestocks } from "@/lib/refunds";
+src/app/api/admin/restock/run/route.ts:7:import { logAdminAudit } from "@/lib/adminAudit";
+src/app/api/admin/orders/route.ts:2:import { NextResponse } from "next/server";
+src/app/api/admin/orders/route.ts:3:import { db } from "@/lib/db";
+src/app/api/admin/orders/route.ts:4:import { ensureOrdersTablesSafe } from "@/lib/orders";
+src/app/api/admin/orders/route.ts:5:import { ensureRefundTablesSafe } from "@/lib/refundsSchema";
+src/app/api/admin/orders/route.ts:6:import { requireAdmin } from "@/lib/guards";
+src/app/api/admin/orders/route.ts:33:     from orders o
+src/app/api/admin/orders/route.ts:34:     left join lateral (
+src/app/api/admin/orders/route.ts:35:       select *
+src/app/api/admin/orders/route.ts:36:         from refunds
+src/app/api/admin/refund/confirm/route.ts:2:import { NextResponse } from "next/server";
+src/app/api/admin/refund/confirm/route.ts:3:import { db } from "@/lib/db";
+src/app/api/admin/refund/confirm/route.ts:4:import { requireAdminOrSales } from "@/lib/guards";
+src/app/api/admin/refund/confirm/route.ts:5:import { ensureRefundTablesSafe } from "@/lib/refundsSchema";
+src/app/api/admin/refund/confirm/route.ts:6:import { markRefundSucceeded, scheduleRestockAfter48h } from "@/lib/refunds";
+src/app/api/admin/refund/confirm/route.ts:7:import { logAdminAudit } from "@/lib/adminAudit";
+src/app/api/admin/refund/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/admin/refund/route.ts:2:import { db } from "@/lib/db";
+src/app/api/admin/refund/route.ts:3:import { requireAdminOrSales } from "@/lib/guards";
+src/app/api/admin/refund/route.ts:4:import { ensureRefundTablesSafe } from "@/lib/refundsSchema";
+src/app/api/admin/refund/route.ts:5:import { createRefundRecord, markRefundFailed, markRefundSucceeded, scheduleRestockAfter48h } from "@/lib/refunds";
+src/app/api/admin/refund/route.ts:6:import { requestPaytabsRefund } from "@/lib/paytabsRefund";
+src/app/api/admin/refund/route.ts:7:import { logAdminAudit } from "@/lib/adminAudit";
+src/app/api/admin/refund/fail/route.ts:2:import { NextResponse } from "next/server";
+src/app/api/admin/refund/fail/route.ts:3:import { db } from "@/lib/db";
+src/app/api/admin/refund/fail/route.ts:4:import { requireAdminOrSales } from "@/lib/guards";
+src/app/api/admin/refund/fail/route.ts:5:import { ensureRefundTablesSafe } from "@/lib/refundsSchema";
+src/app/api/admin/refund/fail/route.ts:6:import { markRefundFailed } from "@/lib/refunds";
+src/app/api/admin/refund/fail/route.ts:7:import { logAdminAudit } from "@/lib/adminAudit";
+src/app/api/admin/customers/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/admin/customers/route.ts:2:import { requireAdmin } from "@/lib/guards";
+src/app/api/admin/customers/route.ts:3:import { fetchAdminCustomers } from "@/lib/adminCustomers";
+src/app/api/admin/customers/export/route.ts:1:import { requireAdmin } from "@/lib/guards";
+src/app/api/admin/customers/export/route.ts:2:import { fetchAdminCustomers, fetchAllAdminCustomers } from "@/lib/adminCustomers";
+src/app/api/admin/staff/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/admin/staff/route.ts:2:import { requireAdmin } from "@/lib/guards";
+src/app/api/admin/staff/route.ts:3:import { db } from "@/lib/db";
+src/app/api/admin/staff/route.ts:4:import { listStaff, upsertStaff } from "@/lib/identity";
+src/app/api/admin/staff/route.ts:68:  await db.query(`delete from staff_users where id=$1`, [staffId]);
+src/app/api/admin/catalog/promotions/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/admin/catalog/promotions/route.ts:2:import { db } from "@/lib/db";
+src/app/api/admin/catalog/promotions/route.ts:3:import { ensureCatalogTablesSafe } from "@/lib/catalog";
+src/app/api/admin/catalog/promotions/route.ts:4:import { requireAdmin } from "@/lib/guards";
+src/app/api/admin/catalog/promotions/route.ts:10:} from "../redirects";
+src/app/api/admin/catalog/promotions/route.ts:160:      // Update: update by id.
+src/app/api/admin/catalog/promotions/route.ts:163:          `insert into promotions
+src/app/api/admin/catalog/promotions/route.ts:208:        `update promotions
+src/app/api/admin/catalog/promotions/route.ts:254:        await db.query(`update promotions set is_active=$2, updated_at=now() where id=$1::bigint`, [idRaw, isActive]);
+src/app/api/admin/catalog/promotions/route.ts:262:        await db.query(`delete from promotions where id=$1::bigint`, [idRaw]);
+src/app/api/admin/catalog/variants/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/admin/catalog/variants/route.ts:2:import { db } from "@/lib/db";
+src/app/api/admin/catalog/variants/route.ts:3:import { ensureCatalogTablesSafe } from "@/lib/catalog";
+src/app/api/admin/catalog/variants/route.ts:4:import { requireAdmin } from "@/lib/guards";
+src/app/api/admin/catalog/variants/route.ts:5:import { logAdminAudit } from "@/lib/adminAudit";
+src/app/api/admin/catalog/variants/route.ts:6:import { catalogErrorRedirect, catalogSavedRedirect, catalogUnauthorizedRedirect } from "../redirects";
+src/app/api/admin/catalog/variants/route.ts:29:  let sql = `select id from product_variants where product_id=$1 and lower(label)=\$2`;
+src/app/api/admin/catalog/variants/route.ts:80:          await trx.query(`update product_variants set is_default=false where product_id=$1`, [productId]);
+src/app/api/admin/catalog/variants/route.ts:84:          `insert into product_variants
+src/app/api/admin/catalog/variants/route.ts:135:          await trx.query(`update product_variants set is_default=false where product_id=$1`, [productId]);
+src/app/api/admin/catalog/variants/route.ts:139:          `update product_variants
+src/app/api/admin/catalog/variants/route.ts:180:        await trx.query(`update product_variants set is_default=false where product_id=$1`, [productId]);
+src/app/api/admin/catalog/variants/route.ts:181:        const result = await trx.query(`update product_variants set is_default=true, updated_at=now() where id=$1 and product_id=$2`, [id, productId]);
+src/app/api/admin/catalog/variants/route.ts:199:        const result = await trx.query(`delete from product_variants where id=$1`, [id]);
+src/app/api/admin/catalog/categories/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/admin/catalog/categories/route.ts:2:import { db } from "@/lib/db";
+src/app/api/admin/catalog/categories/route.ts:3:import { ensureCatalogTablesSafe } from "@/lib/catalog";
+src/app/api/admin/catalog/categories/route.ts:4:import { requireAdmin } from "@/lib/guards";
+src/app/api/admin/catalog/categories/route.ts:9:} from "../redirects";
+src/app/api/admin/catalog/categories/route.ts:10:import type { DbTx } from "@/lib/db";
+src/app/api/admin/catalog/categories/route.ts:52:      `update products set category_key=$2 where category_key=$1`,
+src/app/api/admin/catalog/categories/route.ts:56:      `update promotions
+src/app/api/admin/catalog/categories/route.ts:58:            select array_agg(case when x=$1 then $2 else x end)
+src/app/api/admin/catalog/categories/route.ts:59:            from unnest(category_keys) x
+src/app/api/admin/catalog/categories/route.ts:70:    `select key, name_en, name_ar, sort_order, is_active, is_promoted
+src/app/api/admin/catalog/categories/route.ts:71:       from categories
+src/app/api/admin/catalog/categories/route.ts:92:        await trx.query(`update categories set key=$2 where key=$1`, [firstKey, target]);
+src/app/api/admin/catalog/categories/route.ts:103:      await trx.query(`delete from categories where key=$1`, [oldKey]);
+src/app/api/admin/catalog/categories/route.ts:118:      `update categories
+src/app/api/admin/catalog/categories/route.ts:130:  const prodKeysRes = await trx.query<{ category_key: string }>(`select distinct category_key from products`);
+src/app/api/admin/catalog/categories/route.ts:139:      `update products
+src/app/api/admin/catalog/categories/route.ts:148:    `select id::int as id, category_keys
+src/app/api/admin/catalog/categories/route.ts:149:       from promotions
+src/app/api/admin/catalog/categories/route.ts:161:        `update promotions
+src/app/api/admin/catalog/categories/route.ts:171:      `update promotions
+src/app/api/admin/catalog/categories/route.ts:265:          `select key from categories where key = any($1::text[])`,
+src/app/api/admin/catalog/categories/route.ts:275:            const target = await trx.query(`select 1 from categories where key=$1 limit 1`, [key]);
+src/app/api/admin/catalog/categories/route.ts:282:                await trx.query(`update categories set key=$2 where key=$1`, [first, key]);
+src/app/api/admin/catalog/categories/route.ts:290:              await trx.query(`delete from categories where key=$1`, [oldKey]);
+src/app/api/admin/catalog/categories/route.ts:297:        `insert into categories (key, name_en, name_ar, sort_order, is_active, is_promoted)
+src/app/api/admin/catalog/categories/route.ts:331:          `update categories
+src/app/api/admin/catalog/categories/route.ts:361:          await trx.query(`update products set category_key='perfume' where category_key=$1`, [key]);
+src/app/api/admin/catalog/categories/route.ts:364:            `update promotions
+src/app/api/admin/catalog/categories/route.ts:371:          const r = await trx.query(`delete from categories where key=$1`, [key]);
+src/app/api/admin/catalog/settings/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/admin/catalog/settings/route.ts:2:import { db } from "@/lib/db";
+src/app/api/admin/catalog/settings/route.ts:3:import { ensureCatalogTablesSafe } from "@/lib/catalog";
+src/app/api/admin/catalog/settings/route.ts:4:import { requireAdmin } from "@/lib/guards";
+src/app/api/admin/catalog/settings/route.ts:5:import { catalogErrorRedirect, catalogSavedRedirect, catalogUnauthorizedRedirect } from "../redirects";
+src/app/api/admin/catalog/settings/route.ts:31:      `insert into store_settings (key, value_number, updated_at)
+src/app/api/admin/catalog/settings/route.ts:33:       on conflict (key) do update set value_number=excluded.value_number, updated_at=now()`,
+src/app/api/admin/catalog/product-images/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/admin/catalog/product-images/route.ts:2:import { db } from "@/lib/db";
+src/app/api/admin/catalog/product-images/route.ts:3:import { ensureCatalogTablesSafe } from "@/lib/catalog";
+src/app/api/admin/catalog/product-images/route.ts:4:import { requireAdmin } from "@/lib/guards";
+src/app/api/admin/catalog/product-images/route.ts:5:import { logAdminAudit } from "@/lib/adminAudit";
+src/app/api/admin/catalog/product-images/route.ts:6:import { catalogErrorRedirect, catalogSavedRedirect, catalogUnauthorizedRedirect } from "../redirects";
+src/app/api/admin/catalog/product-images/route.ts:30:    const p = await db.query<{ id: number }>(`select id::int as id from products where id=$1::bigint limit 1`, [productId]);
+src/app/api/admin/catalog/product-images/route.ts:51:      await trx.query(`delete from product_images where product_id=$1`, [productId]);
+src/app/api/admin/catalog/product-images/route.ts:62:          `insert into product_images (product_id, "position", filename, content_type, bytes)
+src/app/api/admin/catalog/redirects.ts:1:import { NextResponse } from "next/server";
+src/app/api/admin/catalog/products/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/admin/catalog/products/route.ts:2:import { db } from "@/lib/db";
+src/app/api/admin/catalog/products/route.ts:3:import { ensureCatalogTablesSafe } from "@/lib/catalog";
+src/app/api/admin/catalog/products/route.ts:4:import { requireAdmin } from "@/lib/guards";
+src/app/api/admin/catalog/products/route.ts:5:import { logAdminAudit } from "@/lib/adminAudit";
+src/app/api/admin/catalog/products/route.ts:11:} from "../redirects";
+src/app/api/admin/catalog/products/route.ts:152:          `insert into products
+src/app/api/admin/catalog/products/route.ts:210:      // - Inline update forms do NOT send compare_at_price_jod. We must not wipe it to NULL.
+src/app/api/admin/catalog/products/route.ts:234:          `update products
+src/app/api/admin/catalog/products/route.ts:296:        `select slug, category_key, name_en, name_ar, description_en, description_ar,
+src/app/api/admin/catalog/products/route.ts:301:           from products where id=$1::bigint`,
+src/app/api/admin/catalog/products/route.ts:311:        const exists = await db.query<{ id: string }>(`select id::text as id from products where slug=$1 limit 1`, [nextSlug]);
+src/app/api/admin/catalog/products/route.ts:319:          `insert into products
+src/app/api/admin/catalog/products/route.ts:354:        await trx.query(`delete from product_images where product_id=$1::bigint`, [idRaw]);
+src/app/api/admin/catalog/products/route.ts:355:        const result = await trx.query(`delete from products where id=$1::bigint`, [idRaw]);
+src/app/api/admin/inventory/reconcile/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/admin/inventory/reconcile/route.ts:2:import crypto from "crypto";
+src/app/api/admin/inventory/reconcile/route.ts:3:import { db } from "@/lib/db";
+src/app/api/admin/inventory/reconcile/route.ts:4:import { ensureOrdersTablesSafe, commitInventoryForPaidOrderId, normalizeSkuForInventory } from "@/lib/orders";
+src/app/api/admin/inventory/reconcile/route.ts:5:import { requireAdmin } from "@/lib/guards";
+src/app/api/admin/inventory/reconcile/route.ts:6:import { logAdminAudit } from "@/lib/adminAudit";
+src/app/api/admin/inventory/reconcile/route.ts:209:      `select id::int as id, product_slug::text as product_slug
+src/app/api/admin/inventory/reconcile/route.ts:210:         from variants
+src/app/api/admin/inventory/reconcile/route.ts:246:    `select count(*)::text as c
+src/app/api/admin/inventory/reconcile/route.ts:247:       from orders
+src/app/api/admin/inventory/reconcile/route.ts:254:    `select id,
+src/app/api/admin/inventory/reconcile/route.ts:261:       from orders
+src/app/api/admin/inventory/reconcile/route.ts:315:      `select slug::text as slug, inventory_qty
+src/app/api/admin/inventory/reconcile/route.ts:316:         from products
+src/app/api/admin/inventory/reconcile/route.ts:388:      `select key, request_hash, response_json
+src/app/api/admin/inventory/reconcile/route.ts:389:         from admin_inventory_reconcile_runs
+src/app/api/admin/inventory/reconcile/route.ts:413:      `select id
+src/app/api/admin/inventory/reconcile/route.ts:414:         from orders
+src/app/api/admin/inventory/reconcile/route.ts:446:        `insert into admin_inventory_reconcile_runs (key, request_hash, response_json)
+src/app/api/admin/inventory/reconcile/route.ts:480:      `insert into admin_inventory_reconcile_runs (key, request_hash, response_json)
+src/app/api/contact/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/contact/route.ts:2:import { db } from "@/lib/db";
+src/app/api/contact/route.ts:3:import { ensureInboxTables } from "@/lib/inbox";
+src/app/api/contact/route.ts:24:      `insert into public.contact_submissions
+src/app/api/catalog/product-by-slug/route.ts:1:import { NextRequest, NextResponse } from "next/server";
+src/app/api/catalog/product-by-slug/route.ts:2:import { db, isDbConnectivityError } from "@/lib/db";
+src/app/api/catalog/product-by-slug/route.ts:3:import { ensureCatalogTablesSafe, isRecoverableCatalogSetupError } from "@/lib/catalog";
+src/app/api/catalog/product-by-slug/route.ts:4:import { fallbackProductBySlug, syntheticVariantId } from "@/lib/catalogFallback";
+src/app/api/catalog/product-by-slug/route.ts:61:      `select p.slug, p.name_en, p.name_ar, p.description_en, p.description_ar, p.price_jod, p.is_active,
+src/app/api/catalog/product-by-slug/route.ts:65:         from products p
+src/app/api/catalog/product-by-slug/route.ts:66:         left join lateral (
+src/app/api/catalog/product-by-slug/route.ts:67:           select v.id, v.label, v.price_jod
+src/app/api/catalog/product-by-slug/route.ts:68:             from product_variants v
+src/app/api/catalog/product/route.ts:1:import { NextResponse } from "next/server";
+src/app/api/catalog/product/route.ts:2:import { db, isDbConnectivityError } from "@/lib/db";
+src/app/api/catalog/product/route.ts:3:import { ensureCatalogTablesSafe, isRecoverableCatalogSetupError } from "@/lib/catalog";
+src/app/api/catalog/product/route.ts:4:import { fallbackProductBySlug } from "@/lib/catalogFallback";
+src/app/api/catalog/product/route.ts:111:    `select id, slug, slug_en, slug_ar, name_en, name_ar, description_en, description_ar,
+src/app/api/catalog/product/route.ts:113:       from products
+src/app/api/catalog/product/route.ts:125:    `select id, "position"::int as position
+src/app/api/catalog/product/route.ts:126:       from product_images
+src/app/api/catalog/product/route.ts:135:      `select id, promo_kind, code, title_en, title_ar, discount_type, discount_value, category_keys
+src/app/api/catalog/product/route.ts:136:         from promotions
+src/app/api/catalog/product-image/[id]/route.ts:1:import { db, isDbConnectivityError } from "@/lib/db";
+src/app/api/catalog/product-image/[id]/route.ts:2:import { ensureCatalogTablesSafe, isRecoverableCatalogSetupError } from "@/lib/catalog";
+src/app/api/catalog/product-image/[id]/route.ts:26:      `select id, content_type, bytes, filename
+src/app/api/catalog/product-image/[id]/route.ts:27:         from product_images
+src/app/sitemap.ts:1:import type { MetadataRoute } from "next";
+src/app/page.tsx:1:import { redirect } from "next/navigation";
+src/app/robots.ts:1:import type { MetadataRoute } from "next";
+src/app/admin/admin.css:488:.admin-shell select {
+src/app/admin/admin.css:999:.admin-table td form .admin-input, .admin-table td form .admin-select { background: #fffaf1; }
+src/app/admin/layout.tsx:2:import AdminShell from "./_components/AdminShell";
+src/app/admin/layout.tsx:3:import { getAdminRole } from "@/lib/admin-page";
+src/app/admin/layout.tsx:4:import { getAdminLang } from "@/lib/admin-lang";
+src/app/admin/_components/RequireAdmin.tsx:2:import React from "react";
+src/app/admin/_components/RequireAdmin.tsx:3:import { redirect } from "next/navigation";
+src/app/admin/_components/RequireAdmin.tsx:4:import { isAdminAuthed } from "@/lib/admin-page";
+src/app/admin/_components/AdminShell.tsx:3:import React, { useEffect, useMemo, useRef, useState } from "react";
+src/app/admin/_components/AdminShell.tsx:4:import Link from "next/link";
+src/app/admin/_components/AdminShell.tsx:5:import { usePathname, useRouter } from "next/navigation";
+src/app/admin/_components/AdminShell.tsx:6:import { adminFetch } from "@/app/admin/_components/adminClient";
+src/app/admin/_components/AdminShell.tsx:7:import HeaderLogo from "@/components/brand/HeaderLogo";
+src/app/admin/error.tsx:3:import { useEffect } from "react";
+src/app/admin/sales/sales-client.tsx:3:import React, { useCallback, useEffect, useMemo, useState } from "react";
+src/app/admin/sales/sales-client.tsx:4:import { readAdminLangCookie } from "@/app/admin/_components/adminClient";
+src/app/admin/sales/sales-client.tsx:396:    setMsg(isAr ? "تمت إزالة رمز العرض من الطلب." : "Promotion code removed from checkout.");
+src/app/admin/sales/sales-client.tsx:468:                : `Some products are no longer available (${missing.join(", ")}). They were removed from your cart. Please confirm again.`
+src/app/admin/sales/sales-client.tsx:526:          <select className="admin-select" value={sortMode} onChange={(event) => setSortMode(event.target.value as typeof sortMode)}>
+src/app/admin/sales/sales-client.tsx:617:          <select className="admin-select" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as "CARD_POS" | "CARD_ONLINE" | "CASH")}>
+src/app/admin/sales/sales-client.tsx:680:          <select className="admin-select" value={ordersStatusFilter} onChange={(event) => setOrdersStatusFilter(event.target.value as "" | "PAID" | "BACKORDER")}>
+src/app/admin/sales/sales-client.tsx:685:          <select className="admin-select" value={ordersLimit} onChange={(event) => setOrdersLimit(Number(event.target.value) as 10 | 20 | 30)}>
+src/app/admin/sales/page.tsx:1:import SalesClient from "./sales-client";
+src/app/admin/sales/page.tsx:2:import { getAdminLang } from "@/lib/admin-lang";
+src/app/admin/monitoring/page.tsx:3:import { db } from "@/lib/db";
+src/app/admin/monitoring/page.tsx:4:import { ensureOrdersTablesSafe } from "@/lib/orders";
+src/app/admin/monitoring/page.tsx:5:import { ensureRefundTablesSafe } from "@/lib/refundsSchema";
+src/app/admin/monitoring/page.tsx:6:import { requireAdmin } from "@/lib/guards";
+src/app/admin/monitoring/page.tsx:7:import { cookies } from "next/headers";
+src/app/admin/monitoring/page.tsx:37:    `select status, count(*)::int as count
+src/app/admin/monitoring/page.tsx:38:       from orders
+src/app/admin/monitoring/page.tsx:45:    `select id, cart_id, created_at, updated_at
+src/app/admin/monitoring/page.tsx:46:       from orders
+src/app/admin/monitoring/page.tsx:54:    `select status, count(*)::int as count
+src/app/admin/monitoring/page.tsx:55:       from refunds
+src/app/admin/monitoring/page.tsx:62:    `select status, count(*)::int as count
+src/app/admin/monitoring/page.tsx:63:       from restock_jobs
+src/app/admin/monitoring/page.tsx:69:    `select cart_id, status, paytabs_tran_ref, updated_at
+src/app/admin/monitoring/page.tsx:70:       from orders
+src/app/admin/login/LoginClient.tsx:3:import React, { useMemo, useState } from "react";
+src/app/admin/login/LoginClient.tsx:4:import { usePathname } from "next/navigation";
+src/app/admin/login/LoginClient.tsx:5:import { readErrorMessage } from "@/lib/http-client";
+src/app/admin/login/LoginClient.tsx:6:import { adminFetch, readAdminLangCookie } from "@/app/admin/_components/adminClient";
+src/app/admin/login/page.tsx:1:import LoginClient from "./LoginClient";
+src/app/admin/inbox/page.tsx:2:import RequireAdmin from "../_components/RequireAdmin";
+src/app/admin/inbox/page.tsx:3:import InboxClient from "./InboxClient";
+src/app/admin/inbox/InboxClient.tsx:3:import React, { useEffect, useMemo, useState } from "react";
+src/app/admin/inbox/InboxClient.tsx:4:import { adminFetch, readAdminLangCookie, type AdminLang } from "@/app/admin/_components/adminClient";
+src/app/admin/orders/page.tsx:4:import { db } from "@/lib/db";
+src/app/admin/orders/page.tsx:5:import { ensureOrdersTablesSafe } from "@/lib/orders";
+src/app/admin/orders/page.tsx:6:import OrdersClient from "./ui";
+src/app/admin/orders/page.tsx:7:import { adminT, getAdminLang } from "@/lib/admin-lang";
+src/app/admin/orders/page.tsx:8:import { requireAdmin } from "@/lib/guards";
+src/app/admin/orders/page.tsx:9:import { cookies } from "next/headers";
+src/app/admin/orders/page.tsx:48:    `select exists (
+src/app/admin/orders/page.tsx:49:      select 1
+src/app/admin/orders/page.tsx:50:      from information_schema.columns
+src/app/admin/orders/page.tsx:104:    `select id, cart_id, status, amount, currency, locale,
+src/app/admin/orders/page.tsx:121:      from orders
+src/app/admin/orders/ui.tsx:3:import { Fragment, useMemo, useState } from "react";
+src/app/admin/orders/ui.tsx:4:import { adminFetch } from "@/app/admin/_components/adminClient";
+src/app/admin/customers/[id]/page.tsx:1:import Link from "next/link";
+src/app/admin/customers/[id]/page.tsx:2:import { notFound } from "next/navigation";
+src/app/admin/customers/[id]/page.tsx:3:import { getAdminLang } from "@/lib/admin-lang";
+src/app/admin/customers/[id]/page.tsx:4:import { fetchAdminCustomerDetails } from "@/lib/adminCustomers";
+src/app/admin/customers/page.tsx:1:import Link from "next/link";
+src/app/admin/customers/page.tsx:2:import { getAdminLang } from "@/lib/admin-lang";
+src/app/admin/customers/page.tsx:3:import { fetchAdminCustomers } from "@/lib/adminCustomers";
+src/app/admin/customers/page.tsx:146:            <select id="pageSize" name="pageSize" className="admin-select" defaultValue={String(data.pageSize)} style={{ width: 140 }}>
+src/app/admin/customers/page.tsx:162:            <select id="scope" name="scope" className="admin-select" defaultValue={exportScope} style={{ width: 180 }}>
+src/app/admin/page.tsx:1:import Link from "next/link";
+src/app/admin/page.tsx:2:import { db, isDbConnectivityError, isDbSchemaError } from "@/lib/db";
+src/app/admin/page.tsx:3:import { ensureOrdersTablesSafe } from "@/lib/orders";
+src/app/admin/page.tsx:4:import { ensureInboxTablesSafe } from "@/lib/inbox";
+src/app/admin/page.tsx:5:import { getAdminLang } from "@/lib/admin-lang";
+src/app/admin/page.tsx:6:import RequireAdmin from "./_components/RequireAdmin";
+src/app/admin/page.tsx:75:      db.query<CountRow>(`select count(*)::text as count from orders`),
+src/app/admin/page.tsx:76:      db.query<CountRow>(`select count(*)::text as count from orders where status='PAID'`),
+src/app/admin/page.tsx:77:      db.query<CountRow>(`select count(*)::text as count from orders where status='PENDING_PAYMENT'`),
+src/app/admin/page.tsx:78:      db.query<CountRow>(`select count(*)::text as count from orders where status in ('FAILED','CANCELED')`),
+src/app/admin/page.tsx:79:      db.query<CountRow>(`select count(*)::text as count from newsletter_subscribers`),
+src/app/admin/page.tsx:80:      db.query<CountRow>(`select count(*)::text as count from contact_submissions`),
+src/app/admin/page.tsx:81:      db.query<CountRow>(`select count(*)::text as count from paytabs_callbacks`),
+src/app/admin/page.tsx:83:        `select coalesce(sum(coalesce(total_jod, amount::numeric)),0)::text as total from orders where status in ('PAID','PAID_COD')`
+src/app/admin/page.tsx:86:        `select id, cart_id, status, amount::text, currency, created_at::text
+src/app/admin/page.tsx:87:         from orders
+src/app/admin/page.tsx:92:        `select id, name, email, subject, created_at::text
+src/app/admin/page.tsx:93:         from contact_submissions
+src/app/admin/page.tsx:98:        `select id, cart_id, tran_ref, signature_valid, created_at::text
+src/app/admin/page.tsx:99:         from paytabs_callbacks
+src/app/admin/staff/page.tsx:1:import { db, isDbConnectivityError, isDbSchemaError } from "@/lib/db";
+src/app/admin/staff/page.tsx:2:import { hasColumn } from "@/lib/dbSchema";
+src/app/admin/staff/page.tsx:3:import { ensureIdentityTablesSafe } from "@/lib/identity";
+src/app/admin/staff/page.tsx:4:import { getAdminLang } from "@/lib/admin-lang";
+src/app/admin/staff/page.tsx:138:        `select id,
+src/app/admin/staff/page.tsx:145:           from staff_users
+src/app/admin/staff/page.tsx:207:            <select className="admin-select" name="role" defaultValue="sales">
+src/app/admin/staff/page.tsx:278:                        <select className="admin-select" name="role" defaultValue={normalizedRole}>
+src/app/admin/catalog/page.tsx:2:import Link from "next/link";
+src/app/admin/catalog/page.tsx:3:import { db, isDbConnectivityError } from "@/lib/db";
+src/app/admin/catalog/page.tsx:4:import { hasColumn } from "@/lib/dbSchema";
+src/app/admin/catalog/page.tsx:5:import { ensureCatalogTablesSafe } from "@/lib/catalog";
+src/app/admin/catalog/page.tsx:6:import { DEFAULT_FREE_SHIPPING_THRESHOLD_JOD, readFreeShippingThresholdJod } from "@/lib/shipping";
+src/app/admin/catalog/page.tsx:7:import { getAdminLang } from "@/lib/admin-lang";
+src/app/admin/catalog/page.tsx:200:        `select key, name_en, name_ar, sort_order, is_active, is_promoted
+src/app/admin/catalog/page.tsx:201:           from categories
+src/app/admin/catalog/page.tsx:205:        `select p.id,
+src/app/admin/catalog/page.tsx:221:           from products p
+src/app/admin/catalog/page.tsx:222:      left join (
+src/app/admin/catalog/page.tsx:223:             select product_id, count(*)::int as image_count
+src/app/admin/catalog/page.tsx:224:               from product_images
+src/app/admin/catalog/page.tsx:227:      left join lateral (
+src/app/admin/catalog/page.tsx:228:             select count(*)::int as auto_promo_count
+src/app/admin/catalog/page.tsx:229:               from promotions pr
+src/app/admin/catalog/page.tsx:241:        `select v.id,
+src/app/admin/catalog/page.tsx:253:           from product_variants v
+src/app/admin/catalog/page.tsx:254:           join products p on p.id=v.product_id
+src/app/admin/catalog/page.tsx:259:        `select id::int as id, promo_kind, code, title_en, title_ar, discount_type, discount_value::text,
+src/app/admin/catalog/page.tsx:262:           from promotions
+src/app/admin/catalog/page.tsx:690:              <select className={UI.select} name="productState" defaultValue={productState}>
+src/app/admin/catalog/page.tsx:700:              <select className={UI.select} name="variantState" defaultValue={variantState}>
+src/app/admin/catalog/page.tsx:710:              <select className={UI.select} name="promoState" defaultValue={promoState}>
+src/app/admin/catalog/page.tsx:739:                : "Catalog data could not be loaded from the database right now. The page is in read-only mode until connectivity is restored."}
+src/app/admin/catalog/page.tsx:779:                  <select name="category_key" defaultValue="perfume" className={UI.select}>
+src/app/admin/catalog/page.tsx:841:                {isAr ? "اختر منتجًا واحدًا لتحديث الاسم/الوصف/السعر/الوسوم دون فقدان السياق." : "Pick one product and update name/description/pricing/tags without losing your current admin context."}
+src/app/admin/catalog/page.tsx:846:                  <select name="productEditId" className={UI.select} defaultValue={selectedEditProduct ? String(selectedEditProduct.id) : ""}>
+src/app/admin/catalog/page.tsx:889:                    <select name="category_key" defaultValue={selectedEditProduct.category_key} className={UI.select}>
+src/app/admin/catalog/page.tsx:996:                              <select name="category_key" defaultValue={p.category_key} className={UI.select}>
+src/app/admin/catalog/page.tsx:1091:                <select name="product_id" className={UI.select} defaultValue={selectedProduct ? String(selectedProduct.id) : ""}>
+src/app/admin/catalog/page.tsx:1113:                  <select className={UI.select} name="variantProductId" defaultValue={selectedProduct ? String(selectedProduct.id) : ""}>
+src/app/admin/catalog/page.tsx:1250:                  <select name="promoEditId" className={UI.select} defaultValue={selectedPromo ? String(selectedPromo.id) : "0"}>
+src/app/admin/catalog/page.tsx:1277:                  <select name="promo_kind" defaultValue={selectedPromo ? normalizePromoKind(selectedPromo.promo_kind) : "CODE"} className={UI.select}>
+src/app/admin/catalog/page.tsx:1284:                  <select name="discount_type" defaultValue={selectedPromo ? String(selectedPromo.discount_type || "PERCENT") : "PERCENT"} className={UI.select}>
+src/app/admin/inventory/page.tsx:1:import RequireAdmin from "@/app/admin/_components/RequireAdmin";
+src/app/admin/inventory/page.tsx:2:import InventoryClient from "./ui";
+src/app/admin/inventory/page.tsx:3:import { getAdminLang } from "@/lib/admin-lang";
+src/app/admin/inventory/ui.tsx:3:import { useEffect, useMemo, useState } from "react";
+src/app/admin/inventory/ui.tsx:4:import Link from "next/link";
+src/app/admin/inventory/ui.tsx:5:import { adminFetch } from "@/app/admin/_components/adminClient";
