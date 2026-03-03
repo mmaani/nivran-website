@@ -56,6 +56,10 @@ type Row = {
   promo_consumed?: boolean | null;
   promo_consume_failed?: boolean | null;
   promo_consume_error?: string | null;
+  sales_actor_role?: string | null;
+  sales_actor_staff_id?: number | null;
+  sales_actor_username?: string | null;
+  sales_created_at?: string | null;
   last_refund_id?: number | null;
   last_refund_status?: string | null;
   last_refund_method?: string | null;
@@ -142,6 +146,17 @@ function statusBadgeStyle(status: string): CSSProperties {
     return { background: "#eef5ff", color: "#1f4a86", border: "1px solid #c9dcff" };
   }
   return { background: "#f6f6f6", color: "#444", border: "1px solid #ddd" };
+}
+
+function sourceBadgeStyle(source: "ONLINE" | "SALES" | "LEGACY_SALES"): CSSProperties {
+  if (source === "SALES") return { background: "#eaf4ff", color: "#184e96", border: "1px solid #b8d3ff" };
+  if (source === "LEGACY_SALES") return { background: "#f4f1ff", color: "#52379b", border: "1px solid #d7cbff" };
+  return { background: "#ecf9ef", color: "#1f6b3c", border: "1px solid #bfe7cd" };
+}
+
+function promoBadgeStyle(hasPromo: boolean): CSSProperties {
+  if (!hasPromo) return { background: "#f4f4f4", color: "#555", border: "1px solid #ddd" };
+  return { background: "#fff4dc", color: "#8d5600", border: "1px solid #f4d39a" };
 }
 
 function allowsTransition(current: string, next: string): boolean {
@@ -250,6 +265,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
         cart: "السلة",
         status: "الحالة",
         payment: "الدفع",
+        source: "القناة",
         amount: "المبلغ",
         customer: "العميل",
         created: "التاريخ",
@@ -267,8 +283,14 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
         shipping: "الشحن",
         total: "الإجمالي",
         promo: "الكوبون/الترقية",
+        promoApplied: "تم تطبيق عرض",
         consumed: "تم الاستخدام",
         consumeFailed: "فشل الاستخدام",
+        online: "المتجر الإلكتروني",
+        salesDesk: "مبيعات مباشرة",
+        salesDeskLegacy: "مبيعات (قديم)",
+        by: "بواسطة",
+        unknownSalesUser: "موظف غير معروف",
         yes: "نعم",
         no: "لا",
         dash: "—",
@@ -288,8 +310,9 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
         autoNoteMissingTran: "لا يوجد tran_ref — استخدم الاسترجاع اليدوي",
         invalidAmount: "المبلغ غير صالح",
 
-        confirmManual: "تأكيد الاسترجاع اليدوي",
-        failManual: "فشل الاسترجاع اليدوي",
+        confirmManual: "تأكيد يدوي",
+        failManual: "فشل يدوي",
+        refundState: "حالة الاسترجاع",
       };
     }
 
@@ -306,6 +329,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
       cart: "Cart",
       status: "Status",
       payment: "Payment",
+      source: "Source",
       amount: "Amount",
       customer: "Customer",
       created: "Created",
@@ -323,8 +347,14 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
       shipping: "shipping",
       total: "total",
       promo: "promo",
+      promoApplied: "Promo applied",
       consumed: "consumed",
       consumeFailed: "consume_failed",
+      online: "Online store",
+      salesDesk: "Sales desk",
+      salesDeskLegacy: "Sales (legacy)",
+      by: "by",
+      unknownSalesUser: "Unknown salesperson",
       yes: "yes",
       no: "no",
       dash: "—",
@@ -344,8 +374,9 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
       autoNoteMissingTran: "No tran_ref — use manual refund",
       invalidAmount: "Invalid amount",
 
-      confirmManual: "Confirm manual refund",
-      failManual: "Mark manual refund failed",
+      confirmManual: "Confirm manual",
+      failManual: "Fail manual",
+      refundState: "Refund state",
     };
   }, [isAr]);
 
@@ -354,11 +385,15 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
     const bySearch = rows.filter((r) => {
       const name = readString(r.customer, "name").toLowerCase();
       const phone = readString(r.customer, "phone").toLowerCase();
+      const salesUser = String(r.sales_actor_username || "").toLowerCase();
+      const promo = String(r.promo_code || "").toLowerCase();
       const matchesSearch =
         String(r.cart_id).toLowerCase().includes(s) ||
         String(r.status).toLowerCase().includes(s) ||
         name.includes(s) ||
-        phone.includes(s);
+        phone.includes(s) ||
+        salesUser.includes(s) ||
+        promo.includes(s);
       if (!s) return true;
       return matchesSearch;
     });
@@ -656,6 +691,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
               <th>{L.cart}</th>
               <th>{L.status}</th>
               <th>{L.payment}</th>
+              <th>{L.source}</th>
               <th>{L.amount}</th>
               <th>{L.customer}</th>
               <th>{L.created}</th>
@@ -679,12 +715,26 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
 
               const statusUpper = String(r.status || "").toUpperCase();
               const paymentUpper = String(r.payment_method || "").toUpperCase();
+              const hasSalesAudit = !!String(r.sales_actor_role || "").trim();
+              const legacySales = !hasSalesAudit && String(r.cart_id || "").toLowerCase().startsWith("sales_");
+              const sourceKind: "ONLINE" | "SALES" | "LEGACY_SALES" = hasSalesAudit ? "SALES" : legacySales ? "LEGACY_SALES" : "ONLINE";
+              const sourceLabel = sourceKind === "SALES" ? L.salesDesk : sourceKind === "LEGACY_SALES" ? L.salesDeskLegacy : L.online;
+              const salesUser = String(r.sales_actor_username || "").trim() || L.unknownSalesUser;
+              const salesStaffId =
+                typeof r.sales_actor_staff_id === "number" && Number.isFinite(r.sales_actor_staff_id) && r.sales_actor_staff_id > 0
+                  ? `#${Math.trunc(r.sales_actor_staff_id)}`
+                  : "";
+              const hasPromo = String(r.discount_source || "").toUpperCase() === "AUTO" || String(r.discount_source || "").toUpperCase() === "CODE";
+              const promoLabel = hasPromo
+                ? `${String(r.discount_source || "").toUpperCase()}${r.promo_code ? `:${String(r.promo_code).trim()}` : ""}`
+                : L.dash;
               const currentRefundId = currentRefundIdForOrder(r.id);
               const lastRefundStatus = String(r.last_refund_status || "").toUpperCase();
               const canConfirmManual =
                 paymentUpper !== "PAYTABS" &&
                 currentRefundId > 0 &&
                 (statusUpper === "REFUND_PENDING" || lastRefundStatus === "REQUESTED" || lastRefundStatus === "FAILED");
+              const refundStateLabel = String(r.last_refund_status || r.status || "").toUpperCase() || L.dash;
 
               return (
                 <Fragment key={`row-${r.id}`}>
@@ -722,6 +772,42 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                       ) : null}
                     </td>
 
+                    <td data-label={L.source}>
+                      <div style={{ display: "grid", gap: 6 }}>
+                        <span
+                          style={{
+                            ...sourceBadgeStyle(sourceKind),
+                            padding: "2px 10px",
+                            borderRadius: 999,
+                            display: "inline-block",
+                            fontSize: 12,
+                            fontWeight: 700,
+                            width: "fit-content",
+                          }}
+                        >
+                          {sourceLabel}
+                        </span>
+                        {sourceKind !== "ONLINE" ? (
+                          <div style={{ fontSize: 12, opacity: 0.78 }}>
+                            {L.by}: <span className="ltr">{salesUser}</span> {salesStaffId ? <span className="mono">{salesStaffId}</span> : null}
+                          </div>
+                        ) : null}
+                        <span
+                          className="mono"
+                          style={{
+                            ...promoBadgeStyle(hasPromo),
+                            padding: "2px 8px",
+                            borderRadius: 999,
+                            display: "inline-block",
+                            fontSize: 11,
+                            width: "fit-content",
+                          }}
+                        >
+                          {L.promoApplied}: {promoLabel}
+                        </span>
+                      </div>
+                    </td>
+
                     <td data-label={L.amount} className="ltr">
                       {amount}
                     </td>
@@ -732,45 +818,62 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                       {new Date(r.created_at).toLocaleString(isAr ? "ar-JO" : undefined)}
                     </td>
 
-                    <td data-label={L.details} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button className="btn" type="button" onClick={() => toggleDetails(r.id)}>
-                        {opened ? L.hideDetails : L.showDetails}
-                      </button>
-
-                      {showRefund ? (
-                        <button
-                          className="btn"
-                          type="button"
-                          onClick={() => openRefund(r)}
-                          disabled={busyId === r.id}
-                          title={L.refund}
-                        >
-                          {L.refund}
-                        </button>
-                      ) : null}
-
-                      {canConfirmManual ? (
-                        <>
-                          <button
-                            className="btn"
-                            type="button"
-                            onClick={() => confirmManualRefund(r.id)}
-                            disabled={busyId === r.id}
-                            title={L.confirmManual}
-                          >
-                            {L.confirmManual}
+                    <td data-label={L.details}>
+                      <div style={{ display: "grid", gap: 6 }}>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                          <button className="btn" type="button" onClick={() => toggleDetails(r.id)}>
+                            {opened ? L.hideDetails : L.showDetails}
                           </button>
-                          <button
-                            className="btn"
-                            type="button"
-                            onClick={() => failManualRefund(r.id)}
-                            disabled={busyId === r.id}
-                            title={L.failManual}
+                          {showRefund ? (
+                            <button
+                              className="btn"
+                              type="button"
+                              onClick={() => openRefund(r)}
+                              disabled={busyId === r.id}
+                              title={L.refund}
+                            >
+                              {L.refund}
+                            </button>
+                          ) : null}
+                        </div>
+                        {canConfirmManual ? (
+                          <div
+                            style={{
+                              display: "inline-flex",
+                              gap: 6,
+                              alignItems: "center",
+                              flexWrap: "wrap",
+                              padding: "6px 8px",
+                              borderRadius: 10,
+                              border: "1px solid #f3c58a",
+                              background: "#fff9f2",
+                              width: "fit-content",
+                            }}
                           >
-                            {L.failManual}
-                          </button>
-                        </>
-                      ) : null}
+                            <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.78 }}>
+                              {L.refundState}: {refundStateLabel}
+                            </span>
+                            <button
+                              className="btn"
+                              type="button"
+                              onClick={() => confirmManualRefund(r.id)}
+                              disabled={busyId === r.id}
+                              title={L.confirmManual}
+                            >
+                              {L.confirmManual}
+                            </button>
+                            <button
+                              className="btn"
+                              type="button"
+                              onClick={() => failManualRefund(r.id)}
+                              disabled={busyId === r.id}
+                              title={L.failManual}
+                            >
+                              {L.failManual}
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
                     </td>
 
                     <td data-label={L.update}>
@@ -792,7 +895,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
 
                   {opened ? (
                     <tr key={`details-${r.id}`} className="admin-row-details">
-                      <td data-label={L.details} colSpan={9}>
+                      <td data-label={L.details} colSpan={10}>
                         <div className="admin-grid" style={{ gap: 8 }}>
                           <div>
                             <strong>{L.items}</strong>
@@ -830,6 +933,13 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                                 ? ` • ${L.consumeFailed}: ${String(r.promo_consume_error || "").trim() || L.yes}`
                                 : ""}
                               <br />
+                              {L.source}:{" "}
+                              {String(r.sales_actor_role || "").trim()
+                                ? `${L.salesDesk} • ${L.by} ${String(r.sales_actor_username || "").trim() || L.unknownSalesUser}`
+                                : String(r.cart_id || "").toLowerCase().startsWith("sales_")
+                                  ? L.salesDeskLegacy
+                                  : L.online}
+                              <br />
                               refund: {parseRefundId(r.last_refund_id) > 0 ? `#${parseRefundId(r.last_refund_id)}` : L.dash} • status:{" "}
                               {String(r.last_refund_status || L.dash)} • method: {String(r.last_refund_method || L.dash)}
                               {r.last_refund_error ? ` • error: ${r.last_refund_error}` : ""}
@@ -845,7 +955,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
 
             {!filtered.length && (
               <tr className="admin-row-details">
-                <td colSpan={9} style={{ padding: 14, opacity: 0.7 }}>
+                <td colSpan={10} style={{ padding: 14, opacity: 0.7 }}>
                   {L.noResults}
                 </td>
               </tr>

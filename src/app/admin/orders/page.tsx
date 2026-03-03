@@ -34,6 +34,10 @@ type OrdersRow = {
   promo_consumed: boolean | null;
   promo_consume_failed: boolean | null;
   promo_consume_error: string | null;
+  sales_actor_role: string | null;
+  sales_actor_staff_id: number | null;
+  sales_actor_username: string | null;
+  sales_created_at: string | null;
   last_refund_id: number | null;
   last_refund_status: string | null;
   last_refund_method: string | null;
@@ -126,6 +130,10 @@ export default async function AdminOrdersPage() {
             ${promoConsumedSelect},
             ${promoConsumeFailedSelect},
             ${promoConsumeErrorSelect},
+            s.actor_role::text as sales_actor_role,
+            s.actor_staff_id::int as sales_actor_staff_id,
+            s.actor_username::text as sales_actor_username,
+            s.created_at::text as sales_created_at,
             r.id::int as last_refund_id,
             r.status::text as last_refund_status,
             r.method::text as last_refund_method,
@@ -135,6 +143,14 @@ export default async function AdminOrdersPage() {
             r.failed_at::text as last_refund_failed_at,
             r.last_error::text as last_refund_error
       from orders o
+      left join lateral (
+        select actor_role, actor_staff_id, actor_username, created_at
+          from sales_audit_logs
+         where order_id = o.id
+           and action = 'CREATE_SALE'
+         order by created_at desc
+         limit 1
+      ) s on true
       left join lateral (
         select id, status, method, amount_jod, requested_at, succeeded_at, failed_at, last_error
           from refunds
