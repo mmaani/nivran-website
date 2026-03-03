@@ -701,9 +701,8 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
               <th>{L.source}</th>
               <th style={{ width: 120 }}>{L.amount}</th>
               <th>{L.customer}</th>
-              <th style={{ width: 176 }}>{L.created}</th>
               <th>{L.details}</th>
-              <th style={{ width: 210 }}>{L.update}</th>
+              <th className="orders-update-head" style={{ width: 210 }}>{L.update}</th>
             </tr>
           </thead>
 
@@ -824,10 +823,11 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                       {amount}
                     </td>
 
-                    <td data-label={L.customer}>{customer}</td>
-
-                    <td data-label={L.created} style={{ fontSize: 12, opacity: 0.8 }}>
-                      {new Date(r.created_at).toLocaleString(isAr ? "ar-JO" : undefined)}
+                    <td data-label={L.customer}>
+                      <div>{customer}</div>
+                      <div style={{ fontSize: 12, opacity: 0.76, marginTop: 4 }}>
+                        {new Date(r.created_at).toLocaleString(isAr ? "ar-JO" : undefined)}
+                      </div>
                     </td>
 
                     <td data-label={L.details} className="orders-actions-cell">
@@ -891,7 +891,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                       </div>
                     </td>
 
-                    <td data-label={L.update} className="orders-update-cell">
+                    <td data-label={L.update} className="orders-update-cell orders-update-sticky">
                       <select
                         value={r.status}
                         disabled={busyId === r.id}
@@ -910,7 +910,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
 
                   {opened ? (
                     <tr key={`details-${r.id}`} className="admin-row-details">
-                      <td data-label={L.details} colSpan={10}>
+                      <td data-label={L.details} colSpan={9}>
                         <div className="admin-grid" style={{ gap: 8 }}>
                           <div>
                             <strong>{L.items}</strong>
@@ -974,7 +974,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
 
             {!filtered.length && (
               <tr className="admin-row-details">
-                <td colSpan={10} style={{ padding: 14, opacity: 0.7 }}>
+                <td colSpan={9} style={{ padding: 14, opacity: 0.7 }}>
                   {L.noResults}
                 </td>
               </tr>
@@ -1096,6 +1096,18 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
         .orders-source-cell {
           max-width: 260px;
         }
+        .orders-update-head,
+        .orders-update-sticky {
+          position: sticky;
+          inset-inline-end: 0;
+          z-index: 4;
+          box-shadow: -1px 0 0 rgba(20, 20, 20, 0.12);
+          background: #fffdf8;
+        }
+        .orders-update-head {
+          z-index: 6;
+          background: linear-gradient(180deg, #f8f1e3, #f2e7d2);
+        }
         .orders-actions-row .btn {
           min-width: 84px;
         }
@@ -1129,6 +1141,11 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
           .orders-update-cell :global(.admin-select) {
             min-width: 0 !important;
             width: 100% !important;
+          }
+          .orders-update-head,
+          .orders-update-sticky {
+            position: static;
+            box-shadow: none;
           }
         }
       `}</style>
