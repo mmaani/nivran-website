@@ -283,6 +283,8 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
         hideDetails: "إخفاء",
         showDetails: "عرض",
         items: "العناصر",
+        customerDetails: "تفاصيل العميل",
+        shippingDetails: "الشحن",
         totals: "الإجماليات",
 
         subtotal: "المجموع قبل الخصم",
@@ -348,6 +350,8 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
       hideDetails: "Hide",
       showDetails: "Show",
       items: "Items",
+      customerDetails: "Customer details",
+      shippingDetails: "Shipping",
       totals: "Totals",
 
       subtotal: "subtotal",
@@ -712,7 +716,11 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
             {filtered.map((r) => {
               const cname = readString(r.customer, "name") || L.dash;
               const cphone = readString(r.customer, "phone") || L.dash;
-              const customer = `${cname} / ${cphone}`;
+              const cemail = readString(r.customer, "email") || L.dash;
+              const customer = cname;
+              const shipCity = readString(r.shipping, "city") || L.dash;
+              const shipAddress = readString(r.shipping, "address") || L.dash;
+              const shipCountry = readString(r.shipping, "country") || L.dash;
 
               const amountValue = clampMoneyJod(toNum(r.total_jod ?? r.amount));
               const amount = `${Number.isFinite(amountValue) ? amountValue.toFixed(2) : "0.00"} ${r.currency}`;
@@ -945,6 +953,20 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                                 ))}
                               </ul>
                             )}
+                          </div>
+
+                          <div>
+                            <strong>{L.customerDetails}</strong>
+                            <div className="mono" style={{ marginTop: 4 }}>
+                              name: {cname}
+                              <br />
+                              phone: {cphone}
+                              <br />
+                              email: {cemail}
+                            </div>
+                            <div className="mono" style={{ marginTop: 6 }}>
+                              {L.shippingDetails}: {shipCity} • {shipAddress} • {shipCountry}
+                            </div>
                           </div>
 
                           <div>
