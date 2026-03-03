@@ -1,0 +1,333 @@
+src/lib/identity.ts:84:        await db.query(`select 1 from staff_users limit 1`);
+src/lib/identity.ts:85:        await db.query(`select 1 from customers limit 1`);
+src/lib/identity.ts:100:  await db.query(`
+src/lib/identity.ts:117:  await db.query(`alter table customers add column if not exists email_verified_at timestamptz`);
+src/lib/identity.ts:119:  await db.query(`
+src/lib/identity.ts:131:  await db.query(`alter table customer_sessions add column if not exists token text`);
+src/lib/identity.ts:132:  await db.query(`alter table customer_sessions add column if not exists token_hash text`);
+src/lib/identity.ts:133:  await db.query(`alter table customer_sessions add column if not exists expires_at timestamptz`);
+src/lib/identity.ts:134:  await db.query(`alter table customer_sessions add column if not exists revoked_at timestamptz`);
+src/lib/identity.ts:135:  await db.query(`update customer_sessions set expires_at = now() + interval '30 days' where expires_at is null`);
+src/lib/identity.ts:137:  await db.query(`create index if not exists customer_sessions_token_hash_idx on customer_sessions(token_hash);`);
+src/lib/identity.ts:139:  await db.query(`
+src/lib/identity.ts:150:  await db.query(`alter table customer_password_reset_tokens add column if not exists token_hash text`);
+src/lib/identity.ts:151:  await db.query(`create index if not exists customer_password_reset_tokens_token_idx on customer_password_reset_tokens(token);`);
+src/lib/identity.ts:152:  await db.query(`create index if not exists customer_password_reset_tokens_token_hash_idx on customer_password_reset_tokens(token_hash);`);
+src/lib/identity.ts:153:  await db.query(`create index if not exists customer_password_reset_tokens_customer_idx on customer_password_reset_tokens(customer_id);`);
+src/lib/identity.ts:161:  await db.query(`
+src/lib/identity.ts:176:  await db.query(`alter table customer_email_verification_codes add column if not exists code text`);
+src/lib/identity.ts:177:  await db.query(`alter table customer_email_verification_codes add column if not exists code_hash text`);
+src/lib/identity.ts:178:  await db.query(`alter table customer_email_verification_codes add column if not exists salt text`);
+src/lib/identity.ts:179:  await db.query(`alter table customer_email_verification_codes add column if not exists used_at timestamptz`);
+src/lib/identity.ts:180:  await db.query(`alter table customer_email_verification_codes add column if not exists attempts int`);
+src/lib/identity.ts:181:  await db.query(`update customer_email_verification_codes set attempts = 0 where attempts is null`);
+src/lib/identity.ts:184:  await db.query(`
+src/lib/identity.ts:203:  await db.query(`create index if not exists customer_email_verification_codes_customer_idx on customer_email_verification_codes(customer_id);`);
+src/lib/identity.ts:204:  await db.query(`create index if not exists customer_email_verification_codes_expires_idx on customer_email_verification_codes(expires_at);`);
+src/lib/identity.ts:207:  await db.query(`
+src/lib/identity.ts:218:  await db.query(`
+src/lib/identity.ts:232:  await db.query(`
+src/lib/identity.ts:247:  await db.query(`alter table staff_users add column if not exists full_name text;`);
+src/lib/identity.ts:249:  await db.query(`create index if not exists idx_customers_created_at on customers(created_at desc)`);
+src/lib/identity.ts:250:  await db.query(`create index if not exists idx_customers_email_lower on customers(lower(email))`);
+src/lib/identity.ts:251:  await db.query(`create index if not exists idx_customer_sessions_customer_id on customer_sessions(customer_id)`);
+src/lib/identity.ts:252:  await db.query(`create index if not exists idx_customer_sessions_expires_at on customer_sessions(expires_at)`);
+src/lib/identity.ts:255:  await db.query(`create index if not exists idx_orders_customer_id_created_at on orders(customer_id, created_at desc)`);
+src/lib/identity.ts:362:  await db.query(
+src/lib/identity.ts:373:  await db.query(
+src/lib/identity.ts:474:        await db.query(
+src/lib/identity.ts:481:        await db.query(
+src/lib/identity.ts:494:    await db.query(
+src/lib/identity.ts:588:  await db.query(
+src/lib/identity.ts:606:    await db.query(
+src/lib/identity.ts:612:    await db.query(
+src/lib/identity.ts:618:    await db.query(
+src/lib/identity.ts:625:    await db.query(`alter table customer_email_verification_codes add column if not exists code text`);
+src/lib/identity.ts:626:    await db.query(`alter table customer_email_verification_codes add column if not exists code_hash text`);
+src/lib/identity.ts:627:    await db.query(`alter table customer_email_verification_codes add column if not exists salt text`);
+src/lib/identity.ts:628:    await db.query(
+src/lib/identity.ts:684:    await db.query(`update customer_email_verification_codes set used_at = now() where id = $1`, [row.id]);
+src/lib/identity.ts:701:    await db.query(`update customer_email_verification_codes set attempts = attempts + 1 where id = $1`, [row.id]);
+src/lib/identity.ts:705:  await db.query(`update customer_email_verification_codes set used_at = now() where id = $1`, [row.id]);
+src/lib/identity.ts:706:  await db.query(
+src/lib/adminSession.ts:169:  await db.query(`
+src/lib/adminSession.ts:203:  await db.query(`insert into staff_login_attempts (username, success) values ($1,$2)`, [username, valid]);
+src/lib/refundsSchema.ts:6:  await db.query(`
+src/lib/refundsSchema.ts:27:  await db.query(`alter table refunds add column if not exists order_id bigint`);
+src/lib/refundsSchema.ts:28:  await db.query(`alter table refunds add column if not exists method text`);
+src/lib/refundsSchema.ts:29:  await db.query(`alter table refunds add column if not exists amount_jod numeric(10,2)`);
+src/lib/refundsSchema.ts:30:  await db.query(`alter table refunds add column if not exists currency text`);
+src/lib/refundsSchema.ts:31:  await db.query(`alter table refunds add column if not exists reason text`);
+src/lib/refundsSchema.ts:32:  await db.query(`alter table refunds add column if not exists idempotency_key text`);
+src/lib/refundsSchema.ts:33:  await db.query(`alter table refunds add column if not exists status text`);
+src/lib/refundsSchema.ts:34:  await db.query(`alter table refunds add column if not exists paytabs_tran_ref text`);
+src/lib/refundsSchema.ts:35:  await db.query(`alter table refunds add column if not exists paytabs_refund_reference text`);
+src/lib/refundsSchema.ts:36:  await db.query(`alter table refunds add column if not exists restocked boolean not null default false`);
+src/lib/refundsSchema.ts:37:  await db.query(`alter table refunds add column if not exists requested_at timestamptz not null default now()`);
+src/lib/refundsSchema.ts:38:  await db.query(`alter table refunds add column if not exists succeeded_at timestamptz`);
+src/lib/refundsSchema.ts:39:  await db.query(`alter table refunds add column if not exists failed_at timestamptz`);
+src/lib/refundsSchema.ts:40:  await db.query(`alter table refunds add column if not exists last_error text`);
+src/lib/refundsSchema.ts:41:  await db.query(`alter table refunds add column if not exists payload jsonb`);
+src/lib/refundsSchema.ts:43:  await db.query(`create unique index if not exists refunds_idempotency_key_idx on refunds (idempotency_key)`);
+src/lib/refundsSchema.ts:44:  await db.query(`create index if not exists refunds_order_id_idx on refunds(order_id)`);
+src/lib/refundsSchema.ts:45:  await db.query(`create index if not exists refunds_status_idx on refunds(status)`);
+src/lib/refundsSchema.ts:47:  await db.query(`
+src/lib/refundsSchema.ts:51:  await db.query(`
+src/lib/refundsSchema.ts:57:  await db.query(`
+src/lib/refundsSchema.ts:63:  await db.query(`
+src/lib/refundsSchema.ts:76:  await db.query(`alter table restock_jobs add column if not exists refund_id bigint`);
+src/lib/refundsSchema.ts:77:  await db.query(`alter table restock_jobs add column if not exists status text`);
+src/lib/refundsSchema.ts:78:  await db.query(`alter table restock_jobs add column if not exists run_at timestamptz`);
+src/lib/refundsSchema.ts:79:  await db.query(`alter table restock_jobs add column if not exists created_at timestamptz not null default now()`);
+src/lib/refundsSchema.ts:80:  await db.query(`alter table restock_jobs add column if not exists updated_at timestamptz not null default now()`);
+src/lib/refundsSchema.ts:81:  await db.query(`alter table restock_jobs add column if not exists attempts int not null default 0`);
+src/lib/refundsSchema.ts:82:  await db.query(`alter table restock_jobs add column if not exists last_error text`);
+src/lib/refundsSchema.ts:84:  await db.query(`create unique index if not exists restock_jobs_refund_id_ux on restock_jobs(refund_id)`);
+src/lib/refundsSchema.ts:85:  await db.query(`create index if not exists restock_jobs_run_at_idx on restock_jobs(status, run_at)`);
+src/lib/refundsSchema.ts:87:  await db.query(`alter table restock_jobs drop constraint if exists restock_jobs_refund_fk`);
+src/lib/refundsSchema.ts:88:  await db.query(`alter table restock_jobs add constraint restock_jobs_refund_fk foreign key (refund_id) references refunds(id)`);
+src/lib/refundsSchema.ts:90:  await db.query(`
+src/lib/refundsSchema.ts:103:  await db.query(`create index if not exists orders_created_at_idx on orders (created_at desc)`);
+src/lib/refundsSchema.ts:104:  await db.query(`create index if not exists orders_status_idx on orders (status)`);
+src/lib/refundsSchema.ts:105:  await db.query(`create index if not exists orders_payment_method_idx on orders (payment_method)`);
+src/lib/refundsSchema.ts:106:  await db.query(`create index if not exists orders_inventory_commit_idx on orders (inventory_committed_at)`);
+src/lib/refundsSchema.ts:107:  await db.query(`create index if not exists orders_customer_gin_idx on orders using gin (customer)`);
+src/lib/inbox.ts:5:  await db.query(`
+src/lib/inbox.ts:17:  await db.query(`alter table contact_submissions add column if not exists topic text`);
+src/lib/inbox.ts:18:  await db.query(`alter table contact_submissions add column if not exists subject text`);
+src/lib/inbox.ts:19:  await db.query(`alter table contact_submissions add column if not exists order_ref text`);
+src/lib/inbox.ts:21:  await db.query(`create index if not exists idx_contact_created_at on contact_submissions(created_at desc)`);
+src/lib/inbox.ts:22:  await db.query(`create index if not exists idx_contact_email on contact_submissions(email)`);
+src/lib/inbox.ts:23:  await db.query(`create index if not exists idx_contact_topic on contact_submissions(topic)`);
+src/lib/inbox.ts:25:  await db.query(`
+src/lib/inbox.ts:32:  await db.query(`alter table newsletter_subscribers add column if not exists locale text not null default 'en'`);
+src/lib/inbox.ts:33:  await db.query(`alter table newsletter_subscribers add column if not exists created_at timestamptz not null default now()`);
+src/lib/inbox.ts:34:  await db.query(`alter table newsletter_subscribers add column if not exists updated_at timestamptz`);
+src/lib/inbox.ts:36:  await db.query(`create unique index if not exists ux_newsletter_email on newsletter_subscribers(email)`);
+src/lib/inbox.ts:37:  await db.query(`create index if not exists idx_newsletter_created_at on newsletter_subscribers(created_at desc)`);
+src/lib/inbox.ts:38:  await db.query(`create index if not exists idx_newsletter_updated on newsletter_subscribers(updated_at desc)`);
+src/lib/inbox.ts:52:        await db.query(`select 1 from contact_submissions limit 1`);
+src/lib/inbox.ts:53:        await db.query(`select 1 from newsletter_subscribers limit 1`);
+src/lib/rateLimit.ts:11:  await db.query(`
+src/lib/rateLimit.ts:19:  await db.query(`create index if not exists auth_rate_limits_key_action_idx on auth_rate_limits(key, action, created_at desc);`);
+src/lib/rateLimit.ts:45:  await db.query(`insert into auth_rate_limits (key, action) values ($1,$2)`, [args.key, args.action]);
+src/lib/cartStore.server.ts:28:  await db.query(`
+src/lib/cartStore.server.ts:75:  await db.query(
+src/lib/ordersSchema.ts:14:  await db.query(`
+src/lib/ordersSchema.ts:64:  await db.query(`
+src/lib/ordersSchema.ts:89:  await db.query(`
+src/lib/ordersSchema.ts:105:  await db.query(`
+src/lib/ordersSchema.ts:122:  await db.query(`alter table orders add column if not exists customer_id bigint;`);
+src/lib/ordersSchema.ts:123:  await db.query(`alter table orders add column if not exists customer_email text;`);
+src/lib/ordersSchema.ts:124:  await db.query(`alter table orders add column if not exists customer_name text;`);
+src/lib/ordersSchema.ts:125:  await db.query(`alter table orders add column if not exists customer_phone text;`);
+src/lib/ordersSchema.ts:126:  await db.query(`alter table orders add column if not exists shipping_city text;`);
+src/lib/ordersSchema.ts:127:  await db.query(`alter table orders add column if not exists shipping_address text;`);
+src/lib/ordersSchema.ts:128:  await db.query(`alter table orders add column if not exists shipping_country text;`);
+src/lib/ordersSchema.ts:129:  await db.query(`alter table orders add column if not exists notes text;`);
+src/lib/ordersSchema.ts:131:  await db.query(`alter table orders add column if not exists amount numeric(10,2);`);
+src/lib/ordersSchema.ts:132:  await db.query(`alter table orders add column if not exists currency text;`);
+src/lib/ordersSchema.ts:133:  await db.query(`alter table orders add column if not exists locale text;`);
+src/lib/ordersSchema.ts:134:  await db.query(`alter table orders add column if not exists payment_method text;`);
+src/lib/ordersSchema.ts:136:  await db.query(`alter table orders add column if not exists subtotal_before_discount_jod numeric(10,2);`);
+src/lib/ordersSchema.ts:137:  await db.query(`alter table orders add column if not exists discount_jod numeric(10,2);`);
+src/lib/ordersSchema.ts:138:  await db.query(`alter table orders add column if not exists subtotal_after_discount_jod numeric(10,2);`);
+src/lib/ordersSchema.ts:139:  await db.query(`alter table orders add column if not exists shipping_jod numeric(10,2);`);
+src/lib/ordersSchema.ts:140:  await db.query(`alter table orders add column if not exists total_jod numeric(10,2);`);
+src/lib/ordersSchema.ts:142:  await db.query(`alter table orders add column if not exists promo_code text;`);
+src/lib/ordersSchema.ts:143:  await db.query(`alter table orders add column if not exists promotion_id bigint;`);
+src/lib/ordersSchema.ts:144:  await db.query(`alter table orders add column if not exists discount_source text;`);
+src/lib/ordersSchema.ts:146:  await db.query(`alter table orders add column if not exists created_at timestamptz;`);
+src/lib/ordersSchema.ts:147:  await db.query(`alter table orders add column if not exists updated_at timestamptz;`);
+src/lib/ordersSchema.ts:149:  await db.query(`update orders set currency='JOD' where currency is null;`);
+src/lib/ordersSchema.ts:150:  await db.query(`update orders set locale='en' where locale is null;`);
+src/lib/ordersSchema.ts:151:  await db.query(`update orders set payment_method='PAYTABS' where payment_method is null;`);
+src/lib/ordersSchema.ts:152:  await db.query(`update orders set created_at=coalesce(created_at, now()) where created_at is null;`);
+src/lib/ordersSchema.ts:153:  await db.query(`update orders set updated_at=coalesce(updated_at, created_at, now()) where updated_at is null;`);
+src/lib/ordersSchema.ts:157:  await db.query(`
+src/lib/ordersSchema.ts:186:  await db.query(`
+src/lib/ordersSchema.ts:215:  await db.query(`create index if not exists idx_orders_customer_id_created_at on orders(customer_id, created_at desc);`);
+src/lib/ordersSchema.ts:216:  await db.query(`create index if not exists idx_orders_created_at on orders(created_at desc);`);
+src/lib/ordersSchema.ts:217:  await db.query(`create index if not exists idx_orders_promo_code on orders(promo_code);`);
+src/lib/ordersSchema.ts:218:  await db.query(`create index if not exists idx_order_items_order_id on order_items(order_id);`);
+src/lib/orders.ts:7:  await db.query(`
+src/lib/orders.ts:17:  await db.query(`
+src/lib/orders.ts:30:  await db.query(`alter table orders add column if not exists locale text not null default 'en'`);
+src/lib/orders.ts:31:  await db.query(`alter table orders add column if not exists customer jsonb`);
+src/lib/orders.ts:32:  await db.query(`alter table orders add column if not exists shipping jsonb`);
+src/lib/orders.ts:33:  await db.query(`alter table orders add column if not exists items jsonb`);
+src/lib/orders.ts:35:  await db.query(`alter table orders add column if not exists customer_name text`);
+src/lib/orders.ts:36:  await db.query(`alter table orders add column if not exists customer_phone text`);
+src/lib/orders.ts:37:  await db.query(`alter table orders add column if not exists customer_email text`);
+src/lib/orders.ts:38:  await db.query(`alter table orders add column if not exists shipping_city text`);
+src/lib/orders.ts:39:  await db.query(`alter table orders add column if not exists shipping_address text`);
+src/lib/orders.ts:40:  await db.query(`alter table orders add column if not exists shipping_country text`);
+src/lib/orders.ts:41:  await db.query(`alter table orders add column if not exists notes text`);
+src/lib/orders.ts:43:  await db.query(`alter table orders add column if not exists subtotal_before_discount_jod numeric(10,2)`);
+src/lib/orders.ts:44:  await db.query(`alter table orders add column if not exists discount_jod numeric(10,2)`);
+src/lib/orders.ts:45:  await db.query(`alter table orders add column if not exists subtotal_after_discount_jod numeric(10,2)`);
+src/lib/orders.ts:46:  await db.query(`alter table orders add column if not exists shipping_jod numeric(10,2)`);
+src/lib/orders.ts:47:  await db.query(`alter table orders add column if not exists total_jod numeric(10,2)`);
+src/lib/orders.ts:49:  await db.query(`alter table orders add column if not exists promo_code text`);
+src/lib/orders.ts:50:  await db.query(`alter table orders add column if not exists promotion_id bigint`);
+src/lib/orders.ts:51:  await db.query(`alter table orders add column if not exists discount_source text`);
+src/lib/orders.ts:53:  await db.query(`alter table orders add column if not exists promo_consumed boolean not null default false`);
+src/lib/orders.ts:54:  await db.query(`alter table orders add column if not exists promo_consumed_at timestamptz`);
+src/lib/orders.ts:55:  await db.query(`alter table orders add column if not exists promo_consume_failed boolean not null default false`);
+src/lib/orders.ts:56:  await db.query(`alter table orders add column if not exists promo_consume_error text`);
+src/lib/orders.ts:58:  await db.query(`alter table orders add column if not exists payment_method text not null default 'PAYTABS'`);
+src/lib/orders.ts:59:  await db.query(`alter table orders add column if not exists customer_id bigint`);
+src/lib/orders.ts:61:  await db.query(`alter table orders add column if not exists paytabs_tran_ref text`);
+src/lib/orders.ts:62:  await db.query(`alter table orders add column if not exists paytabs_last_payload text`);
+src/lib/orders.ts:63:  await db.query(`alter table orders add column if not exists paytabs_last_signature text`);
+src/lib/orders.ts:64:  await db.query(`alter table orders add column if not exists paytabs_response_status text`);
+src/lib/orders.ts:65:  await db.query(`alter table orders add column if not exists paytabs_response_message text`);
+src/lib/orders.ts:68:  await db.query(`alter table orders add column if not exists inventory_committed_at timestamptz`);
+src/lib/orders.ts:71:  await db.query(`alter table orders add column if not exists created_at timestamptz not null default now()`);
+src/lib/orders.ts:72:  await db.query(`alter table orders add column if not exists updated_at timestamptz not null default now()`);
+src/lib/orders.ts:74:  await db.query(`alter table paytabs_callbacks add column if not exists payload jsonb`);
+src/lib/orders.ts:75:  await db.query(`alter table paytabs_callbacks add column if not exists created_at timestamptz not null default now()`);
+src/lib/orders.ts:76:  await db.query(`alter table paytabs_callbacks add column if not exists received_at timestamptz not null default now()`);
+src/lib/orders.ts:79:  await db.query(`
+src/lib/orders.ts:92:  await db.query(`
+src/lib/orders.ts:110:  await db.query(`
+src/lib/orders.ts:117:  await db.query(`
+src/lib/orders.ts:124:  await db.query(`create index if not exists idx_orders_cart_id on orders(cart_id)`);
+src/lib/orders.ts:125:  await db.query(`create index if not exists idx_orders_status on orders(status)`);
+src/lib/orders.ts:126:  await db.query(`create index if not exists idx_orders_created_at on orders(created_at desc)`);
+src/lib/orders.ts:127:  await db.query(`create index if not exists idx_orders_paytabs_tran_ref on orders(paytabs_tran_ref)`);
+src/lib/orders.ts:128:  await db.query(`create index if not exists idx_orders_promo_code on orders(promo_code)`);
+src/lib/orders.ts:129:  await db.query(`create index if not exists idx_orders_discount_source on orders(discount_source)`);
+src/lib/orders.ts:130:  await db.query(`create index if not exists idx_orders_inventory_committed_at on orders(inventory_committed_at)`);
+src/lib/orders.ts:132:  await db.query(`create index if not exists idx_orders_promo_consumed on orders(promo_consumed)`);
+src/lib/orders.ts:133:  await db.query(`create index if not exists idx_orders_promo_consume_failed on orders(promo_consume_failed)`);
+src/lib/orders.ts:135:  await db.query(`create index if not exists idx_paytabs_callbacks_cart_id on paytabs_callbacks(cart_id)`);
+src/lib/orders.ts:136:  await db.query(`create index if not exists idx_paytabs_callbacks_tran_ref on paytabs_callbacks(tran_ref)`);
+src/lib/orders.ts:137:  await db.query(`create index if not exists idx_paytabs_callbacks_created_at on paytabs_callbacks(created_at desc)`);
+src/lib/orders.ts:138:  await db.query(`create index if not exists idx_paytabs_callbacks_received_at on paytabs_callbacks(received_at desc)`);
+src/lib/orders.ts:482:        await db.query(`select 1 from orders limit 1`);
+src/lib/orders.ts:483:        await db.query(`select 1 from paytabs_callbacks limit 1`);
+src/lib/emailLog.ts:6:  await db.query(`
+src/lib/emailLog.ts:22:  await db.query(`create index if not exists email_send_logs_to_idx on email_send_logs("to");`);
+src/lib/emailLog.ts:23:  await db.query(`create index if not exists email_send_logs_created_at_idx on email_send_logs(created_at desc);`);
+src/lib/emailLog.ts:24:  await db.query(`create index if not exists email_send_logs_kind_idx on email_send_logs(kind);`);
+src/lib/emailLog.ts:40:  await db.query(
+src/lib/catalog.ts:17:  await db.query(`
+src/lib/catalog.ts:24:  await db.query(`alter table products add column if not exists slug text;`);
+src/lib/catalog.ts:25:  await db.query(`alter table products add column if not exists slug_en text;`);
+src/lib/catalog.ts:26:  await db.query(`alter table products add column if not exists slug_ar text;`);
+src/lib/catalog.ts:27:  await db.query(`alter table products add column if not exists name_en text;`);
+src/lib/catalog.ts:28:  await db.query(`alter table products add column if not exists name_ar text;`);
+src/lib/catalog.ts:29:  await db.query(`alter table products add column if not exists description_en text;`);
+src/lib/catalog.ts:30:  await db.query(`alter table products add column if not exists description_ar text;`);
+src/lib/catalog.ts:31:  await db.query(`alter table products add column if not exists price_jod numeric(10,2);`);
+src/lib/catalog.ts:32:  await db.query(`alter table products add column if not exists compare_at_price_jod numeric(10,2);`);
+src/lib/catalog.ts:33:  await db.query(`alter table products add column if not exists inventory_qty integer not null default 0;`);
+src/lib/catalog.ts:34:  await db.query(`alter table products add column if not exists category_key text default 'perfume';`);
+src/lib/catalog.ts:35:  await db.query(`alter table products add column if not exists wear_times text[] not null default '{}'::text[];`);
+src/lib/catalog.ts:36:  await db.query(`alter table products add column if not exists seasons text[] not null default '{}'::text[];`);
+src/lib/catalog.ts:37:  await db.query(`alter table products add column if not exists audiences text[] not null default '{}'::text[];`);
+src/lib/catalog.ts:38:  await db.query(`alter table products add column if not exists is_active boolean not null default true;`);
+src/lib/catalog.ts:39:  await db.query(`alter table products add column if not exists created_at timestamptz not null default now();`);
+src/lib/catalog.ts:40:  await db.query(`alter table products add column if not exists updated_at timestamptz not null default now();`);
+src/lib/catalog.ts:43:  await db.query(`
+src/lib/catalog.ts:64:  await db.query(`
+src/lib/catalog.ts:73:  await db.query(`
+src/lib/catalog.ts:88:  await db.query(`alter table products alter column slug set not null;`);
+src/lib/catalog.ts:91:  await db.query(`
+src/lib/catalog.ts:106:  await db.query(`
+src/lib/catalog.ts:121:  await db.query(`
+src/lib/catalog.ts:129:  await db.query(`alter table promotions add column if not exists promo_kind text not null default 'CODE';`);
+src/lib/catalog.ts:130:  await db.query(`alter table promotions add column if not exists code text;`);
+src/lib/catalog.ts:131:  await db.query(`alter table promotions add column if not exists title_en text;`);
+src/lib/catalog.ts:132:  await db.query(`alter table promotions add column if not exists title_ar text;`);
+src/lib/catalog.ts:133:  await db.query(`alter table promotions add column if not exists discount_type text;`);
+src/lib/catalog.ts:134:  await db.query(`alter table promotions add column if not exists discount_value numeric(10,2);`);
+src/lib/catalog.ts:135:  await db.query(`alter table promotions add column if not exists starts_at timestamptz;`);
+src/lib/catalog.ts:136:  await db.query(`alter table promotions add column if not exists ends_at timestamptz;`);
+src/lib/catalog.ts:137:  await db.query(`alter table promotions add column if not exists usage_limit integer;`);
+src/lib/catalog.ts:138:  await db.query(`alter table promotions add column if not exists min_order_jod numeric(10,2);`);
+src/lib/catalog.ts:139:  await db.query(`alter table promotions add column if not exists priority integer not null default 0;`);
+src/lib/catalog.ts:140:  await db.query(`alter table promotions add column if not exists used_count integer not null default 0;`);
+src/lib/catalog.ts:141:  await db.query(`alter table promotions add column if not exists is_active boolean not null default true;`);
+src/lib/catalog.ts:142:  await db.query(`alter table promotions add column if not exists created_at timestamptz not null default now();`);
+src/lib/catalog.ts:143:  await db.query(`alter table promotions add column if not exists updated_at timestamptz not null default now();`);
+src/lib/catalog.ts:146:  await db.query(`alter table promotions add column if not exists category_keys text[];`);
+src/lib/catalog.ts:147:  await db.query(`alter table promotions add column if not exists product_slugs text[];`);
+src/lib/catalog.ts:150:  await db.query(`
+src/lib/catalog.ts:161:  await db.query(`
+src/lib/catalog.ts:177:  await db.query(`
+src/lib/catalog.ts:189:  await db.query(`
+src/lib/catalog.ts:212:  await db.query(`
+src/lib/catalog.ts:221:  await db.query(`
+src/lib/catalog.ts:228:  await db.query(`
+src/lib/catalog.ts:240:  await db.query(`
+src/lib/catalog.ts:256:  await db.query(`create unique index if not exists idx_product_variants_single_default on product_variants(product_id) where is_default=true;`);
+src/lib/catalog.ts:259:  await db.query(`create unique index if not exists idx_products_slug_unique on products(slug);`);
+src/lib/catalog.ts:260:  await db.query(`create index if not exists idx_products_active on products(is_active);`);
+src/lib/catalog.ts:261:  await db.query(`create index if not exists idx_products_category on products(category_key);`);
+src/lib/catalog.ts:262:  await db.query(`create index if not exists idx_products_created_at on products(created_at desc);`);
+src/lib/catalog.ts:263:  await db.query(`create index if not exists idx_products_wear_times on products using gin(wear_times);`);
+src/lib/catalog.ts:264:  await db.query(`create index if not exists idx_products_seasons on products using gin(seasons);`);
+src/lib/catalog.ts:265:  await db.query(`create index if not exists idx_products_audiences on products using gin(audiences);`);
+src/lib/catalog.ts:267:  await db.query(`create unique index if not exists idx_categories_key_unique on categories(key);`);
+src/lib/catalog.ts:268:  await db.query(`create index if not exists idx_categories_active on categories(is_active);`);
+src/lib/catalog.ts:269:  await db.query(`create index if not exists idx_categories_sort on categories(sort_order asc);`);
+src/lib/catalog.ts:271:  await db.query(`drop index if exists idx_promotions_code_unique`);
+src/lib/catalog.ts:272:  await db.query(`create unique index if not exists idx_promotions_code_unique on promotions(code);`);
+src/lib/catalog.ts:273:  await db.query(`create index if not exists idx_promotions_active on promotions(is_active);`);
+src/lib/catalog.ts:274:  await db.query(`create index if not exists idx_promotions_kind on promotions(promo_kind);`);
+src/lib/catalog.ts:275:  await db.query(`create index if not exists idx_promotions_created_at on promotions(created_at desc);`);
+src/lib/catalog.ts:276:  await db.query(`create index if not exists idx_promotions_usage on promotions(usage_limit, used_count);`);
+src/lib/catalog.ts:277:  await db.query(`create index if not exists idx_promotions_priority on promotions(priority desc);`);
+src/lib/catalog.ts:279:  await db.query(`create index if not exists idx_product_images_product on product_images(product_id, "position");`);
+src/lib/catalog.ts:280:  await db.query(`create index if not exists idx_product_variants_product on product_variants(product_id);`);
+src/lib/catalog.ts:281:  await db.query(`create index if not exists idx_product_variants_active on product_variants(product_id, is_active);`);
+src/lib/catalog.ts:282:  await db.query(`create index if not exists idx_product_variants_sort on product_variants(product_id, sort_order asc, id asc);`);
+src/lib/catalog.ts:325:        await db.query(`select 1 from products limit 1`);
+src/lib/catalog.ts:326:        await db.query(`select 1 from categories limit 1`);
+src/lib/catalog.ts:327:        await db.query(`select 1 from promotions limit 1`);
+src/app/api/paytabs/callback/route.ts:46:  const r = await db.query(
+src/app/api/paytabs/callback/route.ts:244:      await db.query(
+src/app/api/paytabs/callback/route.ts:261:      await db.query(
+src/app/api/paytabs/callback/route.ts:313:  await db.query(
+src/app/api/paytabs/initiate/route.ts:154:    await db.query(
+src/app/api/paytabs/initiate/route.ts:161:  await db.query(
+src/app/api/newsletter/route.ts:9:  await db.query(`
+src/app/api/newsletter/route.ts:20:  await db.query(`alter table newsletter_subscribers add column if not exists email text;`);
+src/app/api/newsletter/route.ts:21:  await db.query(
+src/app/api/newsletter/route.ts:24:  await db.query(
+src/app/api/newsletter/route.ts:27:  await db.query(
+src/app/api/newsletter/route.ts:32:  await db.query(`
+src/app/api/newsletter/route.ts:40:  await db.query(
+src/app/api/newsletter/route.ts:89:    await db.query(
+src/app/api/auth/logout/route.ts:29:    await db.query(q, params).catch(() => {});
+src/app/api/auth/forgot-password/route.ts:48:  await db.query(
+src/app/api/auth/profile/route.ts:24:  const pr = await db.query(
+src/app/api/auth/profile/route.ts:52:  const or = await db.query(
+src/app/api/auth/profile/route.ts:138:  await db.query(
+src/app/api/auth/reset-password/route.ts:55:  await db.query(`update customers set password_hash=$2, updated_at=now() where id=$1`, [row.customer_id, await hashPassword(password)]);
+src/app/api/auth/reset-password/route.ts:56:  await db.query(`update customer_password_reset_tokens set used_at=now() where id=$1`, [row.id]);
+src/app/api/auth/reset-password/route.ts:57:  await db.query(`update customer_sessions set revoked_at=now() where customer_id=$1`, [row.customer_id]);
+src/app/api/orders/route.ts:493:  await db.query(
+src/app/api/admin/monitoring/route.ts:17:  const ordersByStatus = await db.query(
+src/app/api/admin/monitoring/route.ts:25:  const paidButNotCommitted = await db.query(
+src/app/api/admin/monitoring/route.ts:34:  const refundFunnel = await db.query(
+src/app/api/admin/monitoring/route.ts:42:  const restockBacklog = await db.query(
+src/app/api/admin/monitoring/route.ts:49:  const stuckPaytabsPending = await db.query(
+src/app/api/admin/orders/route.ts:17:  const { rows } = await db.query(
+src/app/api/admin/staff/route.ts:68:  await db.query(`delete from staff_users where id=$1`, [staffId]);
+src/app/api/admin/catalog/promotions/route.ts:254:        await db.query(`update promotions set is_active=$2, updated_at=now() where id=$1::bigint`, [idRaw, isActive]);
+src/app/api/admin/catalog/promotions/route.ts:262:        await db.query(`delete from promotions where id=$1::bigint`, [idRaw]);
+src/app/api/admin/catalog/categories/route.ts:296:      await db.query(
+src/app/api/admin/catalog/categories/route.ts:330:        const r = await db.query(
+src/app/api/admin/catalog/settings/route.ts:30:    await db.query(
+src/app/api/admin/inventory/reconcile/route.ts:21:  await db.query(`
+src/app/api/admin/inventory/reconcile/route.ts:445:      await db.query(
+src/app/api/admin/inventory/reconcile/route.ts:479:    await db.query(
+src/app/api/contact/route.ts:23:    await db.query(
+src/app/admin/monitoring/page.tsx:36:  const ordersByStatus = await db.query(
+src/app/admin/monitoring/page.tsx:44:  const paidButNotCommitted = await db.query(
+src/app/admin/monitoring/page.tsx:53:  const refundFunnel = await db.query(
+src/app/admin/monitoring/page.tsx:61:  const restockBacklog = await db.query(
+src/app/admin/monitoring/page.tsx:68:  const stuckPaytabsPending = await db.query(
