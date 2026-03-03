@@ -1,0 +1,40 @@
+            table_name             | total_size | total_bytes 
+-----------------------------------+------------+-------------
+ orders                            | 424 kB     |      434176
+ products                          | 312 kB     |      319488
+ paytabs_callbacks                 | 192 kB     |      196608
+ customer_password_reset_tokens    | 160 kB     |      163840
+ sales_audit_logs                  | 160 kB     |      163840
+ promotions                        | 144 kB     |      147456
+ customer_sessions                 | 128 kB     |      131072
+ product_images                    | 120 kB     |      122880
+ categories                        | 112 kB     |      114688
+ customers                         | 112 kB     |      114688
+ email_send_logs                   | 112 kB     |      114688
+ newsletter_subscribers            | 112 kB     |      114688
+ product_variants                  | 96 kB      |       98304
+ staff_users                       | 96 kB      |       98304
+ contact_submissions               | 80 kB      |       81920
+ customer_email_verification_codes | 80 kB      |       81920
+ email_send_log                    | 80 kB      |       81920
+ staff_login_attempts              | 80 kB      |       81920
+ auth_rate_limits                  | 48 kB      |       49152
+ customer_cart_items               | 48 kB      |       49152
+ refunds                           | 48 kB      |       49152
+ variants                          | 48 kB      |       49152
+ admin_audit_logs                  | 32 kB      |       32768
+ password_reset_tokens             | 32 kB      |       32768
+ product_media                     | 32 kB      |       32768
+ restock_jobs                      | 32 kB      |       32768
+ store_settings                    | 32 kB      |       32768
+ batches                           | 24 kB      |       24576
+ coupons                           | 24 kB      |       24576
+ customer_carts                    | 24 kB      |       24576
+ order_items                       | 24 kB      |       24576
+ order_refunds                     | 24 kB      |       24576
+ payments                          | 24 kB      |       24576
+ carts                             | 16 kB      |       16384
+ shipments                         | 16 kB      |       16384
+ inventory                         | 8192 bytes |        8192
+(36 rows)
+
