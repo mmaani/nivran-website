@@ -159,6 +159,7 @@ export async function markRefundFailed(trx: DbTx, input: { refundId: number; mes
   const row = await trx.query<{ status: RefundStatus }>(`select status from refunds where id = $1 for update`, [input.refundId]);
   const current = row.rows[0]?.status;
   if (!current) throw new Error("REFUND_NOT_FOUND");
+  if (current === "FAILED") return;
   await transitionRefundStatus(trx, {
     refundId: input.refundId,
     from: current,
@@ -179,6 +180,12 @@ export async function markRefundSucceeded(
   const current = currentRes.rows[0];
   if (!current) throw new Error("REFUND_NOT_FOUND");
 
+  // Idempotent confirm: allow repeated confirms without throwing transition errors.
+  if (current.status === "CONFIRMED" || current.status === "RESTOCK_SCHEDULED" || current.status === "RESTOCKED") {
+    await trx.query(`update orders set status = 'REFUNDED', updated_at = now() where id = $1`, [current.order_id]);
+    return { orderId: current.order_id };
+  }
+
   await transitionRefundStatus(trx, {
     refundId: input.refundId,
     from: current.status,
@@ -195,7 +202,11 @@ export async function scheduleRestockAfter48h(trx: DbTx, input: { refundId: numb
   const row = await trx.query<{ status: RefundStatus }>(`select status from refunds where id = $1 for update`, [input.refundId]);
   const current = row.rows[0]?.status;
   if (!current) throw new Error("REFUND_NOT_FOUND");
-  await transitionRefundStatus(trx, { refundId: input.refundId, from: current, to: "RESTOCK_SCHEDULED" });
+
+  if (current === "RESTOCKED") return;
+  if (current !== "RESTOCK_SCHEDULED") {
+    await transitionRefundStatus(trx, { refundId: input.refundId, from: current, to: "RESTOCK_SCHEDULED" });
+  }
 
   await trx.query(
     `insert into restock_jobs (refund_id, status, run_at, created_at, updated_at)

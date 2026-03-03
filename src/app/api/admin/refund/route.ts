@@ -60,19 +60,29 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Sales can only create MANUAL refunds" }, { status: 403 });
   }
 
-  const prep = await db.withTransaction(async (trx) => {
-    const prepared = await createRefundRecord(trx, { orderId, amountJod, reason, method, idempotencyKey });
-    if (prepared.created) {
-      await logAdminAudit(trx, req, {
-        adminId: actorIdFromAuth(auth),
-        action: "refund.created",
-        entity: "refund",
-        entityId: String(prepared.refund.id),
-        metadata: { orderId, amountJod, method },
-      });
+  let prep: Awaited<ReturnType<typeof createRefundRecord>>;
+  try {
+    prep = await db.withTransaction(async (trx) => {
+      const prepared = await createRefundRecord(trx, { orderId, amountJod, reason, method, idempotencyKey });
+      if (prepared.created) {
+        await logAdminAudit(trx, req, {
+          adminId: actorIdFromAuth(auth),
+          action: "refund.created",
+          entity: "refund",
+          entityId: String(prepared.refund.id),
+          metadata: { orderId, amountJod, method },
+        });
+      }
+      return prepared;
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "REFUND_PREP_FAILED";
+    if (message === "ORDER_NOT_FOUND") return NextResponse.json({ ok: false, error: message }, { status: 404 });
+    if (message === "ORDER_NOT_REFUNDABLE_STATUS" || message === "MISSING_PAYTABS_TRAN_REF") {
+      return NextResponse.json({ ok: false, error: message }, { status: 409 });
     }
-    return prepared;
-  });
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
 
   if (!prep.created) {
     return NextResponse.json({ ok: true, mode: method, refundId: prep.refund.id, refundStatus: prep.refund.status, reused: true });

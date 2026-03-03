@@ -34,6 +34,14 @@ type OrdersRow = {
   promo_consumed: boolean | null;
   promo_consume_failed: boolean | null;
   promo_consume_error: string | null;
+  last_refund_id: number | null;
+  last_refund_status: string | null;
+  last_refund_method: string | null;
+  last_refund_amount_jod: string | null;
+  last_refund_requested_at: string | null;
+  last_refund_succeeded_at: string | null;
+  last_refund_failed_at: string | null;
+  last_refund_error: string | null;
 };
 
 async function cookieHeader(): Promise<string> {
@@ -85,28 +93,28 @@ export default async function AdminOrdersPage() {
     hasColumn("discount_source"),
   ]);
 
-  const paymentMethodSelect = hasPaymentMethod ? "payment_method" : "'PAYTABS'::text as payment_method";
-  const tranRefSelect = hasTranRef ? "paytabs_tran_ref" : "null::text as paytabs_tran_ref";
-  const itemsSelect = hasItems ? "items" : "'[]'::jsonb as items";
-  const subtotalSelect = hasTotals ? "subtotal_before_discount_jod::text" : "null::text as subtotal_before_discount_jod";
-  const discountSelect = hasTotals ? "discount_jod::text" : "null::text as discount_jod";
-  const shippingSelect = hasTotals ? "shipping_jod::text" : "null::text as shipping_jod";
-  const totalSelect = hasTotals ? "total_jod::text" : "null::text as total_jod";
+  const paymentMethodSelect = hasPaymentMethod ? "o.payment_method" : "'PAYTABS'::text as payment_method";
+  const tranRefSelect = hasTranRef ? "o.paytabs_tran_ref" : "null::text as paytabs_tran_ref";
+  const itemsSelect = hasItems ? "o.items" : "'[]'::jsonb as items";
+  const subtotalSelect = hasTotals ? "o.subtotal_before_discount_jod::text" : "null::text as subtotal_before_discount_jod";
+  const discountSelect = hasTotals ? "o.discount_jod::text" : "null::text as discount_jod";
+  const shippingSelect = hasTotals ? "o.shipping_jod::text" : "null::text as shipping_jod";
+  const totalSelect = hasTotals ? "o.total_jod::text" : "null::text as total_jod";
 
-  const discountSourceSelect = hasPromoMeta ? "discount_source::text" : "null::text as discount_source";
-  const promoCodeSelect = hasPromoMeta ? "promo_code::text" : "null::text as promo_code";
-  const promotionIdSelect = hasPromoMeta ? "promotion_id::text" : "null::text as promotion_id";
-  const promoConsumedSelect = hasPromoMeta ? "promo_consumed" : "false as promo_consumed";
-  const promoConsumeFailedSelect = hasPromoMeta ? "promo_consume_failed" : "false as promo_consume_failed";
-  const promoConsumeErrorSelect = hasPromoMeta ? "promo_consume_error::text" : "null::text as promo_consume_error";
+  const discountSourceSelect = hasPromoMeta ? "o.discount_source::text" : "null::text as discount_source";
+  const promoCodeSelect = hasPromoMeta ? "o.promo_code::text" : "null::text as promo_code";
+  const promotionIdSelect = hasPromoMeta ? "o.promotion_id::text" : "null::text as promotion_id";
+  const promoConsumedSelect = hasPromoMeta ? "o.promo_consumed" : "false as promo_consumed";
+  const promoConsumeFailedSelect = hasPromoMeta ? "o.promo_consume_failed" : "false as promo_consume_failed";
+  const promoConsumeErrorSelect = hasPromoMeta ? "o.promo_consume_error::text" : "null::text as promo_consume_error";
 
   const { rows } = await db.query<OrdersRow>(
-    `select id, cart_id, status, amount, currency, locale,
+    `select o.id, o.cart_id, o.status, o.amount, o.currency, o.locale,
             ${paymentMethodSelect},
             ${tranRefSelect},
-            created_at,
-            coalesce(customer, jsonb_build_object('name', customer_name, 'phone', customer_phone, 'email', customer_email)) as customer,
-            coalesce(shipping, jsonb_build_object('city', shipping_city, 'address', shipping_address, 'country', shipping_country)) as shipping,
+            o.created_at,
+            coalesce(o.customer, jsonb_build_object('name', o.customer_name, 'phone', o.customer_phone, 'email', o.customer_email)) as customer,
+            coalesce(o.shipping, jsonb_build_object('city', o.shipping_city, 'address', o.shipping_address, 'country', o.shipping_country)) as shipping,
             ${itemsSelect},
             ${subtotalSelect},
             ${discountSelect},
@@ -117,9 +125,24 @@ export default async function AdminOrdersPage() {
             ${promotionIdSelect},
             ${promoConsumedSelect},
             ${promoConsumeFailedSelect},
-            ${promoConsumeErrorSelect}
-      from orders
-      order by created_at desc
+            ${promoConsumeErrorSelect},
+            r.id::int as last_refund_id,
+            r.status::text as last_refund_status,
+            r.method::text as last_refund_method,
+            r.amount_jod::text as last_refund_amount_jod,
+            r.requested_at::text as last_refund_requested_at,
+            r.succeeded_at::text as last_refund_succeeded_at,
+            r.failed_at::text as last_refund_failed_at,
+            r.last_error::text as last_refund_error
+      from orders o
+      left join lateral (
+        select id, status, method, amount_jod, requested_at, succeeded_at, failed_at, last_error
+          from refunds
+         where order_id = o.id
+         order by id desc
+         limit 1
+      ) r on true
+      order by o.created_at desc
       limit 200`
   );
 

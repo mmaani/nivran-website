@@ -46,10 +46,25 @@ export async function POST(req: Request) {
 
   if (!(refundId > 0)) return NextResponse.json({ ok: false, error: "refundId is required" }, { status: 400 });
 
-  await db.withTransaction(async (trx) => {
-    await markRefundFailed(trx, { refundId, message, payload: { manual_fail: true } });
-    await logAdminAudit(trx, req, { adminId: actorIdFromAuth(auth), action: "refund.failed", entity: "refund", entityId: String(refundId), metadata: { message } });
-  });
+  try {
+    await db.withTransaction(async (trx) => {
+      await markRefundFailed(trx, { refundId, message, payload: { manual_fail: true } });
+      await logAdminAudit(trx, req, {
+        adminId: actorIdFromAuth(auth),
+        action: "refund.failed",
+        entity: "refund",
+        entityId: String(refundId),
+        metadata: { message },
+      });
+    });
 
-  return NextResponse.json({ ok: true, refundId });
+    return NextResponse.json({ ok: true, refundId });
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error.message : "REFUND_FAIL_UPDATE_FAILED";
+    if (err === "REFUND_NOT_FOUND") return NextResponse.json({ ok: false, error: err }, { status: 404 });
+    if (err.startsWith("REFUND_INVALID_TRANSITION_") || err === "REFUND_TRANSITION_REJECTED") {
+      return NextResponse.json({ ok: false, error: err }, { status: 409 });
+    }
+    return NextResponse.json({ ok: false, error: err }, { status: 500 });
+  }
 }

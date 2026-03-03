@@ -56,6 +56,14 @@ type Row = {
   promo_consumed?: boolean | null;
   promo_consume_failed?: boolean | null;
   promo_consume_error?: string | null;
+  last_refund_id?: number | null;
+  last_refund_status?: string | null;
+  last_refund_method?: string | null;
+  last_refund_amount_jod?: string | null;
+  last_refund_requested_at?: string | null;
+  last_refund_succeeded_at?: string | null;
+  last_refund_failed_at?: string | null;
+  last_refund_error?: string | null;
 };
 
 const STATUS_OPTIONS = [
@@ -94,6 +102,12 @@ type UpdateStatusResponse = { ok?: boolean; error?: string };
 
 // Refund API response (keep loose to avoid type churn)
 type RefundResponse = { ok?: boolean; error?: string; refundId?: number | string; paytabs?: unknown };
+
+function parseRefundId(v: unknown): number {
+  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : Number.NaN;
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.trunc(n);
+}
 
 function normalizeItems(items: unknown): OrderItem[] {
   if (!Array.isArray(items)) return [];
@@ -145,7 +159,14 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
   // Track latest refundId per order (so we can confirm/fail manual refunds without changing orders API)
-  const [refundIdByOrder, setRefundIdByOrder] = useState<Record<number, number>>({});
+  const [refundIdByOrder, setRefundIdByOrder] = useState<Record<number, number>>(() => {
+    const map: Record<number, number> = {};
+    for (const row of initialRows) {
+      const rid = parseRefundId(row.last_refund_id);
+      if (rid > 0) map[row.id] = rid;
+    }
+    return map;
+  });
 
   // Refund modal state
   const [refundOpenFor, setRefundOpenFor] = useState<Row | null>(null);
@@ -280,6 +301,13 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
     });
   }, [rows, q]);
 
+  function currentRefundIdForOrder(orderId: number): number {
+    const fromMap = refundIdByOrder[orderId] || 0;
+    if (fromMap > 0) return fromMap;
+    const row = rows.find((r) => r.id === orderId);
+    return row ? parseRefundId(row.last_refund_id) : 0;
+  }
+
   async function updateStatus(id: number, nextStatus: string) {
     setErr(null);
     setBusyId(id);
@@ -372,19 +400,29 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
       }
 
       // Store refundId for later manual confirm/fail actions
-      const refundIdNum =
-        typeof data.refundId === "number"
-          ? data.refundId
-          : typeof data.refundId === "string"
-            ? Number(data.refundId)
-            : NaN;
+      const refundIdNum = parseRefundId(data.refundId);
 
-      if (Number.isFinite(refundIdNum) && refundIdNum > 0) {
-        setRefundIdByOrder((prev) => ({ ...prev, [refundOpenFor.id]: Math.trunc(refundIdNum) }));
+      if (refundIdNum > 0) {
+        setRefundIdByOrder((prev) => ({ ...prev, [refundOpenFor.id]: refundIdNum }));
       }
 
       // UI: mark order as REFUND_PENDING optimistically
-      setRows((prev) => prev.map((r) => (r.id === refundOpenFor.id ? { ...r, status: "REFUND_PENDING" } : r)));
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === refundOpenFor.id
+            ? {
+                ...r,
+                status: "REFUND_PENDING",
+                last_refund_id: refundIdNum > 0 ? refundIdNum : r.last_refund_id ?? null,
+                last_refund_status: "REQUESTED",
+                last_refund_method: refundMode === "AUTO" ? "PAYTABS" : "MANUAL",
+                last_refund_amount_jod: amount.toFixed(2),
+                last_refund_requested_at: new Date().toISOString(),
+                last_refund_error: null,
+              }
+            : r
+        )
+      );
 
       setRefundOk(L.refundedOk);
     } catch (e: unknown) {
@@ -396,7 +434,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
   }
 
   async function confirmManualRefund(orderId: number) {
-    const refundId = refundIdByOrder[orderId];
+    const refundId = currentRefundIdForOrder(orderId);
     if (!(refundId > 0)) {
       setErr(isAr ? "لا يوجد refundId لهذا الطلب. أنشئ الاسترجاع أولاً." : "No refundId for this order. Create a refund first.");
       return;
@@ -420,7 +458,13 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
         throw new Error(msg || (isAr ? "فشل تأكيد الاسترجاع" : "Confirm refund failed"));
       }
 
-      setRows((prev) => prev.map((r) => (r.id === orderId ? { ...r, status: "REFUNDED" } : r)));
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === orderId
+            ? { ...r, status: "REFUNDED", last_refund_status: "RESTOCK_SCHEDULED", last_refund_succeeded_at: new Date().toISOString() }
+            : r
+        )
+      );
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setErr(msg || (isAr ? "حدث خطأ" : "Error"));
@@ -430,7 +474,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
   }
 
   async function failManualRefund(orderId: number) {
-    const refundId = refundIdByOrder[orderId];
+    const refundId = currentRefundIdForOrder(orderId);
     if (!(refundId > 0)) {
       setErr(isAr ? "لا يوجد refundId لهذا الطلب. أنشئ الاسترجاع أولاً." : "No refundId for this order. Create a refund first.");
       return;
@@ -454,7 +498,19 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
         throw new Error(msg || (isAr ? "فشل تحديث حالة الاسترجاع" : "Mark refund failed"));
       }
 
-      setRows((prev) => prev.map((r) => (r.id === orderId ? { ...r, status: "REFUND_FAILED" } : r)));
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === orderId
+            ? {
+                ...r,
+                status: "REFUND_FAILED",
+                last_refund_status: "FAILED",
+                last_refund_failed_at: new Date().toISOString(),
+                last_refund_error: "manual refund failed in admin",
+              }
+            : r
+        )
+      );
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setErr(msg || (isAr ? "حدث خطأ" : "Error"));
@@ -500,8 +556,12 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
 
               const statusUpper = String(r.status || "").toUpperCase();
               const paymentUpper = String(r.payment_method || "").toUpperCase();
+              const currentRefundId = currentRefundIdForOrder(r.id);
+              const lastRefundStatus = String(r.last_refund_status || "").toUpperCase();
               const canConfirmManual =
-                statusUpper === "REFUND_PENDING" && paymentUpper !== "PAYTABS" && (refundIdByOrder[r.id] || 0) > 0;
+                paymentUpper !== "PAYTABS" &&
+                currentRefundId > 0 &&
+                (statusUpper === "REFUND_PENDING" || lastRefundStatus === "REQUESTED" || lastRefundStatus === "FAILED");
 
               return (
                 <Fragment key={`row-${r.id}`}>
@@ -637,6 +697,10 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                               {r.promo_consume_failed
                                 ? ` • ${L.consumeFailed}: ${String(r.promo_consume_error || "").trim() || L.yes}`
                                 : ""}
+                              <br />
+                              refund: {parseRefundId(r.last_refund_id) > 0 ? `#${parseRefundId(r.last_refund_id)}` : L.dash} • status:{" "}
+                              {String(r.last_refund_status || L.dash)} • method: {String(r.last_refund_method || L.dash)}
+                              {r.last_refund_error ? ` • error: ${r.last_refund_error}` : ""}
                             </div>
                           </div>
                         </div>
