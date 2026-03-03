@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useMemo, useState, type CSSProperties } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { adminFetch } from "@/app/admin/_components/adminClient";
 
 type JsonRecord = Record<string, unknown>;
@@ -109,6 +109,7 @@ type UpdateStatusResponse = { ok?: boolean; error?: string };
 type RefundResponse = { ok?: boolean; error?: string; refundId?: number | string; paytabs?: unknown };
 
 type QuickFilter = "ALL" | "REFUND_ACTIVE" | "REFUND_FAILED" | "PAYTABS" | "MANUAL_ACTION";
+const PAGE_SIZE = 25;
 
 const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   PENDING_PAYMENT: ["PAID", "FAILED", "CANCELED"],
@@ -200,6 +201,10 @@ function isPaidStatus(status: string): boolean {
 
 function canRefundOrder(r: Row): boolean {
   const status = String(r.status || "").toUpperCase();
+  const lastRefundStatus = String(r.last_refund_status || "").toUpperCase();
+  const hasActiveOrCompletedRefund =
+    lastRefundStatus === "REQUESTED" || lastRefundStatus === "CONFIRMED" || lastRefundStatus === "RESTOCK_SCHEDULED" || lastRefundStatus === "RESTOCKED";
+  if (hasActiveOrCompletedRefund) return false;
   return isPaidStatus(status);
 }
 
@@ -223,6 +228,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
   const [err, setErr] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("ALL");
+  const [pageIndex, setPageIndex] = useState(0);
 
   // Track latest refundId per order (so we can confirm/fail manual refunds without changing orders API)
   const [refundIdByOrder, setRefundIdByOrder] = useState<Record<number, number>>(() => {
@@ -344,6 +350,9 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
         refundMaxHint: "الحد الأقصى",
         refundInvalidPercent: "النسبة يجب أن تكون بين 0 و 100",
         refundExceedsTotal: "الاسترجاع يتجاوز إجمالي العملية",
+        page: "الصفحة",
+        previous: "السابق",
+        next: "التالي",
       };
     }
 
@@ -424,6 +433,9 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
       refundMaxHint: "Max",
       refundInvalidPercent: "Percent must be between 0 and 100",
       refundExceedsTotal: "Refund exceeds transaction total",
+      page: "Page",
+      previous: "Previous",
+      next: "Next",
     };
   }, [isAr]);
 
@@ -452,7 +464,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
       const canManual =
         paymentUpper !== "PAYTABS" &&
         currentRefundIdForOrder(r.id) > 0 &&
-        (statusUpper === "REFUND_PENDING" || lastRefundStatus === "REQUESTED");
+        lastRefundStatus === "REQUESTED";
 
       if (quickFilter === "ALL") return true;
       if (quickFilter === "REFUND_ACTIVE") return statusUpper === "REFUND_PENDING" || statusUpper === "REFUND_REQUESTED";
@@ -462,6 +474,38 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
       return true;
     });
   }, [rows, q, quickFilter, currentRefundIdForOrder]);
+
+  const ordered = useMemo(() => {
+    function actionRank(r: Row): number {
+      const paymentUpper = String(r.payment_method || "").toUpperCase();
+      const statusUpper = String(r.status || "").toUpperCase();
+      const lastRefundStatus = String(r.last_refund_status || "").toUpperCase();
+      const refundId = currentRefundIdForOrder(r.id);
+      const needsDecision = paymentUpper !== "PAYTABS" && refundId > 0 && lastRefundStatus === "REQUESTED";
+      if (needsDecision) return 0;
+      if (statusUpper === "REFUND_PENDING" || statusUpper === "REFUND_REQUESTED" || lastRefundStatus === "REQUESTED") return 1;
+      return 2;
+    }
+
+    return [...filtered].sort((a, b) => {
+      const rankDiff = actionRank(a) - actionRank(b);
+      if (rankDiff !== 0) return rankDiff;
+      const ta = new Date(String(a.created_at || "")).getTime();
+      const tb = new Date(String(b.created_at || "")).getTime();
+      return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
+    });
+  }, [filtered, currentRefundIdForOrder]);
+
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(ordered.length / PAGE_SIZE)), [ordered.length]);
+  const pageRows = useMemo(() => {
+    const safePage = Math.min(pageIndex, Math.max(0, totalPages - 1));
+    const start = safePage * PAGE_SIZE;
+    return ordered.slice(start, start + PAGE_SIZE);
+  }, [ordered, pageIndex, totalPages]);
+
+  useEffect(() => {
+    if (pageIndex > totalPages - 1) setPageIndex(Math.max(0, totalPages - 1));
+  }, [pageIndex, totalPages]);
 
   const counts = useMemo(() => {
     const c = { all: rows.length, refundActive: 0, refundFailed: 0, paytabs: 0, manualAction: 0 };
@@ -475,7 +519,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
       const canManual =
         paymentUpper !== "PAYTABS" &&
         currentRefundIdForOrder(r.id) > 0 &&
-        (statusUpper === "REFUND_PENDING" || lastRefundStatus === "REQUESTED");
+        lastRefundStatus === "REQUESTED";
       if (canManual) c.manualAction += 1;
     }
     return c;
@@ -748,15 +792,34 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
 
   return (
     <div className="admin-grid">
-      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={L.search} className="admin-input" />
+      <input
+        value={q}
+        onChange={(e) => {
+          setQ(e.target.value);
+          setPageIndex(0);
+        }}
+        placeholder={L.search}
+        className="admin-input"
+      />
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button className="btn" type="button" onClick={() => setQuickFilter("ALL")} disabled={quickFilter === "ALL"}>
+        <button
+          className="btn"
+          type="button"
+          onClick={() => {
+            setQuickFilter("ALL");
+            setPageIndex(0);
+          }}
+          disabled={quickFilter === "ALL"}
+        >
           {L.all} ({counts.all})
         </button>
         <button
           className="btn"
           type="button"
-          onClick={() => setQuickFilter("REFUND_ACTIVE")}
+          onClick={() => {
+            setQuickFilter("REFUND_ACTIVE");
+            setPageIndex(0);
+          }}
           disabled={quickFilter === "REFUND_ACTIVE"}
         >
           {L.refundActive} ({counts.refundActive})
@@ -764,21 +827,47 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
         <button
           className="btn"
           type="button"
-          onClick={() => setQuickFilter("REFUND_FAILED")}
+          onClick={() => {
+            setQuickFilter("REFUND_FAILED");
+            setPageIndex(0);
+          }}
           disabled={quickFilter === "REFUND_FAILED"}
         >
           {L.refundFailed} ({counts.refundFailed})
         </button>
-        <button className="btn" type="button" onClick={() => setQuickFilter("PAYTABS")} disabled={quickFilter === "PAYTABS"}>
+        <button
+          className="btn"
+          type="button"
+          onClick={() => {
+            setQuickFilter("PAYTABS");
+            setPageIndex(0);
+          }}
+          disabled={quickFilter === "PAYTABS"}
+        >
           {L.paytabs} ({counts.paytabs})
         </button>
         <button
           className="btn"
           type="button"
-          onClick={() => setQuickFilter("MANUAL_ACTION")}
+          onClick={() => {
+            setQuickFilter("MANUAL_ACTION");
+            setPageIndex(0);
+          }}
           disabled={quickFilter === "MANUAL_ACTION"}
         >
           {L.manualAction} ({counts.manualAction})
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <span className="admin-muted">
+          {L.page} {Math.min(pageIndex + 1, totalPages)} / {totalPages}
+        </span>
+        <button className="btn" type="button" disabled={pageIndex <= 0} onClick={() => setPageIndex((p) => Math.max(0, p - 1))}>
+          {L.previous}
+        </button>
+        <button className="btn" type="button" disabled={pageIndex >= totalPages - 1} onClick={() => setPageIndex((p) => Math.min(totalPages - 1, p + 1))}>
+          {L.next}
         </button>
       </div>
 
@@ -801,7 +890,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
           </thead>
 
           <tbody>
-            {filtered.map((r) => {
+            {pageRows.map((r) => {
               const cname = readString(r.customer, "name") || L.dash;
               const cphone = readString(r.customer, "phone") || L.dash;
               const cemail = readString(r.customer, "email") || L.dash;
@@ -817,7 +906,6 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
               const opened = !!expanded[r.id];
               const showRefund = canRefundOrder(r);
 
-              const statusUpper = String(r.status || "").toUpperCase();
               const paymentUpper = String(r.payment_method || "").toUpperCase();
               const hasSalesAudit = !!String(r.sales_actor_role || "").trim();
               const legacySales = !hasSalesAudit && String(r.cart_id || "").toLowerCase().startsWith("sales_");
@@ -840,7 +928,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
               const canConfirmManual =
                 paymentUpper !== "PAYTABS" &&
                 currentRefundId > 0 &&
-                (statusUpper === "REFUND_PENDING" || lastRefundStatus === "REQUESTED");
+                lastRefundStatus === "REQUESTED";
               const refundStateLabel = String(r.last_refund_status || r.status || "").toUpperCase() || L.dash;
 
               return (
@@ -1076,7 +1164,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
               );
             })}
 
-            {!filtered.length && (
+            {!pageRows.length && (
               <tr className="admin-row-details">
                 <td colSpan={9} style={{ padding: 14, opacity: 0.7 }}>
                   {L.noResults}
