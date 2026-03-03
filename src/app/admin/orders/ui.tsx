@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useCallback, useMemo, useState, type CSSProperties } from "react";
 import { adminFetch } from "@/app/admin/_components/adminClient";
 
 type JsonRecord = Record<string, unknown>;
@@ -103,10 +103,53 @@ type UpdateStatusResponse = { ok?: boolean; error?: string };
 // Refund API response (keep loose to avoid type churn)
 type RefundResponse = { ok?: boolean; error?: string; refundId?: number | string; paytabs?: unknown };
 
+type QuickFilter = "ALL" | "REFUND_ACTIVE" | "REFUND_FAILED" | "PAYTABS" | "MANUAL_ACTION";
+
+const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  PENDING_PAYMENT: ["PAID", "FAILED", "CANCELED"],
+  PAID: ["PROCESSING", "REFUND_REQUESTED", "REFUND_PENDING"],
+  PROCESSING: ["SHIPPED", "REFUND_REQUESTED", "REFUND_PENDING"],
+  SHIPPED: ["DELIVERED", "REFUND_REQUESTED", "REFUND_PENDING"],
+  DELIVERED: ["REFUND_REQUESTED", "REFUND_PENDING"],
+  FAILED: [],
+  CANCELED: [],
+  PENDING_COD_CONFIRM: ["PAID_COD", "CANCELED"],
+  PAID_COD: ["PROCESSING", "REFUND_REQUESTED", "REFUND_PENDING"],
+  REFUND_REQUESTED: ["REFUND_PENDING", "REFUND_FAILED", "REFUNDED"],
+  REFUND_PENDING: ["REFUND_FAILED", "REFUNDED"],
+  REFUND_FAILED: [],
+  REFUNDED: [],
+};
+
 function parseRefundId(v: unknown): number {
   const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : Number.NaN;
   if (!Number.isFinite(n) || n <= 0) return 0;
   return Math.trunc(n);
+}
+
+function statusBadgeStyle(status: string): CSSProperties {
+  const s = String(status || "").toUpperCase();
+  if (s === "PAID" || s === "PAID_COD" || s === "DELIVERED" || s === "REFUNDED") {
+    return { background: "#eaf9ef", color: "#1f7a3f", border: "1px solid #bfe7cd" };
+  }
+  if (s.startsWith("REFUND_")) {
+    return { background: "#fff4e8", color: "#9a4d00", border: "1px solid #ffd1a8" };
+  }
+  if (s === "FAILED" || s === "CANCELED") {
+    return { background: "#ffecec", color: "#a12626", border: "1px solid #ffc4c4" };
+  }
+  if (s === "PENDING_PAYMENT" || s === "PENDING_COD_CONFIRM" || s === "PROCESSING" || s === "SHIPPED") {
+    return { background: "#eef5ff", color: "#1f4a86", border: "1px solid #c9dcff" };
+  }
+  return { background: "#f6f6f6", color: "#444", border: "1px solid #ddd" };
+}
+
+function allowsTransition(current: string, next: string): boolean {
+  const cur = String(current || "").toUpperCase();
+  const nxt = String(next || "").toUpperCase();
+  if (!cur || !nxt) return false;
+  if (cur === nxt) return true;
+  return (ALLOWED_TRANSITIONS[cur] || []).includes(nxt);
 }
 
 function normalizeItems(items: unknown): OrderItem[] {
@@ -157,6 +200,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
   const [busyId, setBusyId] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("ALL");
 
   // Track latest refundId per order (so we can confirm/fail manual refunds without changing orders API)
   const [refundIdByOrder, setRefundIdByOrder] = useState<Record<number, number>>(() => {
@@ -181,11 +225,26 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
   // Policy locked: restock after 2 days (no immediate)
   const restockPolicyLocked = "DELAYED_2D" as const;
 
+  const currentRefundIdForOrder = useCallback(
+    (orderId: number): number => {
+      const fromMap = refundIdByOrder[orderId] || 0;
+      if (fromMap > 0) return fromMap;
+      const row = rows.find((r) => r.id === orderId);
+      return row ? parseRefundId(row.last_refund_id) : 0;
+    },
+    [refundIdByOrder, rows]
+  );
+
   const L = useMemo(() => {
     if (isAr) {
       return {
         search: "ابحث برقم السلة / الحالة / اسم العميل / الهاتف",
         noResults: "لا توجد نتائج",
+        all: "الكل",
+        refundActive: "استرجاع نشط",
+        refundFailed: "استرجاع فاشل",
+        paytabs: "PayTabs",
+        manualAction: "إجراء يدوي",
 
         id: "المعرّف",
         cart: "السلة",
@@ -237,6 +296,11 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
     return {
       search: "Search by cart_id / status / customer name / phone",
       noResults: "No results",
+      all: "All",
+      refundActive: "Refund active",
+      refundFailed: "Refund failed",
+      paytabs: "PayTabs",
+      manualAction: "Manual action",
 
       id: "ID",
       cart: "Cart",
@@ -287,26 +351,53 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return rows;
-
-    return rows.filter((r) => {
+    const bySearch = rows.filter((r) => {
       const name = readString(r.customer, "name").toLowerCase();
       const phone = readString(r.customer, "phone").toLowerCase();
-      return (
+      const matchesSearch =
         String(r.cart_id).toLowerCase().includes(s) ||
         String(r.status).toLowerCase().includes(s) ||
         name.includes(s) ||
-        phone.includes(s)
-      );
+        phone.includes(s);
+      if (!s) return true;
+      return matchesSearch;
     });
-  }, [rows, q]);
 
-  function currentRefundIdForOrder(orderId: number): number {
-    const fromMap = refundIdByOrder[orderId] || 0;
-    if (fromMap > 0) return fromMap;
-    const row = rows.find((r) => r.id === orderId);
-    return row ? parseRefundId(row.last_refund_id) : 0;
-  }
+    return bySearch.filter((r) => {
+      const statusUpper = String(r.status || "").toUpperCase();
+      const paymentUpper = String(r.payment_method || "").toUpperCase();
+      const lastRefundStatus = String(r.last_refund_status || "").toUpperCase();
+      const canManual =
+        paymentUpper !== "PAYTABS" &&
+        currentRefundIdForOrder(r.id) > 0 &&
+        (statusUpper === "REFUND_PENDING" || lastRefundStatus === "REQUESTED" || lastRefundStatus === "FAILED");
+
+      if (quickFilter === "ALL") return true;
+      if (quickFilter === "REFUND_ACTIVE") return statusUpper === "REFUND_PENDING" || statusUpper === "REFUND_REQUESTED";
+      if (quickFilter === "REFUND_FAILED") return statusUpper === "REFUND_FAILED" || lastRefundStatus === "FAILED";
+      if (quickFilter === "PAYTABS") return paymentUpper === "PAYTABS";
+      if (quickFilter === "MANUAL_ACTION") return canManual;
+      return true;
+    });
+  }, [rows, q, quickFilter, currentRefundIdForOrder]);
+
+  const counts = useMemo(() => {
+    const c = { all: rows.length, refundActive: 0, refundFailed: 0, paytabs: 0, manualAction: 0 };
+    for (const r of rows) {
+      const statusUpper = String(r.status || "").toUpperCase();
+      const paymentUpper = String(r.payment_method || "").toUpperCase();
+      const lastRefundStatus = String(r.last_refund_status || "").toUpperCase();
+      if (statusUpper === "REFUND_PENDING" || statusUpper === "REFUND_REQUESTED") c.refundActive += 1;
+      if (statusUpper === "REFUND_FAILED" || lastRefundStatus === "FAILED") c.refundFailed += 1;
+      if (paymentUpper === "PAYTABS") c.paytabs += 1;
+      const canManual =
+        paymentUpper !== "PAYTABS" &&
+        currentRefundIdForOrder(r.id) > 0 &&
+        (statusUpper === "REFUND_PENDING" || lastRefundStatus === "REQUESTED" || lastRefundStatus === "FAILED");
+      if (canManual) c.manualAction += 1;
+    }
+    return c;
+  }, [rows, currentRefundIdForOrder]);
 
   async function updateStatus(id: number, nextStatus: string) {
     setErr(null);
@@ -522,6 +613,38 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
   return (
     <div className="admin-grid">
       <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={L.search} className="admin-input" />
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button className="btn" type="button" onClick={() => setQuickFilter("ALL")} disabled={quickFilter === "ALL"}>
+          {L.all} ({counts.all})
+        </button>
+        <button
+          className="btn"
+          type="button"
+          onClick={() => setQuickFilter("REFUND_ACTIVE")}
+          disabled={quickFilter === "REFUND_ACTIVE"}
+        >
+          {L.refundActive} ({counts.refundActive})
+        </button>
+        <button
+          className="btn"
+          type="button"
+          onClick={() => setQuickFilter("REFUND_FAILED")}
+          disabled={quickFilter === "REFUND_FAILED"}
+        >
+          {L.refundFailed} ({counts.refundFailed})
+        </button>
+        <button className="btn" type="button" onClick={() => setQuickFilter("PAYTABS")} disabled={quickFilter === "PAYTABS"}>
+          {L.paytabs} ({counts.paytabs})
+        </button>
+        <button
+          className="btn"
+          type="button"
+          onClick={() => setQuickFilter("MANUAL_ACTION")}
+          disabled={quickFilter === "MANUAL_ACTION"}
+        >
+          {L.manualAction} ({counts.manualAction})
+        </button>
+      </div>
 
       {err && <p style={{ color: "crimson", margin: 0 }}>{err}</p>}
 
@@ -575,10 +698,19 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                     </td>
 
                     <td data-label={L.status}>
-                      <b className="ltr">
+                      <span
+                        className="ltr"
+                        style={{
+                          ...statusBadgeStyle(r.status),
+                          padding: "3px 8px",
+                          borderRadius: 999,
+                          display: "inline-block",
+                          fontWeight: 700,
+                        }}
+                      >
                         {r.status}
-                        {isAr ? ` — ${STATUS_AR[r.status] || ""}` : ""}
-                      </b>
+                      </span>
+                      {isAr ? <div style={{ fontSize: 12, opacity: 0.8 }}>{STATUS_AR[r.status] || ""}</div> : null}
                     </td>
 
                     <td data-label={L.payment}>
@@ -650,7 +782,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                         style={{ maxWidth: 280 }}
                       >
                         {STATUS_OPTIONS.map((s) => (
-                          <option key={s} value={s}>
+                          <option key={s} value={s} disabled={!allowsTransition(r.status, s)}>
                             {isAr ? `${s} — ${STATUS_AR[s] || ""}` : s}
                           </option>
                         ))}
