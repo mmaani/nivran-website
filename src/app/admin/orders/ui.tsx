@@ -257,6 +257,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
   const [decisionInputMode, setDecisionInputMode] = useState<"AMOUNT" | "PERCENT">("AMOUNT");
   const [decisionInputValue, setDecisionInputValue] = useState<string>("");
   const [decisionNote, setDecisionNote] = useState<string>("");
+  const [decisionQtyBySlug, setDecisionQtyBySlug] = useState<Record<string, string>>({});
 
   // Policy locked: restock after 2 days (no immediate)
   const restockPolicyLocked = "DELAYED_2D" as const;
@@ -582,6 +583,11 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
     const total = clampMoneyJod(toNum(r.total_jod ?? r.amount));
     const existingRefund = clampMoneyJod(toNum(r.last_refund_amount_jod));
     const initialAmount = existingRefund > 0 ? existingRefund : total;
+    const itemQtyMap: Record<string, string> = {};
+    for (const item of normalizeItems(r.items)) {
+      const maxQty = Math.max(0, Math.trunc(item.qty || 0));
+      itemQtyMap[item.slug] = action === "APPROVE" ? String(maxQty) : "";
+    }
     setDecisionOpenFor(r);
     setDecisionAction(action);
     setDecisionErr(null);
@@ -590,6 +596,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
     setDecisionInputMode("AMOUNT");
     setDecisionInputValue(initialAmount > 0 ? initialAmount.toFixed(2) : "");
     setDecisionNote("");
+    setDecisionQtyBySlug(itemQtyMap);
   }
 
   function closeRefundDecision() {
@@ -601,6 +608,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
     setDecisionInputMode("AMOUNT");
     setDecisionInputValue("");
     setDecisionNote("");
+    setDecisionQtyBySlug({});
   }
 
   async function submitRefundDecision() {
@@ -641,6 +649,32 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
       return;
     }
 
+    const decisionItems = normalizeItems(decisionOpenFor.items);
+    const returnItems =
+      decisionAction === "APPROVE"
+        ? decisionItems
+            .map((item) => {
+              const maxQty = Math.max(0, Math.trunc(item.qty || 0));
+              if (maxQty <= 0) return null;
+              const qty =
+                decisionKind === "FULL"
+                  ? maxQty
+                  : (() => {
+                      const raw = Number(decisionQtyBySlug[item.slug] || 0);
+                      const clean = Number.isFinite(raw) ? Math.max(0, Math.trunc(raw)) : 0;
+                      return Math.min(clean, maxQty);
+                    })();
+              if (qty <= 0) return null;
+              return { slug: item.slug, qty };
+            })
+            .filter((entry): entry is { slug: string; qty: number } => entry !== null)
+        : [];
+
+    if (decisionAction === "APPROVE" && returnItems.length === 0) {
+      setDecisionErr(isAr ? "حدد عنصرًا واحدًا على الأقل مع كمية مرتجعة." : "Select at least one returned item with quantity.");
+      return;
+    }
+
     setDecisionBusy(true);
     setDecisionErr(null);
     setBusyId(orderId);
@@ -658,6 +692,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
             amountInputMode: decisionInputMode,
             amountInputValue: Number.isFinite(inputValueNum) ? inputValueNum : 0,
             note: String(decisionNote || "").trim(),
+            returnItems,
           }),
         });
         const raw: unknown = await res.json().catch(() => null);
@@ -1367,6 +1402,41 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                             </div>
                           </>
                         ) : null}
+
+                        <div style={{ display: "grid", gap: 8 }}>
+                          <label style={{ fontSize: 12, opacity: 0.8 }}>{isAr ? "العناصر المرتجعة (الكمية)" : "Returned items (quantity)"}</label>
+                          <div style={{ display: "grid", gap: 6, maxHeight: 220, overflow: "auto", padding: 8, border: "1px solid rgba(0,0,0,.1)", borderRadius: 10 }}>
+                            {normalizeItems(decisionOpenFor.items).map((item) => {
+                              const maxQty = Math.max(0, Math.trunc(item.qty || 0));
+                              const label = isAr ? item.name_ar || item.name_en || item.slug : item.name_en || item.name_ar || item.slug;
+                              return (
+                                <div key={`${decisionOpenFor.id}-${item.slug}`} style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: 8, alignItems: "center" }}>
+                                  <div style={{ fontSize: 13 }}>
+                                    <span>{label}</span>
+                                    <span className="mono" style={{ opacity: 0.75 }}> • max {maxQty}</span>
+                                  </div>
+                                  <input
+                                    className="admin-input ltr"
+                                    inputMode="numeric"
+                                    value={
+                                      decisionKind === "FULL"
+                                        ? String(maxQty)
+                                        : decisionQtyBySlug[item.slug] || ""
+                                    }
+                                    placeholder="0"
+                                    onChange={(e) =>
+                                      setDecisionQtyBySlug((prev) => ({
+                                        ...prev,
+                                        [item.slug]: e.target.value.replace(/[^\d]/g, ""),
+                                      }))
+                                    }
+                                    disabled={decisionBusy || decisionKind === "FULL"}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
                       </>
                     ) : null}
 

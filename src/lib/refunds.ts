@@ -29,6 +29,7 @@ type OrderForRefund = {
   paytabs_tran_ref: string | null;
   total_jod: string | null;
   amount: string | null;
+  items: unknown;
 };
 
 type ProductRow = {
@@ -73,6 +74,55 @@ function extractRestockDeltas(items: unknown): Array<{ slug: string; qty: number
     const qtyNum = typeof qtyRaw === "number" ? qtyRaw : typeof qtyRaw === "string" ? Number(qtyRaw) : 1;
     const qty = Number.isFinite(qtyNum) ? Math.max(0, Math.trunc(qtyNum)) : 1;
     if (slug && qty > 0) out.push({ slug, qty });
+  }
+  return out;
+}
+
+export type ReturnItem = { slug: string; qty: number };
+
+function purchasedQtyBySlug(items: unknown): Map<string, number> {
+  const map = new Map<string, number>();
+  if (!Array.isArray(items)) return map;
+  for (const entry of items) {
+    if (!isRecord(entry)) continue;
+    const slugRaw = entry["slug"];
+    const slug = typeof slugRaw === "string" ? slugRaw.trim() : "";
+    if (!slug) continue;
+    const qtyRaw = entry["requested_qty"] ?? entry["qty"] ?? 0;
+    const qtyNum = typeof qtyRaw === "number" ? qtyRaw : typeof qtyRaw === "string" ? Number(qtyRaw) : 0;
+    const qty = Number.isFinite(qtyNum) ? Math.max(0, Math.trunc(qtyNum)) : 0;
+    if (qty <= 0) continue;
+    map.set(slug, (map.get(slug) || 0) + qty);
+  }
+  return map;
+}
+
+export function normalizeReturnItems(returnItems: unknown, orderItems: unknown): ReturnItem[] {
+  if (!Array.isArray(returnItems)) return [];
+  const purchased = purchasedQtyBySlug(orderItems);
+  if (purchased.size === 0) throw new Error("ORDER_ITEMS_UNAVAILABLE");
+
+  const aggregated = new Map<string, number>();
+  for (const item of returnItems) {
+    if (!isRecord(item)) continue;
+    const slugRaw = item["slug"];
+    const slug = typeof slugRaw === "string" ? slugRaw.trim() : "";
+    if (!slug) continue;
+    const qtyRaw = item["qty"];
+    const qtyNum = typeof qtyRaw === "number" ? qtyRaw : typeof qtyRaw === "string" ? Number(qtyRaw) : Number.NaN;
+    const qty = Number.isFinite(qtyNum) ? Math.max(0, Math.trunc(qtyNum)) : 0;
+    if (qty <= 0) continue;
+
+    const purchasedQty = purchased.get(slug) || 0;
+    if (purchasedQty <= 0) throw new Error("REFUND_ITEM_NOT_IN_ORDER");
+    const nextQty = (aggregated.get(slug) || 0) + qty;
+    if (nextQty > purchasedQty) throw new Error("REFUND_ITEM_QTY_EXCEEDS_ORDER");
+    aggregated.set(slug, nextQty);
+  }
+
+  const out: ReturnItem[] = [];
+  for (const [slug, qty] of aggregated.entries()) {
+    if (qty > 0) out.push({ slug, qty });
   }
   return out;
 }
@@ -128,10 +178,10 @@ export async function transitionRefundStatus(
 
 export async function createRefundRecord(
   trx: DbTx,
-  input: { orderId: number; amountJod: number; reason: string; method: RefundMethod; idempotencyKey: string }
+  input: { orderId: number; amountJod: number; reason: string; method: RefundMethod; idempotencyKey: string; returnItems?: unknown }
 ): Promise<{ refund: RefundRow; order: OrderForRefund; created: boolean }> {
   const orderRes = await trx.query<OrderForRefund>(
-    `select id, status, payment_method, paytabs_tran_ref, total_jod::text as total_jod, amount::text as amount
+    `select id, status, payment_method, paytabs_tran_ref, total_jod::text as total_jod, amount::text as amount, items
        from orders
       where id = $1
       for update`,
@@ -150,15 +200,18 @@ export async function createRefundRecord(
     return { refund: existing.rows[0], order, created: false };
   }
 
+  const normalizedReturnItems = normalizeReturnItems(input.returnItems, order.items);
+  const payload = normalizedReturnItems.length > 0 ? { return_items: normalizedReturnItems } : null;
+
   const ins = await trx.query<RefundRow>(
     `insert into refunds
-      (order_id, method, amount_jod, currency, reason, idempotency_key, status, paytabs_tran_ref, requested_at)
+      (order_id, method, amount_jod, currency, reason, idempotency_key, status, paytabs_tran_ref, requested_at, payload)
      values
-      ($1,$2,$3,'JOD',$4,$5,'REQUESTED',$6, now())
+      ($1,$2,$3,'JOD',$4,$5,'REQUESTED',$6, now(), $7::jsonb)
      on conflict (idempotency_key)
      do nothing
      returning *`,
-    [input.orderId, input.method, input.amountJod, input.reason || null, input.idempotencyKey, order.paytabs_tran_ref || null]
+    [input.orderId, input.method, input.amountJod, input.reason || null, input.idempotencyKey, order.paytabs_tran_ref || null, payload ? JSON.stringify(payload) : null]
   );
 
   const created = ins.rows[0];
@@ -255,15 +308,17 @@ export async function runDueRestocks(
 
   for (const job of jobsRes.rows) {
     try {
-      const refundRes = await trx.query<{ order_id: number; status: RefundStatus }>(
-        `select order_id, status from refunds where id = $1 for update`,
+      const refundRes = await trx.query<{ order_id: number; status: RefundStatus; payload: unknown }>(
+        `select order_id, status, payload from refunds where id = $1 for update`,
         [job.refund_id]
       );
       const refund = refundRes.rows[0];
       if (!refund) throw new Error("REFUND_NOT_FOUND");
 
       const orderRes = await trx.query<{ items: unknown }>(`select items from orders where id = $1 for update`, [refund.order_id]);
-      const deltas = extractRestockDeltas(orderRes.rows[0]?.items);
+      const payloadRecord = isRecord(refund.payload) ? refund.payload : null;
+      const payloadReturnItems = payloadRecord ? payloadRecord["return_items"] : null;
+      const deltas = Array.isArray(payloadReturnItems) && payloadReturnItems.length > 0 ? normalizeReturnItems(payloadReturnItems, orderRes.rows[0]?.items) : extractRestockDeltas(orderRes.rows[0]?.items);
 
       for (const d of deltas) {
         const p = await trx.query<ProductRow>(`select slug, inventory_qty from products where slug = $1 for update`, [d.slug]);

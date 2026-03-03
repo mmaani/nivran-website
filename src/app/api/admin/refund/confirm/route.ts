@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/guards";
 import { ensureRefundTablesSafe } from "@/lib/refundsSchema";
-import { markRefundSucceeded, scheduleRestockAfter48h } from "@/lib/refunds";
+import { markRefundSucceeded, normalizeReturnItems, scheduleRestockAfter48h } from "@/lib/refunds";
 import { logAdminAudit } from "@/lib/adminAudit";
 
 type JsonRecord = Record<string, unknown>;
@@ -44,14 +44,15 @@ export async function POST(req: Request) {
   const refundKind = toStr(body["refundKind"]).trim().toUpperCase() || "FULL";
   const amountInputMode = toStr(body["amountInputMode"]).trim().toUpperCase() || "AMOUNT";
   const amountInputValue = toNum(body["amountInputValue"]);
+  const returnItems = body["returnItems"];
 
   if (!(refundId > 0)) return NextResponse.json({ ok: false, error: "refundId is required" }, { status: 400 });
   if (!(amountJod > 0)) return NextResponse.json({ ok: false, error: "amountJod must be > 0" }, { status: 400 });
 
   try {
     const result = await db.withTransaction(async (trx) => {
-      const meta = await trx.query<{ order_id: number; order_total_jod: string }>(
-        `select r.order_id, coalesce(o.total_jod, o.amount::numeric)::text as order_total_jod
+      const meta = await trx.query<{ order_id: number; order_total_jod: string; order_items: unknown; refund_payload: unknown }>(
+        `select r.order_id, coalesce(o.total_jod, o.amount::numeric)::text as order_total_jod, o.items as order_items, r.payload as refund_payload
            from refunds r
            join orders o on o.id = r.order_id
           where r.id = $1
@@ -64,17 +65,24 @@ export async function POST(req: Request) {
       if (!(orderTotal > 0)) throw new Error("ORDER_TOTAL_INVALID");
       if (amountJod > orderTotal) throw new Error("REFUND_AMOUNT_EXCEEDS_ORDER_TOTAL");
 
+      const existingPayload = isRecord(row.refund_payload) ? row.refund_payload : {};
+      const candidateReturnItems = returnItems ?? existingPayload["return_items"];
+      const normalizedReturnItems = normalizeReturnItems(candidateReturnItems, row.order_items);
+      const payload = {
+        ...existingPayload,
+        return_items: normalizedReturnItems.length > 0 ? normalizedReturnItems : existingPayload["return_items"] ?? null,
+        manual_note: note,
+        amount_jod: amountJod,
+        refund_kind: refundKind,
+        amount_input_mode: amountInputMode,
+        amount_input_value: amountInputValue,
+      };
+
       await trx.query(`update refunds set amount_jod = $2 where id = $1`, [refundId, amountJod]);
       const r = await markRefundSucceeded(trx, {
         refundId,
         paytabsRefundReference: null,
-        payload: {
-          manual_note: note,
-          amount_jod: amountJod,
-          refund_kind: refundKind,
-          amount_input_mode: amountInputMode,
-          amount_input_value: amountInputValue,
-        },
+        payload,
       });
       await scheduleRestockAfter48h(trx, { refundId });
       await logAdminAudit(trx, req, {
@@ -93,7 +101,13 @@ export async function POST(req: Request) {
     if (message === "REFUND_NOT_FOUND") {
       return NextResponse.json({ ok: false, error: message }, { status: 404 });
     }
-    if (message === "REFUND_AMOUNT_EXCEEDS_ORDER_TOTAL" || message === "ORDER_TOTAL_INVALID") {
+    if (
+      message === "REFUND_AMOUNT_EXCEEDS_ORDER_TOTAL" ||
+      message === "ORDER_TOTAL_INVALID" ||
+      message === "REFUND_ITEM_NOT_IN_ORDER" ||
+      message === "REFUND_ITEM_QTY_EXCEEDS_ORDER" ||
+      message === "ORDER_ITEMS_UNAVAILABLE"
+    ) {
       return NextResponse.json({ ok: false, error: message }, { status: 409 });
     }
     if (message.startsWith("REFUND_INVALID_TRANSITION_") || message === "REFUND_TRANSITION_REJECTED") {

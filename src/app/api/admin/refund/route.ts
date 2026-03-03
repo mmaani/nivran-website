@@ -51,6 +51,7 @@ export async function POST(req: Request) {
   const reason = toStr(body["reason"]);
   const idempotencyKey = toStr(body["idempotencyKey"]);
   const method = modeToMethod(toStr(body["mode"]));
+  const returnItems = body["returnItems"];
 
   if (!(orderId > 0)) return NextResponse.json({ ok: false, error: "orderId is required" }, { status: 400 });
   if (!(amountJod > 0)) return NextResponse.json({ ok: false, error: "amountJod must be > 0" }, { status: 400 });
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
   let prep: Awaited<ReturnType<typeof createRefundRecord>>;
   try {
     prep = await db.withTransaction(async (trx) => {
-      const prepared = await createRefundRecord(trx, { orderId, amountJod, reason, method, idempotencyKey });
+      const prepared = await createRefundRecord(trx, { orderId, amountJod, reason, method, idempotencyKey, returnItems });
       if (prepared.created) {
         await logAdminAudit(trx, req, {
           adminId: actorIdFromAuth(auth),
@@ -82,7 +83,10 @@ export async function POST(req: Request) {
       message === "ORDER_NOT_REFUNDABLE_STATUS" ||
       message === "MISSING_PAYTABS_TRAN_REF" ||
       message === "REFUND_AMOUNT_EXCEEDS_ORDER_TOTAL" ||
-      message === "ORDER_TOTAL_INVALID"
+      message === "ORDER_TOTAL_INVALID" ||
+      message === "REFUND_ITEM_NOT_IN_ORDER" ||
+      message === "REFUND_ITEM_QTY_EXCEEDS_ORDER" ||
+      message === "ORDER_ITEMS_UNAVAILABLE"
     ) {
       return NextResponse.json({ ok: false, error: message }, { status: 409 });
     }

@@ -189,6 +189,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
   const [refundRequestBusy, setRefundRequestBusy] = useState(false);
   const [refundRequestErr, setRefundRequestErr] = useState<string | null>(null);
   const [refundRequestOk, setRefundRequestOk] = useState<string | null>(null);
+  const [refundRequestQtyBySlug, setRefundRequestQtyBySlug] = useState<Record<string, string>>({});
   const [promoQuote, setPromoQuote] = useState<PromoQuoteState>({ checking: false, discountJod: 0, subtotalAfterDiscountJod: 0, error: null });
 
   useEffect(() => {
@@ -484,6 +485,11 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
     setRefundRequestReason("");
     const amount = Number(order.total_jod || 0);
     setRefundRequestAmount(Number.isFinite(amount) && amount > 0 ? amount.toFixed(2) : "");
+    const initialMap: Record<string, string> = {};
+    for (const item of normalizeOrderItems(order.items)) {
+      initialMap[item.slug] = "";
+    }
+    setRefundRequestQtyBySlug(initialMap);
   }
 
   function closeRefundRequest(): void {
@@ -493,6 +499,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
     setRefundRequestOk(null);
     setRefundRequestReason("");
     setRefundRequestAmount("");
+    setRefundRequestQtyBySlug({});
   }
 
   async function submitRefundRequest(): Promise<void> {
@@ -506,6 +513,19 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
         throw new Error(isAr ? "المبلغ غير صالح." : "Invalid refund amount.");
       }
       const idempotencyKey = `sales-refund-${refundRequestForOrder.id}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+      const orderItems = normalizeOrderItems(refundRequestForOrder.items);
+      const returnItems = orderItems
+        .map((item) => {
+          const raw = Number(refundRequestQtyBySlug[item.slug] || 0);
+          const qty = Number.isFinite(raw) ? Math.max(0, Math.trunc(raw)) : 0;
+          const maxQty = Math.max(0, Math.trunc(item.requested_qty || item.qty || 0));
+          if (qty <= 0) return null;
+          return { slug: item.slug, qty: Math.min(qty, maxQty) };
+        })
+        .filter((entry): entry is { slug: string; qty: number } => entry !== null && entry.qty > 0);
+      if (returnItems.length === 0) {
+        throw new Error(isAr ? "حدد عنصرًا واحدًا على الأقل مع كمية مسترجعة." : "Select at least one returned item with quantity.");
+      }
       const response = await fetch("/api/admin/refund", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -516,6 +536,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
           reason: refundRequestReason.trim(),
           mode: "MANUAL",
           idempotencyKey,
+          returnItems,
         }),
       });
       const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; refundId?: number | string };
@@ -1006,6 +1027,11 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
                 ? `الطلب #${refundRequestForOrder.id} — ${refundRequestForOrder.customer_name || "—"}`
                 : `Order #${refundRequestForOrder.id} - ${refundRequestForOrder.customer_name || "—"}`}
             </p>
+            <p className="admin-muted" style={{ marginTop: -6 }}>
+              {isAr
+                ? `الهاتف: ${refundRequestForOrder.customer_phone || "—"} • البريد: ${refundRequestForOrder.customer_email || "—"}`
+                : `Phone: ${refundRequestForOrder.customer_phone || "—"} • Email: ${refundRequestForOrder.customer_email || "—"}`}
+            </p>
             {refundRequestErr ? <p style={{ color: "crimson", margin: 0 }}>{refundRequestErr}</p> : null}
             {refundRequestOk ? <p style={{ color: "seagreen", margin: 0 }}>{refundRequestOk}</p> : null}
             <div className="admin-grid" style={{ gap: 8 }}>
@@ -1026,6 +1052,34 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
                 placeholder={isAr ? "مثال: إرجاع عميل" : "e.g. customer return"}
                 disabled={refundRequestBusy}
               />
+              <label style={{ fontSize: 12, opacity: 0.8 }}>{isAr ? "العناصر المرتجعة (الكمية)" : "Returned items (quantity)"}</label>
+              <div style={{ display: "grid", gap: 6, maxHeight: 220, overflow: "auto", padding: 8, border: "1px solid rgba(0,0,0,.1)", borderRadius: 10 }}>
+                {normalizeOrderItems(refundRequestForOrder.items).map((item) => {
+                  const maxQty = Math.max(0, Math.trunc(item.requested_qty || item.qty || 0));
+                  const label = isAr ? item.name_ar || item.name_en || item.slug : item.name_en || item.name_ar || item.slug;
+                  return (
+                    <div key={`${refundRequestForOrder.id}-${item.slug}`} style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: 8, alignItems: "center" }}>
+                      <div style={{ fontSize: 13 }}>
+                        <span>{label}</span>
+                        <span className="mono" style={{ opacity: 0.75 }}> • max {maxQty}</span>
+                      </div>
+                      <input
+                        className="admin-input ltr"
+                        inputMode="numeric"
+                        value={refundRequestQtyBySlug[item.slug] || ""}
+                        placeholder="0"
+                        onChange={(event) =>
+                          setRefundRequestQtyBySlug((prev) => ({
+                            ...prev,
+                            [item.slug]: event.target.value.replace(/[^\d]/g, ""),
+                          }))
+                        }
+                        disabled={refundRequestBusy}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
             </div>
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 12 }}>
               <button className="btn" type="button" onClick={closeRefundRequest} disabled={refundRequestBusy}>
