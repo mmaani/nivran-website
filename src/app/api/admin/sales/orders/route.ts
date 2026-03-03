@@ -15,6 +15,9 @@ type SalesOrderRow = {
   total_jod: string;
   item_lines: number;
   item_qty_total: number;
+  items: unknown;
+  last_refund_id: number | null;
+  last_refund_status: string | null;
   created_at: string;
 };
 
@@ -55,10 +58,12 @@ export async function GET(req: Request) {
     where += ` and o.created_at <= $${params.length}::timestamptz`;
   }
 
-  params.push(limit + 1);
-  const limitParam = `$${params.length}`;
-  params.push(offset);
-  const offsetParam = `$${params.length}`;
+  const paramsForBase = [...params];
+  const whereForBase = where;
+
+  const pageParams = [...paramsForBase, limit + 1, offset];
+  const limitParam = `$${pageParams.length - 1}`;
+  const offsetParam = `$${pageParams.length}`;
 
   const result = await db.query<SalesOrderRow>(
     `select
@@ -75,20 +80,50 @@ export async function GET(req: Request) {
          select sum(greatest(0, coalesce((entry->>'requested_qty')::int, (entry->>'qty')::int, 0)))
            from jsonb_array_elements(coalesce(o.items, '[]'::jsonb)) as entry
        ), 0)::int as item_qty_total,
+       coalesce(o.items, '[]'::jsonb) as items,
+       r.id::int as last_refund_id,
+       r.status::text as last_refund_status,
        o.created_at::text as created_at
      from sales_audit_logs l
      join orders o on o.id = l.order_id
-     ${where}
+     left join lateral (
+       select id, status
+         from refunds
+        where order_id = o.id
+        order by id desc
+        limit 1
+     ) r on true
+     ${whereForBase}
      order by l.created_at desc
      limit ${limitParam} offset ${offsetParam}`,
-    params
+    pageParams
   );
 
   const hasMore = result.rows.length > limit;
   const orders = hasMore ? result.rows.slice(0, limit) : result.rows;
 
+  const summaryRes = await db.query<{ transactions_count: string; total_sales_jod: string }>(
+    `select
+       count(*)::text as transactions_count,
+       coalesce(sum(coalesce(o.total_jod, o.amount::numeric)), 0)::text as total_sales_jod
+     from sales_audit_logs l
+     join orders o on o.id = l.order_id
+     ${whereForBase}`,
+    paramsForBase
+  );
+  const summary = summaryRes.rows[0] || { transactions_count: "0", total_sales_jod: "0" };
+
   return NextResponse.json({
     ok: true,
+    viewer: {
+      role: auth.role,
+      username: auth.username,
+      staffId: auth.staffId,
+    },
+    summary: {
+      transactionsCount: Number(summary.transactions_count || "0"),
+      totalSalesJod: Number(summary.total_sales_jod || "0"),
+    },
     orders,
     pagination: {
       limit,

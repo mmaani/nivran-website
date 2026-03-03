@@ -37,10 +37,33 @@ type OrderRow = {
   payment_method?: string;
   item_lines?: number;
   item_qty_total?: number;
+  items?: unknown;
+  last_refund_id?: number | null;
+  last_refund_status?: string | null;
   created_at: string;
 };
 
+type SalesOrderItem = {
+  slug: string;
+  name_en: string;
+  name_ar: string;
+  qty: number;
+  requested_qty: number;
+  unit_price_jod: number;
+  line_total_jod: number;
+};
+
 type OrdersResponse = {
+  ok?: boolean;
+  viewer?: {
+    role?: "admin" | "sales";
+    username?: string | null;
+    staffId?: number | null;
+  };
+  summary?: {
+    transactionsCount?: number;
+    totalSalesJod?: number;
+  };
   orders: OrderRow[];
   pagination?: {
     limit: number;
@@ -77,6 +100,41 @@ function normalizeVariantId(value: unknown): number | null {
   return Math.trunc(n);
 }
 
+function normalizeOrderItems(items: unknown): SalesOrderItem[] {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((entry): SalesOrderItem | null => {
+      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return null;
+      const row = entry as Record<string, unknown>;
+      const slug = String(row["slug"] || "").trim();
+      if (!slug) return null;
+      const qtyRaw = Number(row["requested_qty"] ?? row["qty"] ?? 0);
+      const qty = Number.isFinite(qtyRaw) ? Math.max(0, Math.trunc(qtyRaw)) : 0;
+      const requestedQtyRaw = Number(row["requested_qty"] ?? row["qty"] ?? qty);
+      const requested_qty = Number.isFinite(requestedQtyRaw) ? Math.max(0, Math.trunc(requestedQtyRaw)) : qty;
+      const unitRaw = Number(row["unit_price_jod"] ?? 0);
+      const unit_price_jod = Number.isFinite(unitRaw) ? unitRaw : 0;
+      const lineRaw = Number(row["line_total_jod"] ?? unit_price_jod * requested_qty);
+      const line_total_jod = Number.isFinite(lineRaw) ? lineRaw : 0;
+      return {
+        slug,
+        name_en: String(row["name_en"] || ""),
+        name_ar: String(row["name_ar"] || ""),
+        qty,
+        requested_qty,
+        unit_price_jod,
+        line_total_jod,
+      };
+    })
+    .filter((entry): entry is SalesOrderItem => entry !== null);
+}
+
+function parseRefundId(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.trunc(n);
+}
+
 function resolveCartLinePricing(product: Product, variantId: number | null, isAr: boolean): { unitPriceJod: number; variantLabel: string } {
   if (variantId) {
     const selectedVariant = product.variants?.find((entry) => normalizeId(entry.id) === variantId) || null;
@@ -101,11 +159,16 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
   const [query, setQuery] = useState("");
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
   const [sortMode, setSortMode] = useState<"recent" | "name" | "stock-asc" | "stock-desc">("recent");
-  const [ordersStatusFilter, setOrdersStatusFilter] = useState<"" | "PAID" | "BACKORDER">("");
+  const [ordersStatusFilter, setOrdersStatusFilter] = useState<string>("");
   const [ordersLimit, setOrdersLimit] = useState<10 | 20 | 30>(10);
   const [ordersOffset, setOrdersOffset] = useState(0);
   const [ordersHasMore, setOrdersHasMore] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersTransactionsCount, setOrdersTransactionsCount] = useState(0);
+  const [ordersTotalSalesJod, setOrdersTotalSalesJod] = useState(0);
+  const [viewerRole, setViewerRole] = useState<"admin" | "sales">("sales");
+  const [viewerName, setViewerName] = useState("");
+  const [expandedOrders, setExpandedOrders] = useState<Record<number, boolean>>({});
   const [ordersFrom, setOrdersFrom] = useState("");
   const [ordersTo, setOrdersTo] = useState("");
   const [promoCode, setPromoCode] = useState("");
@@ -120,6 +183,12 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
   const [accountPassword, setAccountPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
+  const [refundRequestForOrder, setRefundRequestForOrder] = useState<OrderRow | null>(null);
+  const [refundRequestAmount, setRefundRequestAmount] = useState("");
+  const [refundRequestReason, setRefundRequestReason] = useState("");
+  const [refundRequestBusy, setRefundRequestBusy] = useState(false);
+  const [refundRequestErr, setRefundRequestErr] = useState<string | null>(null);
+  const [refundRequestOk, setRefundRequestOk] = useState<string | null>(null);
   const [promoQuote, setPromoQuote] = useState<PromoQuoteState>({ checking: false, discountJod: 0, subtotalAfterDiscountJod: 0, error: null });
 
   useEffect(() => {
@@ -141,7 +210,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
 
   const isAr = lang === "ar";
 
-  const load = useCallback(async (offsetOverride?: number, append = false) => {
+  const load = useCallback(async (offsetOverride?: number) => {
     const offset = typeof offsetOverride === "number" ? Math.max(0, Math.trunc(offsetOverride)) : ordersOffset;
     if (ordersFrom && ordersTo && ordersFrom > ordersTo) {
       setMsg(isAr ? "تاريخ البداية يجب أن يكون قبل تاريخ النهاية." : "From date must be before To date.");
@@ -178,9 +247,13 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
       setProducts(loadedProducts);
       setPromos(Array.isArray(catalog.promotions) ? catalog.promotions : []);
       const nextOrders = Array.isArray(salesOrders.orders) ? salesOrders.orders : [];
-      setOrders((prev) => (append ? [...prev, ...nextOrders] : nextOrders));
+      setOrders(nextOrders);
       setOrdersHasMore(Boolean(salesOrders.pagination?.hasMore));
       setOrdersOffset(offset);
+      setOrdersTransactionsCount(Number(salesOrders.summary?.transactionsCount || 0));
+      setOrdersTotalSalesJod(Number(salesOrders.summary?.totalSalesJod || 0));
+      setViewerRole(salesOrders.viewer?.role === "admin" ? "admin" : "sales");
+      setViewerName(String(salesOrders.viewer?.username || "").trim());
 
       const selection: Record<number, number | null> = {};
       for (const product of loadedProducts) {
@@ -379,8 +452,84 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
     const normalized = String(value || "").toUpperCase();
     if (normalized === "PAID") return isAr ? "مدفوع" : "Paid";
     if (normalized === "BACKORDER") return isAr ? "طلب مؤجل" : "Backorder";
+    if (normalized === "REFUND_PENDING") return isAr ? "قيد الاسترجاع" : "Refund pending";
+    if (normalized === "REFUND_FAILED") return isAr ? "فشل الاسترجاع" : "Refund failed";
+    if (normalized === "REFUNDED") return isAr ? "تم الاسترجاع" : "Refunded";
     return value || "—";
   };
+
+  const canRequestRefund = (order: OrderRow): boolean => {
+    const status = String(order.status || "").toUpperCase();
+    return status === "PAID" || status === "PAID_COD";
+  };
+
+  const previousPageOffset = Math.max(0, ordersOffset - ordersLimit);
+  const pageNumber = Math.floor(ordersOffset / Math.max(1, ordersLimit)) + 1;
+
+  function openRefundRequest(order: OrderRow): void {
+    setRefundRequestForOrder(order);
+    setRefundRequestErr(null);
+    setRefundRequestOk(null);
+    setRefundRequestReason("");
+    const amount = Number(order.total_jod || 0);
+    setRefundRequestAmount(Number.isFinite(amount) && amount > 0 ? amount.toFixed(2) : "");
+  }
+
+  function closeRefundRequest(): void {
+    if (refundRequestBusy) return;
+    setRefundRequestForOrder(null);
+    setRefundRequestErr(null);
+    setRefundRequestOk(null);
+    setRefundRequestReason("");
+    setRefundRequestAmount("");
+  }
+
+  async function submitRefundRequest(): Promise<void> {
+    if (!refundRequestForOrder) return;
+    setRefundRequestBusy(true);
+    setRefundRequestErr(null);
+    setRefundRequestOk(null);
+    try {
+      const amount = Number(refundRequestAmount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new Error(isAr ? "المبلغ غير صالح." : "Invalid refund amount.");
+      }
+      const idempotencyKey = `sales-refund-${refundRequestForOrder.id}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+      const response = await fetch("/api/admin/refund", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          orderId: refundRequestForOrder.id,
+          amountJod: Math.round(amount * 100) / 100,
+          reason: refundRequestReason.trim(),
+          mode: "MANUAL",
+          idempotencyKey,
+        }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; refundId?: number | string };
+      if (!response.ok || payload.ok !== true) {
+        throw new Error(payload.error || (isAr ? "تعذر إنشاء طلب الاسترجاع." : "Failed to create refund request."));
+      }
+      const refundId = parseRefundId(payload.refundId);
+      setOrders((prev) =>
+        prev.map((order) =>
+          order.id === refundRequestForOrder.id
+            ? { ...order, status: "REFUND_PENDING", last_refund_id: refundId || order.last_refund_id || null, last_refund_status: "REQUESTED" }
+            : order
+        )
+      );
+      setRefundRequestOk(
+        isAr
+          ? `تم إنشاء طلب الاسترجاع${refundId ? ` (#${refundId})` : ""}. يحتاج موافقة الإدارة.`
+          : `Refund request created${refundId ? ` (#${refundId})` : ""}. Admin approval is required.`
+      );
+    } catch (error: unknown) {
+      setRefundRequestErr(error instanceof Error ? error.message : isAr ? "تعذر إنشاء طلب الاسترجاع." : "Failed to create refund request.");
+    } finally {
+      setRefundRequestBusy(false);
+    }
+  }
 
   const applyPromotionCode = (code: string | null | undefined) => {
     const next = String(code || "").trim();
@@ -511,12 +660,23 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
   return (
     <div className="admin-grid" style={{ gap: 16 }} dir={isAr ? "rtl" : "ltr"}>
       <h1 className="admin-h1">{isAr ? "بوابة المبيعات" : "Sales Portal"}</h1>
+      <p className="admin-muted" style={{ marginTop: -8 }}>
+        {viewerRole === "sales"
+          ? isAr
+            ? `مرحبًا ${viewerName || "مندوب المبيعات"} — راقب مبيعاتك وأنشئ طلبات استرجاع للإدارة.`
+            : `Welcome ${viewerName || "Sales Rep"} - monitor your transactions and create refund requests for admin approval.`
+          : isAr
+            ? "وضع الإدارة: يمكنك متابعة جميع عمليات البيع."
+            : "Admin mode: you can review all sales transactions."}
+      </p>
 
       <div className="admin-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
         <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "المنتجات المعروضة" : "Visible products"}</b><div>{visibleProducts.length}</div></div>
         <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "العروض" : "Promotions"}</b><div>{promos.length}</div></div>
         <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "عناصر السلة" : "Cart items"}</b><div>{itemCount}</div></div>
         <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "المجموع الفرعي" : "Subtotal"}</b><div>{money(subtotal)}</div></div>
+        <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "إجمالي المعاملات" : "Sales transactions"}</b><div>{ordersTransactionsCount}</div></div>
+        <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "إجمالي المبيعات" : "Total sales"}</b><div>{money(ordersTotalSalesJod)}</div></div>
       </div>
 
       <div className="admin-card" style={{ padding: 14 }}>
@@ -677,10 +837,13 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
       <div className="admin-card" style={{ padding: 14 }}>
         <h3>{isAr ? "طلبات المبيعات الخاصة بي" : "My Sales Orders"}</h3>
         <div className="admin-row" style={{ gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-          <select className="admin-select" value={ordersStatusFilter} onChange={(event) => setOrdersStatusFilter(event.target.value as "" | "PAID" | "BACKORDER")}>
+          <select className="admin-select" value={ordersStatusFilter} onChange={(event) => setOrdersStatusFilter(event.target.value)}>
             <option value="">{isAr ? "كل الحالات" : "All statuses"}</option>
             <option value="PAID">{isAr ? "مدفوع" : "Paid"}</option>
             <option value="BACKORDER">{isAr ? "طلب مؤجل" : "Backorder"}</option>
+            <option value="REFUND_PENDING">{isAr ? "قيد الاسترجاع" : "Refund pending"}</option>
+            <option value="REFUND_FAILED">{isAr ? "فشل الاسترجاع" : "Refund failed"}</option>
+            <option value="REFUNDED">{isAr ? "تم الاسترجاع" : "Refunded"}</option>
           </select>
           <select className="admin-select" value={ordersLimit} onChange={(event) => setOrdersLimit(Number(event.target.value) as 10 | 20 | 30)}>
             <option value={10}>{isAr ? "آخر 10" : "Latest 10"}</option>
@@ -691,8 +854,9 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
           <input className="admin-input" type="date" aria-label={isAr ? "إلى تاريخ" : "To date"} value={ordersTo} onChange={(event) => setOrdersTo(event.target.value)} />
           <button className="btn" type="button" onClick={() => void load(0)}>{isAr ? "تحديث" : "Refresh"}</button>
           <button className="btn" type="button" onClick={resetOrdersFilters}>{isAr ? "إعادة ضبط" : "Reset"}</button>
-          <button className="btn" type="button" disabled={ordersOffset <= 0 || ordersLoading} onClick={() => void load(Math.max(0, ordersOffset - ordersLimit), false)}>{isAr ? "السابق" : "Previous"}</button>
-          <button className="btn" type="button" disabled={!ordersHasMore || ordersLoading} onClick={() => void load(ordersOffset + ordersLimit, true)}>{isAr ? "عرض المزيد" : "Show more"}</button>
+          <button className="btn" type="button" disabled={ordersOffset <= 0 || ordersLoading} onClick={() => void load(previousPageOffset)}>{isAr ? "السابق" : "Previous"}</button>
+          <button className="btn" type="button" disabled={!ordersHasMore || ordersLoading} onClick={() => void load(ordersOffset + ordersLimit)}>{isAr ? "التالي" : "Next"}</button>
+          <span className="admin-muted">{isAr ? `الصفحة ${pageNumber}` : `Page ${pageNumber}`}</span>
         </div>
         <div className="admin-table-wrap">
           <table className="admin-table sales-orders-table">
@@ -707,32 +871,145 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
                 <th>{isAr ? "العناصر" : "Items"}</th>
                 <th>{isAr ? "الكمية" : "Qty"}</th>
                 <th>{isAr ? "الحالة" : "Status"}</th>
+                <th>{isAr ? "الاسترجاع" : "Refund"}</th>
                 <th style={{ textAlign: "right" }}>{isAr ? "الإجمالي" : "Amount"}</th>
+                <th>{isAr ? "إجراءات" : "Actions"}</th>
               </tr>
             </thead>
             <tbody>
-              {orders.map((order) => (
-                <tr key={order.id}>
-                  <td data-label={isAr ? "الرقم" : "ID"}>#{order.id}</td>
-                  <td data-label={isAr ? "التاريخ" : "Created"}>{new Date(order.created_at).toLocaleString(isAr ? "ar-JO" : "en-GB")}</td>
-                  <td data-label={isAr ? "العميل" : "Customer"}>{order.customer_name || "—"}</td>
-                  <td data-label={isAr ? "البريد" : "Email"}>{order.customer_email || "—"}</td>
-                  <td data-label={isAr ? "الهاتف" : "Phone"}>{order.customer_phone || "—"}</td>
-                  <td data-label={isAr ? "الدفع" : "Payment"}>{paymentLabel(order.payment_method)}</td>
-                  <td data-label={isAr ? "العناصر" : "Items"}>{order.item_lines ?? 0}</td>
-                  <td data-label={isAr ? "الكمية" : "Qty"}>{order.item_qty_total ?? 0}</td>
-                  <td data-label={isAr ? "الحالة" : "Status"}>{statusLabel(order.status)}</td>
-                  <td data-label={isAr ? "الإجمالي" : "Amount"} style={{ textAlign: "right" }}>{money(Number(order.total_jod || 0))}</td>
-                </tr>
-              ))}
+              {orders.map((order) => {
+                const items = normalizeOrderItems(order.items);
+                const expanded = !!expandedOrders[order.id];
+                const refundId = parseRefundId(order.last_refund_id);
+                const refundStatus = String(order.last_refund_status || "").toUpperCase();
+                const refundText =
+                  refundId > 0
+                    ? `${isAr ? "طلب" : "Request"} #${refundId} ${refundStatus ? `(${refundStatus})` : ""}`
+                    : "—";
+                const refundRequestDisabled = !canRequestRefund(order);
+
+                return (
+                  <React.Fragment key={order.id}>
+                    <tr>
+                      <td data-label={isAr ? "الرقم" : "ID"}>#{order.id}</td>
+                      <td data-label={isAr ? "التاريخ" : "Created"}>{new Date(order.created_at).toLocaleString(isAr ? "ar-JO" : "en-GB")}</td>
+                      <td data-label={isAr ? "العميل" : "Customer"}>{order.customer_name || "—"}</td>
+                      <td data-label={isAr ? "البريد" : "Email"}>{order.customer_email || "—"}</td>
+                      <td data-label={isAr ? "الهاتف" : "Phone"}>{order.customer_phone || "—"}</td>
+                      <td data-label={isAr ? "الدفع" : "Payment"}>{paymentLabel(order.payment_method)}</td>
+                      <td data-label={isAr ? "العناصر" : "Items"}>{order.item_lines ?? items.length}</td>
+                      <td data-label={isAr ? "الكمية" : "Qty"}>{order.item_qty_total ?? 0}</td>
+                      <td data-label={isAr ? "الحالة" : "Status"}>{statusLabel(order.status)}</td>
+                      <td data-label={isAr ? "الاسترجاع" : "Refund"}>{refundText}</td>
+                      <td data-label={isAr ? "الإجمالي" : "Amount"} style={{ textAlign: "right" }}>{money(Number(order.total_jod || 0))}</td>
+                      <td data-label={isAr ? "إجراءات" : "Actions"} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button className="btn" type="button" onClick={() => setExpandedOrders((prev) => ({ ...prev, [order.id]: !prev[order.id] }))}>
+                          {expanded ? (isAr ? "إخفاء" : "Hide") : (isAr ? "عرض" : "Show")}
+                        </button>
+                        <button className="btn" type="button" disabled={refundRequestDisabled} onClick={() => openRefundRequest(order)}>
+                          {isAr ? "طلب استرجاع" : "Request refund"}
+                        </button>
+                      </td>
+                    </tr>
+                    {expanded ? (
+                      <tr className="admin-row-details">
+                        <td colSpan={12}>
+                          <div className="admin-grid" style={{ gap: 6 }}>
+                            <strong>{isAr ? "العناصر المشتراة" : "Purchased items"}</strong>
+                            {items.length === 0 ? (
+                              <div className="admin-muted">{isAr ? "لا توجد عناصر مفصلة لهذا الطلب." : "No item details for this order."}</div>
+                            ) : (
+                              <ul style={{ margin: 0, paddingInlineStart: 18 }}>
+                                {items.map((item) => (
+                                  <li key={`${order.id}-${item.slug}-${item.requested_qty}`}>
+                                    <span>{isAr ? item.name_ar || item.name_en || item.slug : item.name_en || item.name_ar || item.slug}</span>
+                                    <span className="mono"> — {item.requested_qty} × {item.unit_price_jod.toFixed(2)} = {item.line_total_jod.toFixed(2)} JOD</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </React.Fragment>
+                );
+              })}
             {orders.length === 0 ? (
-              <tr><td data-label={isAr ? "الحالة" : "Status"} colSpan={10} style={{ padding: 12 }}>{isAr ? "لا توجد طلبات مبيعات ضمن المرشحات." : "No sales orders in current filters."}</td></tr>
+              <tr><td data-label={isAr ? "الحالة" : "Status"} colSpan={12} style={{ padding: 12 }}>{isAr ? "لا توجد طلبات مبيعات ضمن المرشحات." : "No sales orders in current filters."}</td></tr>
               ) : null}
             </tbody>
           </table>
         </div>
         {ordersLoading ? <p className="admin-muted" style={{ marginTop: 8 }}>{isAr ? "جارٍ تحميل الطلبات..." : "Loading orders..."}</p> : null}
       </div>
+
+      {refundRequestForOrder ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.35)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 50,
+          }}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) closeRefundRequest();
+          }}
+        >
+          <div
+            style={{
+              width: "min(620px, 100%)",
+              background: "var(--cream, #fff)",
+              color: "var(--ink, #111)",
+              borderRadius: 16,
+              boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+              padding: 16,
+            }}
+          >
+            <h3 style={{ marginTop: 0 }}>{isAr ? "طلب استرجاع (ينتظر موافقة الإدارة)" : "Refund request (awaiting admin approval)"}</h3>
+            <p className="admin-muted" style={{ marginTop: 0 }}>
+              {isAr
+                ? `الطلب #${refundRequestForOrder.id} — ${refundRequestForOrder.customer_name || "—"}`
+                : `Order #${refundRequestForOrder.id} - ${refundRequestForOrder.customer_name || "—"}`}
+            </p>
+            {refundRequestErr ? <p style={{ color: "crimson", margin: 0 }}>{refundRequestErr}</p> : null}
+            {refundRequestOk ? <p style={{ color: "seagreen", margin: 0 }}>{refundRequestOk}</p> : null}
+            <div className="admin-grid" style={{ gap: 8 }}>
+              <label style={{ fontSize: 12, opacity: 0.8 }}>{isAr ? "المبلغ (JOD)" : "Amount (JOD)"}</label>
+              <input
+                className="admin-input ltr"
+                value={refundRequestAmount}
+                onChange={(event) => setRefundRequestAmount(event.target.value)}
+                inputMode="decimal"
+                placeholder="0.00"
+                disabled={refundRequestBusy}
+              />
+              <label style={{ fontSize: 12, opacity: 0.8 }}>{isAr ? "سبب الاسترجاع" : "Refund reason"}</label>
+              <input
+                className="admin-input"
+                value={refundRequestReason}
+                onChange={(event) => setRefundRequestReason(event.target.value)}
+                placeholder={isAr ? "مثال: إرجاع عميل" : "e.g. customer return"}
+                disabled={refundRequestBusy}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 12 }}>
+              <button className="btn" type="button" onClick={closeRefundRequest} disabled={refundRequestBusy}>
+                {isAr ? "إغلاق" : "Close"}
+              </button>
+              <button className="btn btn-primary" type="button" onClick={() => void submitRefundRequest()} disabled={refundRequestBusy}>
+                {refundRequestBusy ? (isAr ? "جارٍ الإرسال..." : "Submitting...") : (isAr ? "إرسال طلب الاسترجاع" : "Submit refund request")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
