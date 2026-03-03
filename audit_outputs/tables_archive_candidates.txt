@@ -1,4 +1,1 @@
-batches
-order_refunds
-product_media
-shipments
+email_send_log

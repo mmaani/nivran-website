@@ -1,0 +1,26 @@
+Output format is aligned.
+ categories_keys
+
+ air-freshener | air-freshener
+ cream         | cream
+ hand-gel      | hand-gel
+ perfume       | perfume
+ soap          | soap
+
+ hyphen_underscore_duplicates
+
+
+ product_category_usage
+
+ cream        |              1
+ hand-gel     |              1
+ perfume      |              4
+ soap         |              1
+
+ promotion_category_usage
+
+ air-freshener |              1
+ cream         |              2
+ hand-gel      |              4
+ perfume       |              4
+

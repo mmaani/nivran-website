@@ -1,5 +1,6 @@
 admin_audit_logs
 auth_rate_limits
+batches
 carts
 categories
 contact_submissions
@@ -13,17 +14,20 @@ email_send_logs
 inventory
 newsletter_subscribers
 order_items
+order_refunds
 orders
 password_reset_tokens
 payments
 paytabs_callbacks
 product_images
+product_media
 product_variants
 products
 promotions
 refunds
 restock_jobs
 sales_audit_logs
+shipments
 staff_login_attempts
 staff_users
 store_settings
