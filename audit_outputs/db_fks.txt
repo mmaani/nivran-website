@@ -1,0 +1,28 @@
+                      conname                       |             fk_table              |  pk_table   |                                definition                                
+----------------------------------------------------+-----------------------------------+-------------+--------------------------------------------------------------------------
+ batches_variant_id_fkey                            | batches                           | variants    | FOREIGN KEY (variant_id) REFERENCES variants(id) ON DELETE CASCADE
+ customer_cart_items_customer_id_fkey               | customer_cart_items               | customers   | FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+ customer_carts_customer_id_fkey                    | customer_carts                    | customers   | FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+ customer_email_verification_codes_customer_id_fkey | customer_email_verification_codes | customers   | FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+ customer_password_reset_tokens_customer_id_fkey    | customer_password_reset_tokens    | customers   | FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+ customer_sessions_customer_id_fkey                 | customer_sessions                 | customers   | FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+ inventory_variant_id_fkey                          | inventory                         | variants    | FOREIGN KEY (variant_id) REFERENCES variants(id) ON DELETE CASCADE
+ order_items_order_id_fk                            | order_items                       | orders      | FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+ order_items_order_id_fkey                          | order_items                       | orders      | FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+ order_items_variant_id_fkey                        | order_items                       | variants    | FOREIGN KEY (variant_id) REFERENCES variants(id)
+ order_refunds_order_id_fkey                        | order_refunds                     | orders      | FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+ orders_customer_id_fk                              | orders                            | customers   | FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
+ password_reset_tokens_staff_user_id_fkey           | password_reset_tokens             | staff_users | FOREIGN KEY (staff_user_id) REFERENCES staff_users(id) ON DELETE CASCADE
+ payments_order_id_fkey                             | payments                          | orders      | FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+ product_images_product_id_fkey                     | product_images                    | products    | FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+ product_media_product_id_fkey                      | product_media                     | products    | FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+ product_variants_product_id_fkey                   | product_variants                  | products    | FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+ refunds_order_fk                                   | refunds                           | orders      | FOREIGN KEY (order_id) REFERENCES orders(id)
+ refunds_order_id_fkey                              | refunds                           | orders      | FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+ restock_jobs_order_id_fkey                         | restock_jobs                      | orders      | FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+ restock_jobs_refund_fk                             | restock_jobs                      | refunds     | FOREIGN KEY (refund_id) REFERENCES refunds(id)
+ restock_jobs_refund_id_fkey                        | restock_jobs                      | refunds     | FOREIGN KEY (refund_id) REFERENCES refunds(id) ON DELETE CASCADE
+ shipments_order_id_fkey                            | shipments                         | orders      | FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+ variants_product_id_fkey                           | variants                          | products    | FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+(24 rows)
+

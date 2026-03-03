@@ -1,0 +1,41 @@
+                         List of relations
+ Schema |               Name                | Type  |    Owner     
+--------+-----------------------------------+-------+--------------
+ public | admin_audit_logs                  | table | neondb_owner
+ public | auth_rate_limits                  | table | neondb_owner
+ public | batches                           | table | neondb_owner
+ public | carts                             | table | neondb_owner
+ public | categories                        | table | neondb_owner
+ public | contact_submissions               | table | neondb_owner
+ public | coupons                           | table | neondb_owner
+ public | customer_cart_items               | table | neondb_owner
+ public | customer_carts                    | table | neondb_owner
+ public | customer_email_verification_codes | table | neondb_owner
+ public | customer_password_reset_tokens    | table | neondb_owner
+ public | customer_sessions                 | table | neondb_owner
+ public | customers                         | table | neondb_owner
+ public | email_send_log                    | table | neondb_owner
+ public | email_send_logs                   | table | neondb_owner
+ public | inventory                         | table | neondb_owner
+ public | newsletter_subscribers            | table | neondb_owner
+ public | order_items                       | table | neondb_owner
+ public | order_refunds                     | table | neondb_owner
+ public | orders                            | table | neondb_owner
+ public | password_reset_tokens             | table | neondb_owner
+ public | payments                          | table | neondb_owner
+ public | paytabs_callbacks                 | table | neondb_owner
+ public | product_images                    | table | neondb_owner
+ public | product_media                     | table | neondb_owner
+ public | product_variants                  | table | neondb_owner
+ public | products                          | table | neondb_owner
+ public | promotions                        | table | neondb_owner
+ public | refunds                           | table | neondb_owner
+ public | restock_jobs                      | table | neondb_owner
+ public | sales_audit_logs                  | table | neondb_owner
+ public | shipments                         | table | neondb_owner
+ public | staff_login_attempts              | table | neondb_owner
+ public | staff_users                       | table | neondb_owner
+ public | store_settings                    | table | neondb_owner
+ public | variants                          | table | neondb_owner
+(36 rows)
+

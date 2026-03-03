@@ -1,0 +1,7 @@
+                                       List of schemas
+  Name  |       Owner       |           Access privileges            |      Description       
+--------+-------------------+----------------------------------------+------------------------
+ public | pg_database_owner | pg_database_owner=UC/pg_database_owner+| standard public schema
+        |                   | =U/pg_database_owner                   | 
+(1 row)
+
