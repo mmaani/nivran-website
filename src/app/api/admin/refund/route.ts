@@ -78,7 +78,12 @@ export async function POST(req: Request) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "REFUND_PREP_FAILED";
     if (message === "ORDER_NOT_FOUND") return NextResponse.json({ ok: false, error: message }, { status: 404 });
-    if (message === "ORDER_NOT_REFUNDABLE_STATUS" || message === "MISSING_PAYTABS_TRAN_REF") {
+    if (
+      message === "ORDER_NOT_REFUNDABLE_STATUS" ||
+      message === "MISSING_PAYTABS_TRAN_REF" ||
+      message === "REFUND_AMOUNT_EXCEEDS_ORDER_TOTAL" ||
+      message === "ORDER_TOTAL_INVALID"
+    ) {
       return NextResponse.json({ ok: false, error: message }, { status: 409 });
     }
     return NextResponse.json({ ok: false, error: message }, { status: 500 });

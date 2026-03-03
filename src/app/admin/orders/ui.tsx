@@ -243,6 +243,14 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
   const [refundReason, setRefundReason] = useState<string>("");
   // Hybrid: PayTabs online, Manual POS/Cash
   const [refundMode, setRefundMode] = useState<"AUTO" | "MANUAL">("AUTO");
+  const [decisionOpenFor, setDecisionOpenFor] = useState<Row | null>(null);
+  const [decisionAction, setDecisionAction] = useState<"APPROVE" | "REJECT">("APPROVE");
+  const [decisionBusy, setDecisionBusy] = useState(false);
+  const [decisionErr, setDecisionErr] = useState<string | null>(null);
+  const [decisionKind, setDecisionKind] = useState<"FULL" | "PARTIAL">("FULL");
+  const [decisionInputMode, setDecisionInputMode] = useState<"AMOUNT" | "PERCENT">("AMOUNT");
+  const [decisionInputValue, setDecisionInputValue] = useState<string>("");
+  const [decisionNote, setDecisionNote] = useState<string>("");
 
   // Policy locked: restock after 2 days (no immediate)
   const restockPolicyLocked = "DELAYED_2D" as const;
@@ -323,6 +331,19 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
         failManual: "رفض الاسترجاع",
         refundState: "بانتظار قرار الاسترجاع",
         refundDecisionHint: "إجراء مطلوب",
+        refundDecisionTitleApprove: "اعتماد الاسترجاع",
+        refundDecisionTitleReject: "رفض الاسترجاع",
+        refundType: "نوع الاسترجاع",
+        refundTypeFull: "كامل",
+        refundTypePartial: "جزئي",
+        refundInputMode: "طريقة الإدخال",
+        refundInputModeAmount: "المبلغ (JOD)",
+        refundInputModePercent: "النسبة المئوية %",
+        refundValue: "القيمة",
+        refundNote: "ملاحظة",
+        refundMaxHint: "الحد الأقصى",
+        refundInvalidPercent: "النسبة يجب أن تكون بين 0 و 100",
+        refundExceedsTotal: "الاسترجاع يتجاوز إجمالي العملية",
       };
     }
 
@@ -390,6 +411,19 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
       failManual: "Reject Refund",
       refundState: "Refund decision pending",
       refundDecisionHint: "Action required",
+      refundDecisionTitleApprove: "Approve refund",
+      refundDecisionTitleReject: "Reject refund",
+      refundType: "Refund type",
+      refundTypeFull: "Full",
+      refundTypePartial: "Partial",
+      refundInputMode: "Input mode",
+      refundInputModeAmount: "Amount (JOD)",
+      refundInputModePercent: "Percentage %",
+      refundValue: "Value",
+      refundNote: "Note",
+      refundMaxHint: "Max",
+      refundInvalidPercent: "Percent must be between 0 and 100",
+      refundExceedsTotal: "Refund exceeds transaction total",
     };
   }, [isAr]);
 
@@ -500,6 +534,146 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
     setRefundMode("AUTO");
   }
 
+  function openRefundDecision(r: Row, action: "APPROVE" | "REJECT") {
+    const total = clampMoneyJod(toNum(r.total_jod ?? r.amount));
+    const existingRefund = clampMoneyJod(toNum(r.last_refund_amount_jod));
+    const initialAmount = existingRefund > 0 ? existingRefund : total;
+    setDecisionOpenFor(r);
+    setDecisionAction(action);
+    setDecisionErr(null);
+    setDecisionBusy(false);
+    setDecisionKind(initialAmount >= total ? "FULL" : "PARTIAL");
+    setDecisionInputMode("AMOUNT");
+    setDecisionInputValue(initialAmount > 0 ? initialAmount.toFixed(2) : "");
+    setDecisionNote("");
+  }
+
+  function closeRefundDecision() {
+    if (decisionBusy) return;
+    setDecisionOpenFor(null);
+    setDecisionErr(null);
+    setDecisionAction("APPROVE");
+    setDecisionKind("FULL");
+    setDecisionInputMode("AMOUNT");
+    setDecisionInputValue("");
+    setDecisionNote("");
+  }
+
+  async function submitRefundDecision() {
+    if (!decisionOpenFor) return;
+    const orderId = decisionOpenFor.id;
+    const refundId = currentRefundIdForOrder(orderId);
+    if (!(refundId > 0)) {
+      setDecisionErr(isAr ? "لا يوجد refundId لهذا الطلب." : "No refundId for this order.");
+      return;
+    }
+
+    const orderTotal = clampMoneyJod(toNum(decisionOpenFor.total_jod ?? decisionOpenFor.amount));
+    if (!(orderTotal > 0)) {
+      setDecisionErr(isAr ? "إجمالي الطلب غير صالح." : "Order total is invalid.");
+      return;
+    }
+
+    let amountJod = orderTotal;
+    if (decisionKind === "PARTIAL") {
+      if (decisionInputMode === "PERCENT") {
+        const pct = Number(String(decisionInputValue || "").trim());
+        if (!(pct > 0 && pct <= 100)) {
+          setDecisionErr(L.refundInvalidPercent);
+          return;
+        }
+        amountJod = clampMoneyJod((orderTotal * pct) / 100);
+      } else {
+        amountJod = clampMoneyJod(Number(String(decisionInputValue || "").trim()));
+      }
+    }
+
+    if (!(amountJod > 0)) {
+      setDecisionErr(L.invalidAmount);
+      return;
+    }
+    if (amountJod > orderTotal) {
+      setDecisionErr(L.refundExceedsTotal);
+      return;
+    }
+
+    setDecisionBusy(true);
+    setDecisionErr(null);
+    setBusyId(orderId);
+
+    try {
+      if (decisionAction === "APPROVE") {
+        const inputValueNum = Number(String(decisionInputValue || "0").trim());
+        const res = await adminFetch("/api/admin/refund/confirm", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            refundId,
+            amountJod,
+            refundKind: decisionKind,
+            amountInputMode: decisionInputMode,
+            amountInputValue: Number.isFinite(inputValueNum) ? inputValueNum : 0,
+            note: String(decisionNote || "").trim(),
+          }),
+        });
+        const raw: unknown = await res.json().catch(() => null);
+        const ok = isRecord(raw) && raw["ok"] === true;
+        if (!res.ok || !ok) {
+          const msg = isRecord(raw) ? String(raw["error"] || "") : "";
+          throw new Error(msg || (isAr ? "فشل تأكيد الاسترجاع" : "Confirm refund failed"));
+        }
+        setRows((prev) =>
+          prev.map((r) =>
+            r.id === orderId
+              ? {
+                  ...r,
+                  status: "REFUNDED",
+                  last_refund_status: "RESTOCK_SCHEDULED",
+                  last_refund_succeeded_at: new Date().toISOString(),
+                  last_refund_amount_jod: amountJod.toFixed(2),
+                }
+              : r
+          )
+        );
+      } else {
+        const res = await adminFetch("/api/admin/refund/fail", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            refundId,
+            message: String(decisionNote || "").trim() || "manual refund rejected in admin",
+          }),
+        });
+        const raw: unknown = await res.json().catch(() => null);
+        const ok = isRecord(raw) && raw["ok"] === true;
+        if (!res.ok || !ok) {
+          const msg = isRecord(raw) ? String(raw["error"] || "") : "";
+          throw new Error(msg || (isAr ? "فشل تحديث حالة الاسترجاع" : "Mark refund failed"));
+        }
+        setRows((prev) =>
+          prev.map((r) =>
+            r.id === orderId
+              ? {
+                  ...r,
+                  status: "REFUND_FAILED",
+                  last_refund_status: "FAILED",
+                  last_refund_failed_at: new Date().toISOString(),
+                  last_refund_error: String(decisionNote || "").trim() || "manual refund rejected in admin",
+                }
+              : r
+          )
+        );
+      }
+      closeRefundDecision();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setDecisionErr(msg || (isAr ? "حدث خطأ" : "Error"));
+    } finally {
+      setDecisionBusy(false);
+      setBusyId(null);
+    }
+  }
+
   async function submitRefund() {
     if (!refundOpenFor) return;
 
@@ -569,92 +743,6 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
       setRefundErr(msg || (isAr ? "حدث خطأ" : "Error"));
     } finally {
       setRefundBusy(false);
-    }
-  }
-
-  async function confirmManualRefund(orderId: number) {
-    const refundId = currentRefundIdForOrder(orderId);
-    if (!(refundId > 0)) {
-      setErr(isAr ? "لا يوجد refundId لهذا الطلب. أنشئ الاسترجاع أولاً." : "No refundId for this order. Create a refund first.");
-      return;
-    }
-
-    setErr(null);
-    setBusyId(orderId);
-
-    try {
-      const res = await adminFetch("/api/admin/refund/confirm", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ refundId, note: "confirmed in admin" }),
-      });
-
-      const raw: unknown = await res.json().catch(() => null);
-      const ok = isRecord(raw) && raw["ok"] === true;
-
-      if (!res.ok || !ok) {
-        const msg = isRecord(raw) ? String(raw["error"] || "") : "";
-        throw new Error(msg || (isAr ? "فشل تأكيد الاسترجاع" : "Confirm refund failed"));
-      }
-
-      setRows((prev) =>
-        prev.map((r) =>
-          r.id === orderId
-            ? { ...r, status: "REFUNDED", last_refund_status: "RESTOCK_SCHEDULED", last_refund_succeeded_at: new Date().toISOString() }
-            : r
-        )
-      );
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setErr(msg || (isAr ? "حدث خطأ" : "Error"));
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function failManualRefund(orderId: number) {
-    const refundId = currentRefundIdForOrder(orderId);
-    if (!(refundId > 0)) {
-      setErr(isAr ? "لا يوجد refundId لهذا الطلب. أنشئ الاسترجاع أولاً." : "No refundId for this order. Create a refund first.");
-      return;
-    }
-
-    setErr(null);
-    setBusyId(orderId);
-
-    try {
-      const res = await adminFetch("/api/admin/refund/fail", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ refundId, message: "manual refund failed in admin" }),
-      });
-
-      const raw: unknown = await res.json().catch(() => null);
-      const ok = isRecord(raw) && raw["ok"] === true;
-
-      if (!res.ok || !ok) {
-        const msg = isRecord(raw) ? String(raw["error"] || "") : "";
-        throw new Error(msg || (isAr ? "فشل تحديث حالة الاسترجاع" : "Mark refund failed"));
-      }
-
-      setRows((prev) =>
-        prev.map((r) =>
-          r.id === orderId
-            ? {
-                ...r,
-                status: "REFUND_FAILED",
-                last_refund_status: "FAILED",
-                last_refund_failed_at: new Date().toISOString(),
-                last_refund_error: "manual refund failed in admin",
-              }
-            : r
-        )
-      );
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setErr(msg || (isAr ? "حدث خطأ" : "Error"));
-    } finally {
-      setBusyId(null);
     }
   }
 
@@ -736,7 +824,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
               const sourceKind: "ONLINE" | "SALES" | "LEGACY_SALES" = hasSalesAudit ? "SALES" : legacySales ? "LEGACY_SALES" : "ONLINE";
               const sourceLabel = sourceKind === "SALES" ? L.salesDesk : sourceKind === "LEGACY_SALES" ? L.salesDeskLegacy : L.online;
               const actorRole = String(r.sales_actor_role || "").trim().toLowerCase();
-              const fallbackActorName = actorRole === "admin" ? L.unknownSalesUser : L.unknownSalesUser;
+              const fallbackActorName = actorRole === "admin" ? L.unknownSalesUser : L.salesDesk;
               const salesUser =
                 String(r.sales_actor_display_name || "").trim() || String(r.sales_actor_username || "").trim() || fallbackActorName;
               const salesStaffId =
@@ -888,7 +976,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                               <button
                                 className="btn orders-refund-approve"
                                 type="button"
-                                onClick={() => confirmManualRefund(r.id)}
+                                onClick={() => openRefundDecision(r, "APPROVE")}
                                 disabled={busyId === r.id}
                                 title={L.confirmManual}
                               >
@@ -897,7 +985,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                               <button
                                 className="btn orders-refund-reject"
                                 type="button"
-                                onClick={() => failManualRefund(r.id)}
+                                onClick={() => openRefundDecision(r, "REJECT")}
                                 disabled={busyId === r.id}
                                 title={L.failManual}
                               >
@@ -1097,6 +1185,126 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      ) : null}
+      {decisionOpenFor ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.35)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 60,
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeRefundDecision();
+          }}
+        >
+          <div
+            style={{
+              width: "min(680px, 100%)",
+              background: "var(--cream, #fff)",
+              color: "var(--ink, #111)",
+              borderRadius: 16,
+              boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+              padding: 16,
+            }}
+          >
+            {(() => {
+              const orderTotal = clampMoneyJod(toNum(decisionOpenFor.total_jod ?? decisionOpenFor.amount));
+              return (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+                    <div>
+                      <div style={{ fontSize: 16, fontWeight: 700 }}>
+                        {decisionAction === "APPROVE" ? L.refundDecisionTitleApprove : L.refundDecisionTitleReject}
+                      </div>
+                      <div className="mono" style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
+                        #{decisionOpenFor.id} • {decisionOpenFor.cart_id} • {L.refundMaxHint}: {orderTotal.toFixed(2)} JOD
+                      </div>
+                    </div>
+                    <button className="btn" type="button" onClick={closeRefundDecision} disabled={decisionBusy}>
+                      {L.close}
+                    </button>
+                  </div>
+
+                  <div className="admin-grid" style={{ gap: 10, marginTop: 12 }}>
+                    {decisionErr ? <p style={{ color: "crimson", margin: 0 }}>{decisionErr}</p> : null}
+
+                    {decisionAction === "APPROVE" ? (
+                      <>
+                        <div style={{ display: "grid", gap: 8 }}>
+                          <label style={{ fontSize: 12, opacity: 0.8 }}>{L.refundType}</label>
+                          <select
+                            className="admin-select"
+                            value={decisionKind}
+                            onChange={(e) => setDecisionKind(e.target.value === "PARTIAL" ? "PARTIAL" : "FULL")}
+                            disabled={decisionBusy}
+                          >
+                            <option value="FULL">{L.refundTypeFull}</option>
+                            <option value="PARTIAL">{L.refundTypePartial}</option>
+                          </select>
+                        </div>
+
+                        {decisionKind === "PARTIAL" ? (
+                          <>
+                            <div style={{ display: "grid", gap: 8 }}>
+                              <label style={{ fontSize: 12, opacity: 0.8 }}>{L.refundInputMode}</label>
+                              <select
+                                className="admin-select"
+                                value={decisionInputMode}
+                                onChange={(e) => setDecisionInputMode(e.target.value === "PERCENT" ? "PERCENT" : "AMOUNT")}
+                                disabled={decisionBusy}
+                              >
+                                <option value="AMOUNT">{L.refundInputModeAmount}</option>
+                                <option value="PERCENT">{L.refundInputModePercent}</option>
+                              </select>
+                            </div>
+                            <div style={{ display: "grid", gap: 8 }}>
+                              <label style={{ fontSize: 12, opacity: 0.8 }}>{L.refundValue}</label>
+                              <input
+                                className="admin-input ltr"
+                                value={decisionInputValue}
+                                onChange={(e) => setDecisionInputValue(e.target.value)}
+                                inputMode="decimal"
+                                placeholder={decisionInputMode === "PERCENT" ? "0-100" : "0.00"}
+                                disabled={decisionBusy}
+                              />
+                            </div>
+                          </>
+                        ) : null}
+                      </>
+                    ) : null}
+
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <label style={{ fontSize: 12, opacity: 0.8 }}>{L.refundNote}</label>
+                      <input
+                        className="admin-input"
+                        value={decisionNote}
+                        onChange={(e) => setDecisionNote(e.target.value)}
+                        placeholder={isAr ? "اختياري" : "optional"}
+                        disabled={decisionBusy}
+                      />
+                    </div>
+
+                    <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 6 }}>
+                      <button className="btn" type="button" onClick={closeRefundDecision} disabled={decisionBusy}>
+                        {L.cancel}
+                      </button>
+                      <button className="btn btn-primary" type="button" onClick={() => void submitRefundDecision()} disabled={decisionBusy}>
+                        {decisionBusy ? "…" : decisionAction === "APPROVE" ? L.confirmManual : L.failManual}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       ) : null}

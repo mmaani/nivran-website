@@ -27,6 +27,8 @@ type OrderForRefund = {
   id: number;
   status: string;
   paytabs_tran_ref: string | null;
+  total_jod: string | null;
+  amount: string | null;
 };
 
 type ProductRow = {
@@ -84,6 +86,15 @@ function isRefundableOrderStatus(status: string): boolean {
   return s === "PAID" || s === "PAID_COD" || s === "PROCESSING" || s === "SHIPPED" || s === "DELIVERED";
 }
 
+function toSafeNumber(v: string | number | null | undefined): number {
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  if (typeof v === "string") {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
+
 function canTransition(from: RefundStatus, to: RefundStatus): boolean {
   return REFUND_TRANSITIONS[from]?.includes(to) ?? false;
 }
@@ -120,12 +131,18 @@ export async function createRefundRecord(
   input: { orderId: number; amountJod: number; reason: string; method: RefundMethod; idempotencyKey: string }
 ): Promise<{ refund: RefundRow; order: OrderForRefund; created: boolean }> {
   const orderRes = await trx.query<OrderForRefund>(
-    `select id, status, payment_method, paytabs_tran_ref from orders where id = $1 for update`,
+    `select id, status, payment_method, paytabs_tran_ref, total_jod::text as total_jod, amount::text as amount
+       from orders
+      where id = $1
+      for update`,
     [input.orderId]
   );
   const order = orderRes.rows[0];
   if (!order) throw new Error("ORDER_NOT_FOUND");
   if (!isRefundableOrderStatus(order.status)) throw new Error("ORDER_NOT_REFUNDABLE_STATUS");
+  const orderTotal = Math.max(0, toSafeNumber(order.total_jod) || toSafeNumber(order.amount));
+  if (!(orderTotal > 0)) throw new Error("ORDER_TOTAL_INVALID");
+  if (input.amountJod > orderTotal) throw new Error("REFUND_AMOUNT_EXCEEDS_ORDER_TOTAL");
   if (input.method === "PAYTABS" && !(order.paytabs_tran_ref || "").trim()) throw new Error("MISSING_PAYTABS_TRAN_REF");
 
   const existing = await trx.query<RefundRow>(`select * from refunds where idempotency_key = $1 limit 1`, [input.idempotencyKey]);
