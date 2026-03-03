@@ -30,3 +30,13 @@
 ## Notes
 - No tables were dropped.
 - `tables_drop_later.txt` is intentionally deferred until post-archive observation period.
+
+
+## Re-run the SQL audit safely (fix for `db_full_audit.sql: No such file or directory`)
+Use the wrapper so path resolution is stable even if your shell cwd changes:
+
+```bash
+DATABASE_URL_UNPOOLED="<preview-db-url>" bash scripts/run-db-full-audit.sh
+```
+
+This executes `${REPO_ROOT}/db_full_audit.sql` and writes output to `audit_outputs/db_full_audit_output.txt`.
