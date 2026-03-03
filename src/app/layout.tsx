@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { cairoArabic, inter, playfairDisplay } from "./ui/fonts";
 import Script from "next/script";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
   title: "NIVRAN — Wear the calm.",
@@ -12,10 +13,10 @@ export const metadata: Metadata = {
     icon: [
       { url: "/brand/favicon.ico" }, // legacy
       { url: "/brand/favicon-96x96.png", type: "image/png", sizes: "96x96" },
-      { url: "/brand/favicon.svg", type: "image/svg+xml" }
+      { url: "/brand/favicon.svg", type: "image/svg+xml" },
     ],
     shortcut: [{ url: "/brand/favicon.ico" }],
-    apple: [{ url: "/brand/apple-touch-icon.png", sizes: "180x180", type: "image/png" }]
+    apple: [{ url: "/brand/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
   manifest: "/brand/site.webmanifest",
 };
@@ -45,7 +46,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </Script>
       </head>
 
-      <body>{children}</body>
+      <body>
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }
