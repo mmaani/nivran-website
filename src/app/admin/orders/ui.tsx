@@ -299,7 +299,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
         salesDesk: "مبيعات مباشرة",
         salesDeskLegacy: "مبيعات (قديم)",
         by: "بواسطة",
-        unknownSalesUser: "موظف غير معروف",
+        unknownSalesUser: "المشرف",
         yes: "نعم",
         no: "لا",
         dash: "—",
@@ -366,7 +366,7 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
       salesDesk: "Sales desk",
       salesDeskLegacy: "Sales (legacy)",
       by: "by",
-      unknownSalesUser: "Unknown salesperson",
+      unknownSalesUser: "Admin",
       yes: "yes",
       no: "no",
       dash: "—",
@@ -735,8 +735,10 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
               const legacySales = !hasSalesAudit && String(r.cart_id || "").toLowerCase().startsWith("sales_");
               const sourceKind: "ONLINE" | "SALES" | "LEGACY_SALES" = hasSalesAudit ? "SALES" : legacySales ? "LEGACY_SALES" : "ONLINE";
               const sourceLabel = sourceKind === "SALES" ? L.salesDesk : sourceKind === "LEGACY_SALES" ? L.salesDeskLegacy : L.online;
+              const actorRole = String(r.sales_actor_role || "").trim().toLowerCase();
+              const fallbackActorName = actorRole === "admin" ? L.unknownSalesUser : L.unknownSalesUser;
               const salesUser =
-                String(r.sales_actor_display_name || "").trim() || String(r.sales_actor_username || "").trim() || L.unknownSalesUser;
+                String(r.sales_actor_display_name || "").trim() || String(r.sales_actor_username || "").trim() || fallbackActorName;
               const salesStaffId =
                 typeof r.sales_actor_staff_id === "number" && Number.isFinite(r.sales_actor_staff_id) && r.sales_actor_staff_id > 0
                   ? `#${Math.trunc(r.sales_actor_staff_id)}`

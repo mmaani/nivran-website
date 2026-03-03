@@ -35,6 +35,18 @@
   --chip-bg: rgba(255, 255, 255, 0.80);
 
   overflow-x: hidden; /* prevent page-wide horizontal scroll */
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+.admin-shell[dir="rtl"] {
+  font-family: var(--font-arabic), "Cairo", sans-serif;
+}
+
+.admin-shell button,
+.admin-shell input,
+.admin-shell select,
+.admin-shell textarea {
+  font-family: inherit;
 }
 
 /* Density toggle */
