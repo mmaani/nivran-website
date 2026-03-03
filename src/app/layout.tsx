@@ -6,12 +6,11 @@ import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
   title: "NIVRAN — Wear the calm.",
-  description: "Clean, minimalist, unisex fragrance brand.",
+  description: "Clean, minimalist, unisex fragrance and body care brand.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://www.nivran.com"),
   icons: {
-    // Classic set (most compatible)
     icon: [
-      { url: "/brand/favicon.ico" }, // legacy
+      { url: "/brand/favicon.ico" },
       { url: "/brand/favicon-96x96.png", type: "image/png", sizes: "96x96" },
       { url: "/brand/favicon.svg", type: "image/svg+xml" },
     ],
@@ -22,16 +21,16 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const isProd = process.env.VERCEL_ENV === "production"; // production | preview | development :contentReference[oaicite:1]{index=1}
+
   return (
     <html
       lang="en"
       className={`${inter.variable} ${cairoArabic.variable} ${playfairDisplay.variable}`}
     >
       <head>
-        {/* Required by RealFaviconGenerator guidance */}
         <meta name="apple-mobile-web-app-title" content="NIVRAN" />
 
-        {/* Google tag (gtag.js) */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-RSBL7QC85M"
           strategy="afterInteractive"
@@ -48,7 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
       <body>
         {children}
-        <Analytics />
+        {isProd ? <Analytics /> : null}
       </body>
     </html>
   );
