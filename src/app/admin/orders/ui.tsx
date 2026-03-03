@@ -858,73 +858,53 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
                             </button>
                           ) : null}
                         </div>
-                        {canConfirmManual ? (
-                          <div
-                            className="orders-manual-bar"
-                            style={{
-                              display: "inline-flex",
-                              gap: 6,
-                              alignItems: "center",
-                              flexWrap: "nowrap",
-                              padding: "10px 12px",
-                              borderRadius: 12,
-                              border: "1px solid #efb969",
-                              background: "linear-gradient(180deg, #fff8ee, #fff2df)",
-                              width: "100%",
-                            }}
-                          >
-                            <span
-                              className="orders-refund-hint"
-                              style={{
-                                fontSize: 11,
-                                fontWeight: 900,
-                                letterSpacing: ".03em",
-                                textTransform: "uppercase",
-                                color: "#8d4f00",
-                              }}
-                            >
-                              {L.refundDecisionHint}
-                            </span>
-                            <span style={{ fontSize: 12, fontWeight: 800, opacity: 0.92 }}>
-                              {L.refundState}: <span className="mono">{refundStateLabel}</span>
-                            </span>
-                            <button
-                              className="btn orders-refund-approve"
-                              type="button"
-                              onClick={() => confirmManualRefund(r.id)}
-                              disabled={busyId === r.id}
-                              title={L.confirmManual}
-                            >
-                              {L.confirmManual}
-                            </button>
-                            <button
-                              className="btn orders-refund-reject"
-                              type="button"
-                              onClick={() => failManualRefund(r.id)}
-                              disabled={busyId === r.id}
-                              title={L.failManual}
-                            >
-                              {L.failManual}
-                            </button>
-                          </div>
-                        ) : null}
                       </div>
                     </td>
 
                     <td data-label={L.update} className="orders-update-cell orders-update-sticky">
-                      <select
-                        value={r.status}
-                        disabled={busyId === r.id}
-                        onChange={(e) => updateStatus(r.id, e.target.value)}
-                        className="admin-select"
-                        style={{ width: "100%", minWidth: 170 }}
-                      >
-                        {STATUS_OPTIONS.map((s) => (
-                          <option key={s} value={s} disabled={!allowsTransition(r.status, s)}>
-                            {isAr ? `${s} — ${STATUS_AR[s] || ""}` : s}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="orders-update-stack">
+                        <select
+                          value={r.status}
+                          disabled={busyId === r.id}
+                          onChange={(e) => updateStatus(r.id, e.target.value)}
+                          className="admin-select"
+                          style={{ width: "100%", minWidth: 170 }}
+                        >
+                          {STATUS_OPTIONS.map((s) => (
+                            <option key={s} value={s} disabled={!allowsTransition(r.status, s)}>
+                              {isAr ? `${s} — ${STATUS_AR[s] || ""}` : s}
+                            </option>
+                          ))}
+                        </select>
+                        {canConfirmManual ? (
+                          <div className="orders-refund-panel">
+                            <span className="orders-refund-hint">{L.refundDecisionHint}</span>
+                            <span style={{ fontSize: 12, fontWeight: 800, opacity: 0.92 }}>
+                              {L.refundState}: <span className="mono">{refundStateLabel}</span>
+                            </span>
+                            <div className="orders-refund-btns">
+                              <button
+                                className="btn orders-refund-approve"
+                                type="button"
+                                onClick={() => confirmManualRefund(r.id)}
+                                disabled={busyId === r.id}
+                                title={L.confirmManual}
+                              >
+                                {L.confirmManual}
+                              </button>
+                              <button
+                                className="btn orders-refund-reject"
+                                type="button"
+                                onClick={() => failManualRefund(r.id)}
+                                disabled={busyId === r.id}
+                                title={L.failManual}
+                              >
+                                {L.failManual}
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
 
@@ -1151,12 +1131,33 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
           border-radius: 12px;
           padding: 8px;
         }
-        .orders-manual-bar {
-          max-width: 100%;
-          overflow-x: auto;
-          padding-bottom: 4px;
+        .orders-update-stack {
+          display: grid;
+          gap: 8px;
         }
-        .orders-manual-bar .btn {
+        .orders-refund-panel {
+          display: grid;
+          gap: 6px;
+          border: 1px solid #efb969;
+          border-radius: 12px;
+          background: linear-gradient(180deg, #fff8ee, #fff2df);
+          padding: 10px 10px;
+        }
+        .orders-refund-hint {
+          font-size: 11px;
+          font-weight: 900;
+          letter-spacing: 0.03em;
+          text-transform: uppercase;
+          color: #8d4f00;
+        }
+        .orders-refund-btns {
+          display: flex;
+          gap: 6px;
+          flex-wrap: nowrap;
+          overflow-x: auto;
+          padding-bottom: 2px;
+        }
+        .orders-refund-btns .btn {
           white-space: nowrap;
           min-height: 40px;
           padding-inline: 14px;
@@ -1194,12 +1195,17 @@ export default function OrdersClient({ initialRows, lang }: { initialRows: Row[]
           .orders-actions-row {
             gap: 5px;
           }
-          .orders-manual-bar {
-            gap: 5px;
-            padding: 8px;
-            max-width: 100%;
+          .orders-update-stack {
+            gap: 6px;
           }
-          .orders-manual-bar .btn {
+          .orders-refund-panel {
+            padding: 8px;
+            border-radius: 10px;
+          }
+          .orders-refund-btns {
+            gap: 5px;
+          }
+          .orders-refund-btns .btn {
             min-height: 36px;
             padding-inline: 10px;
             font-size: 12px;
