@@ -186,6 +186,7 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
       return {
         title: "مطابقة المخزون",
         subtitle: "طلبات مدفوعة لم يتم خصم المخزون لها بعد.",
+        restockNote: "ملاحظة: إعادة مخزون المرتجعات (كاملة أو جزئية) تتم تلقائيًا عبر نظام الاسترجاع بعد الموافقة.",
         search: "بحث برقم الطلب / السلة / الحالة / الدفع",
         refresh: "تحديث",
         commitAll: "تنفيذ للكل",
@@ -207,6 +208,7 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
     return {
       title: "Inventory reconciliation",
       subtitle: "Paid orders that have not committed inventory yet.",
+      restockNote: "Note: refunded item restocks (full or partial) are processed automatically through the refund workflow after approval.",
       search: "Search by order id / cart_id / status / payment",
       refresh: "Refresh",
       commitAll: "Commit all",
@@ -362,6 +364,7 @@ export default function InventoryClient({ lang }: { lang: "en" | "ar" }) {
         </div>
 
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={L.search} className="admin-input" />
+        <div className="admin-muted" style={{ fontSize: 12 }}>{L.restockNote}</div>
 
         {err ? <div style={{ color: "crimson", fontWeight: 700 }}>{err}</div> : null}
         {note ? <div style={{ color: "seagreen", fontWeight: 700 }}>{note}</div> : null}

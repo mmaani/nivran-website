@@ -63,6 +63,8 @@ type OrdersResponse = {
   summary?: {
     transactionsCount?: number;
     totalSalesJod?: number;
+    grossSalesJod?: number;
+    refundedSalesJod?: number;
   };
   orders: OrderRow[];
   pagination?: {
@@ -72,6 +74,23 @@ type OrdersResponse = {
     nextOffset: number | null;
   };
 };
+
+const SALES_ORDER_STATUSES = [
+  "PENDING_PAYMENT",
+  "PAID",
+  "FAILED",
+  "CANCELED",
+  "PENDING_COD_CONFIRM",
+  "PROCESSING",
+  "SHIPPED",
+  "DELIVERED",
+  "BACKORDER",
+  "PAID_COD",
+  "REFUND_REQUESTED",
+  "REFUND_PENDING",
+  "REFUND_FAILED",
+  "REFUNDED",
+] as const;
 
 type PromoQuoteState = {
   checking: boolean;
@@ -160,12 +179,14 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
   const [sortMode, setSortMode] = useState<"recent" | "name" | "stock-asc" | "stock-desc">("recent");
   const [ordersStatusFilter, setOrdersStatusFilter] = useState<string>("");
-  const [ordersLimit, setOrdersLimit] = useState<10 | 20 | 30>(10);
+  const [ordersLimit, setOrdersLimit] = useState<10 | 25 | 50>(10);
   const [ordersOffset, setOrdersOffset] = useState(0);
   const [ordersHasMore, setOrdersHasMore] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersTransactionsCount, setOrdersTransactionsCount] = useState(0);
   const [ordersTotalSalesJod, setOrdersTotalSalesJod] = useState(0);
+  const [ordersGrossSalesJod, setOrdersGrossSalesJod] = useState(0);
+  const [ordersRefundedSalesJod, setOrdersRefundedSalesJod] = useState(0);
   const [viewerRole, setViewerRole] = useState<"admin" | "sales">("sales");
   const [viewerName, setViewerName] = useState("");
   const [expandedOrders, setExpandedOrders] = useState<Record<number, boolean>>({});
@@ -253,6 +274,8 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
       setOrdersOffset(offset);
       setOrdersTransactionsCount(Number(salesOrders.summary?.transactionsCount || 0));
       setOrdersTotalSalesJod(Number(salesOrders.summary?.totalSalesJod || 0));
+      setOrdersGrossSalesJod(Number(salesOrders.summary?.grossSalesJod || 0));
+      setOrdersRefundedSalesJod(Number(salesOrders.summary?.refundedSalesJod || 0));
       setViewerRole(salesOrders.viewer?.role === "admin" ? "admin" : "sales");
       setViewerName(String(salesOrders.viewer?.username || "").trim());
 
@@ -451,8 +474,17 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
 
   const statusLabel = (value?: string | null) => {
     const normalized = String(value || "").toUpperCase();
+    if (normalized === "PENDING_PAYMENT") return isAr ? "بانتظار الدفع" : "Pending payment";
     if (normalized === "PAID") return isAr ? "مدفوع" : "Paid";
+    if (normalized === "FAILED") return isAr ? "فشل الدفع" : "Failed";
+    if (normalized === "CANCELED") return isAr ? "ملغي" : "Canceled";
+    if (normalized === "PENDING_COD_CONFIRM") return isAr ? "بانتظار تأكيد الدفع عند الاستلام" : "Pending COD confirm";
+    if (normalized === "PROCESSING") return isAr ? "قيد المعالجة" : "Processing";
+    if (normalized === "SHIPPED") return isAr ? "تم الشحن" : "Shipped";
+    if (normalized === "DELIVERED") return isAr ? "تم التسليم" : "Delivered";
     if (normalized === "BACKORDER") return isAr ? "طلب مؤجل" : "Backorder";
+    if (normalized === "PAID_COD") return isAr ? "مدفوع عند الاستلام" : "Paid COD";
+    if (normalized === "REFUND_REQUESTED") return isAr ? "طلب استرجاع" : "Refund requested";
     if (normalized === "REFUND_PENDING") return isAr ? "قيد الاسترجاع" : "Refund pending";
     if (normalized === "REFUND_FAILED") return isAr ? "فشل الاسترجاع" : "Refund failed";
     if (normalized === "REFUNDED") return isAr ? "تم الاسترجاع" : "Refunded";
@@ -708,7 +740,9 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
         <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "عناصر السلة" : "Cart items"}</b><div>{itemCount}</div></div>
         <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "المجموع الفرعي" : "Subtotal"}</b><div>{money(subtotal)}</div></div>
         <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "إجمالي المعاملات" : "Sales transactions"}</b><div>{ordersTransactionsCount}</div></div>
-        <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "إجمالي المبيعات" : "Total sales"}</b><div>{money(ordersTotalSalesJod)}</div></div>
+        <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "إجمالي البيع قبل الاسترجاع" : "Gross sales"}</b><div>{money(ordersGrossSalesJod)}</div></div>
+        <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "إجمالي المسترجع" : "Refunded amount"}</b><div>-{money(ordersRefundedSalesJod)}</div></div>
+        <div className="admin-card" style={{ padding: 12 }}><b>{isAr ? "صافي المبيعات" : "Net sales"}</b><div>{money(ordersTotalSalesJod)}</div></div>
       </div>
 
       <div className="admin-card" style={{ padding: 14 }}>
@@ -871,16 +905,16 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
         <div className="admin-row" style={{ gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
           <select className="admin-select" value={ordersStatusFilter} onChange={(event) => setOrdersStatusFilter(event.target.value)}>
             <option value="">{isAr ? "كل الحالات" : "All statuses"}</option>
-            <option value="PAID">{isAr ? "مدفوع" : "Paid"}</option>
-            <option value="BACKORDER">{isAr ? "طلب مؤجل" : "Backorder"}</option>
-            <option value="REFUND_PENDING">{isAr ? "قيد الاسترجاع" : "Refund pending"}</option>
-            <option value="REFUND_FAILED">{isAr ? "فشل الاسترجاع" : "Refund failed"}</option>
-            <option value="REFUNDED">{isAr ? "تم الاسترجاع" : "Refunded"}</option>
+            {SALES_ORDER_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {statusLabel(status)}
+              </option>
+            ))}
           </select>
-          <select className="admin-select" value={ordersLimit} onChange={(event) => setOrdersLimit(Number(event.target.value) as 10 | 20 | 30)}>
+          <select className="admin-select" value={ordersLimit} onChange={(event) => setOrdersLimit(Number(event.target.value) as 10 | 25 | 50)}>
             <option value={10}>{isAr ? "آخر 10" : "Latest 10"}</option>
-            <option value={20}>{isAr ? "آخر 20" : "Latest 20"}</option>
-            <option value={30}>{isAr ? "آخر 30" : "Latest 30"}</option>
+            <option value={25}>{isAr ? "آخر 25" : "Latest 25"}</option>
+            <option value={50}>{isAr ? "آخر 50" : "Latest 50"}</option>
           </select>
           <input className="admin-input" type="date" aria-label={isAr ? "من تاريخ" : "From date"} value={ordersFrom} onChange={(event) => setOrdersFrom(event.target.value)} />
           <input className="admin-input" type="date" aria-label={isAr ? "إلى تاريخ" : "To date"} value={ordersTo} onChange={(event) => setOrdersTo(event.target.value)} />
@@ -897,8 +931,6 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
                 <th>{isAr ? "الرقم" : "#"}</th>
                 <th>{isAr ? "التاريخ" : "Created"}</th>
                 <th>{isAr ? "العميل" : "Customer"}</th>
-                <th>{isAr ? "البريد" : "Email"}</th>
-                <th>{isAr ? "الهاتف" : "Phone"}</th>
                 <th>{isAr ? "الدفع" : "Payment"}</th>
                 <th>{isAr ? "العناصر" : "Items"}</th>
                 <th>{isAr ? "الكمية" : "Qty"}</th>
@@ -926,9 +958,12 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
                     <tr>
                       <td data-label={isAr ? "الرقم" : "ID"}>#{order.id}</td>
                       <td data-label={isAr ? "التاريخ" : "Created"}>{new Date(order.created_at).toLocaleString(isAr ? "ar-JO" : "en-GB")}</td>
-                      <td data-label={isAr ? "العميل" : "Customer"}>{order.customer_name || "—"}</td>
-                      <td data-label={isAr ? "البريد" : "Email"}>{order.customer_email || "—"}</td>
-                      <td data-label={isAr ? "الهاتف" : "Phone"}>{order.customer_phone || "—"}</td>
+                      <td data-label={isAr ? "العميل" : "Customer"}>
+                        <div style={{ display: "grid", gap: 2 }}>
+                          <strong>{order.customer_name || "—"}</strong>
+                          <span className="admin-muted" style={{ fontSize: 12 }}>{isAr ? "التفاصيل في عرض المزيد" : "Details in Show more"}</span>
+                        </div>
+                      </td>
                       <td data-label={isAr ? "الدفع" : "Payment"}>{paymentLabel(order.payment_method)}</td>
                       <td data-label={isAr ? "العناصر" : "Items"}>{order.item_lines ?? items.length}</td>
                       <td data-label={isAr ? "الكمية" : "Qty"}>{order.item_qty_total ?? 0}</td>
@@ -936,7 +971,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
                       <td data-label={isAr ? "الاسترجاع" : "Refund"}>{refundText}</td>
                       <td data-label={isAr ? "الإجمالي" : "Amount"} style={{ textAlign: "right" }}>{money(Number(order.total_jod || 0))}</td>
                       <td data-label={isAr ? "إجراءات" : "Actions"}>
-                        <div style={{ display: "grid", gap: 6, minWidth: 170 }}>
+                        <div className="sales-actions-row" style={{ minWidth: 230 }}>
                           <button className="btn" type="button" onClick={() => setExpandedOrders((prev) => ({ ...prev, [order.id]: !prev[order.id] }))}>
                             {expanded ? (isAr ? "إخفاء" : "Hide") : (isAr ? "عرض" : "Show")}
                           </button>
@@ -962,8 +997,14 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
                     </tr>
                     {expanded ? (
                       <tr className="admin-row-details">
-                        <td colSpan={12}>
+                        <td colSpan={10}>
                           <div className="admin-grid" style={{ gap: 6 }}>
+                            <strong>{isAr ? "بيانات العميل" : "Customer details"}</strong>
+                            <div style={{ display: "grid", gap: 4 }}>
+                              <div>{isAr ? "الاسم" : "Name"}: {order.customer_name || "—"}</div>
+                              <div className="ltr">{isAr ? "الهاتف" : "Phone"}: {order.customer_phone || "—"}</div>
+                              <div className="ltr">{isAr ? "البريد" : "Email"}: {order.customer_email || "—"}</div>
+                            </div>
                             <strong>{isAr ? "العناصر المشتراة" : "Purchased items"}</strong>
                             {items.length === 0 ? (
                               <div className="admin-muted">{isAr ? "لا توجد عناصر مفصلة لهذا الطلب." : "No item details for this order."}</div>
@@ -985,7 +1026,7 @@ export default function SalesClient({ initialLang = "en" }: { initialLang?: "en"
                 );
               })}
             {orders.length === 0 ? (
-              <tr><td data-label={isAr ? "الحالة" : "Status"} colSpan={12} style={{ padding: 12 }}>{isAr ? "لا توجد طلبات مبيعات ضمن المرشحات." : "No sales orders in current filters."}</td></tr>
+              <tr><td data-label={isAr ? "الحالة" : "Status"} colSpan={10} style={{ padding: 12 }}>{isAr ? "لا توجد طلبات مبيعات ضمن المرشحات." : "No sales orders in current filters."}</td></tr>
               ) : null}
             </tbody>
           </table>

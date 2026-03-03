@@ -102,16 +102,41 @@ export async function GET(req: Request) {
   const hasMore = result.rows.length > limit;
   const orders = hasMore ? result.rows.slice(0, limit) : result.rows;
 
-  const summaryRes = await db.query<{ transactions_count: string; total_sales_jod: string }>(
+  const summaryRes = await db.query<{ transactions_count: string; gross_sales_jod: string; refunded_sales_jod: string; net_sales_jod: string }>(
     `select
        count(*)::text as transactions_count,
-       coalesce(sum(coalesce(o.total_jod, o.amount::numeric)), 0)::text as total_sales_jod
+       coalesce(sum(coalesce(o.total_jod, o.amount::numeric)), 0)::text as gross_sales_jod,
+       coalesce(
+         sum(
+           coalesce((
+             select sum(r.amount_jod)
+               from refunds r
+              where r.order_id = o.id
+                and r.status in ('CONFIRMED','RESTOCK_SCHEDULED','RESTOCKED')
+           ), 0)
+         ),
+         0
+       )::text as refunded_sales_jod,
+       (
+         coalesce(sum(coalesce(o.total_jod, o.amount::numeric)), 0)
+         - coalesce(
+             sum(
+               coalesce((
+                 select sum(r.amount_jod)
+                   from refunds r
+                  where r.order_id = o.id
+                    and r.status in ('CONFIRMED','RESTOCK_SCHEDULED','RESTOCKED')
+               ), 0)
+             ),
+             0
+           )
+       )::text as net_sales_jod
      from sales_audit_logs l
      join orders o on o.id = l.order_id
      ${whereForBase}`,
     paramsForBase
   );
-  const summary = summaryRes.rows[0] || { transactions_count: "0", total_sales_jod: "0" };
+  const summary = summaryRes.rows[0] || { transactions_count: "0", gross_sales_jod: "0", refunded_sales_jod: "0", net_sales_jod: "0" };
 
   return NextResponse.json({
     ok: true,
@@ -122,7 +147,9 @@ export async function GET(req: Request) {
     },
     summary: {
       transactionsCount: Number(summary.transactions_count || "0"),
-      totalSalesJod: Number(summary.total_sales_jod || "0"),
+      totalSalesJod: Number(summary.net_sales_jod || "0"),
+      grossSalesJod: Number(summary.gross_sales_jod || "0"),
+      refundedSalesJod: Number(summary.refunded_sales_jod || "0"),
     },
     orders,
     pagination: {
