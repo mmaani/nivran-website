@@ -1,0 +1,37 @@
+table_name,present_in_code,total_bytes,total_size_pretty,has_fk,notes
+admin_audit_logs,YES,2,2 rows,NO,
+auth_rate_limits,YES,4,4 rows,NO,
+batches,NO,0,0 rows,YES,not in code but FK-linked
+carts,YES,0,0 rows,NO,
+categories,YES,5,5 rows,NO,
+contact_submissions,YES,4,4 rows,NO,
+coupons,NO,0,0 rows,NO,legacy/duplicate-small-no-fk
+customer_cart_items,YES,3,3 rows,YES,
+customer_carts,YES,1,1 rows,YES,
+customer_email_verification_codes,YES,7,7 rows,YES,
+customer_password_reset_tokens,YES,5,5 rows,YES,
+customer_sessions,YES,22,22 rows,YES,
+customers,YES,12,12 rows,YES,
+email_send_log,NO,1,1 rows,NO,legacy/duplicate-small-no-fk
+email_send_logs,YES,36,36 rows,NO,
+inventory,YES,0,0 rows,YES,
+newsletter_subscribers,YES,4,4 rows,NO,
+order_items,YES,0,0 rows,YES,
+order_refunds,NO,0,0 rows,YES,not in code but FK-linked
+orders,YES,87,87 rows,YES,
+password_reset_tokens,YES,0,0 rows,YES,
+payments,YES,0,0 rows,YES,
+paytabs_callbacks,YES,7,7 rows,NO,
+product_images,YES,7,7 rows,YES,
+product_media,NO,7,7 rows,YES,not in code but FK-linked
+product_variants,YES,2,2 rows,YES,
+products,YES,7,7 rows,YES,
+promotions,YES,5,5 rows,NO,
+refunds,YES,0,0 rows,YES,
+restock_jobs,YES,0,0 rows,YES,
+sales_audit_logs,YES,41,41 rows,NO,
+shipments,NO,0,0 rows,YES,not in code but FK-linked
+staff_login_attempts,YES,5,5 rows,NO,
+staff_users,YES,1,1 rows,YES,
+store_settings,YES,1,1 rows,NO,
+variants,YES,7,7 rows,YES,

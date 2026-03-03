@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { cairoArabic, inter, playfairDisplay } from "./ui/fonts";
 import Script from "next/script";
-import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
   title: "NIVRAN — Wear the calm.",
@@ -21,7 +20,7 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const isProd = process.env.VERCEL_ENV === "production"; // production | preview | development :contentReference[oaicite:1]{index=1}
+  const isProd = process.env.VERCEL_ENV === "production";
 
   return (
     <html
@@ -47,7 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
       <body>
         {children}
-        {isProd ? <Analytics /> : null}
+        {isProd ? <Script src="/_vercel/insights/script.js" strategy="afterInteractive" /> : null}
       </body>
     </html>
   );
