@@ -1,6 +1,9 @@
 node_modules/
 .next/
 out/
+coverage/
+*.log
+*.tsbuildinfo
 
 .env
 .env.*
@@ -10,3 +13,5 @@ out/
 .vercel
 .env*.local
 nivran-admin-ui-mobile-pack_UPDATED.zip
+ai_sources/
+sources_nivran.zip

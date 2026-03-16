@@ -2,6 +2,16 @@
 
 NIVRAN / نيفـران storefront on Next.js App Router with Neon Postgres and PayTabs Hosted Payment Page (HPP).
 
+## Governance docs
+
+- `docs/PROJECT_SCOPE.md`
+- `docs/PROJECT_ISOLATION.md`
+- `docs/AGENT_RULES.md`
+- `docs/SECURITY_POLICY.md`
+- `docs/ECOMMERCE_SCOPE.md`
+- `docs/PRODUCT_SYSTEM.md`
+- `docs/BRAND_GOVERNANCE.md`
+
 ## Runbook contract check
 
 Run this to verify README-critical environment keys and helper scripts are still present:
